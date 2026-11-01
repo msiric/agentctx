@@ -30,7 +30,7 @@ status()   { if [ "$1" -eq "$2" ]; then pass; else flunk "${3:-} expected exit $
 
 # Fresh sandbox: new HOME, stub bin dir first on PATH, clean agent env vars.
 sandbox() {
-  SB=$(mktemp -d)
+  SB=$(cd "$(mktemp -d)" && pwd -P)   # macOS: /var is a symlink to /private/var
   export HOME="$SB/home"
   mkdir -p "$HOME" "$SB/stubs" "$HOME/.local/bin"
   unset AGENTCTX_HOME CODEX_HOME COPILOT_HOME CLAUDE_CONFIG_DIR AGENTCTX_EFFORT AGENTCTX_MAX_CHARS CLAUDECODE
