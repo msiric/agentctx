@@ -231,14 +231,18 @@ test_install_fresh() {
   contains "$(cat "$HOME/.claude/CLAUDE.md")" "@~/.agents/AGENTS.md"
   links_to "$HOME/.codex/AGENTS.md" "$HOME/.agents/AGENTS.md"
   links_to "$HOME/.copilot/copilot-instructions.md" "$HOME/.agents/AGENTS.md"
-  links_to "$HOME/.local/bin/agentctx" "$BIN"
-  links_to "$HOME/.agents/skills/effort" "$ROOT/skills/effort"
+  links_to "$HOME/.local/bin/agentctx" "$HOME/.agents/agentctx/bin/agentctx"
+  links_to "$HOME/.agents/skills/effort" "$HOME/.agents/agentctx/skills/effort"
+  is_file "$HOME/.agents/agentctx/bin/agentctx"; is_file "$HOME/.agents/agentctx/.claude-plugin/plugin.json"
+  contains "$(cat "$HOME/.agents/agentctx/.agentctx-runtime")" "source=git"
+  contains "$(cat "$HOME/.codex/hooks.json")" "'$HOME/.agents/agentctx/bin/agentctx' context" "hooks use the stable runtime path"
+  [ -d "$HOME/.agents/agentctx/tests" ] && flunk "runtime should not carry tests"
   contains "$(cat "$HOME/.codex/hooks.json")" "context --for codex"
   contains "$(cat "$HOME/.copilot/hooks/agentctx.json")" '"sessionStart"'
   contains "$(cat "$HOME/.copilot/hooks/agentctx.json")" '"sessionEnd"'
   contains "$(cat "$HOME/.codex/hooks.json")" "harvest --for codex"
   calls=$(cat "$HOME/claude.calls")
-  contains "$calls" "plugin marketplace add $ROOT --scope user"
+  contains "$calls" "plugin marketplace add $HOME/.agents/agentctx --scope user"
   contains "$calls" "plugin install agentctx@agentctx --scope user"
   if command -v python3 >/dev/null 2>&1; then
     for j in "$HOME/.codex/hooks.json" "$HOME/.copilot/hooks/agentctx.json" "$ROOT/hooks/hooks.json" "$ROOT/.claude-plugin/plugin.json" "$ROOT/.claude-plugin/marketplace.json"; do
@@ -282,7 +286,7 @@ test_install_preserves_user_files() {
   lacks "$out" "\"description\": \"managed by agentctx" "snippet carries no ownership marker"
   contains "$out" "context --for codex"
   # user merges the snippet: still not ours
-  printf '{"hooks":{"Stop":[],"SessionStart":[{"hooks":[{"type":"command","command":"%s context --for codex"}]}]}}\n' "'$BIN'" > "$HOME/.codex/hooks.json"
+  printf '{"hooks":{"Stop":[],"SessionStart":[{"hooks":[{"type":"command","command":"%s context --for codex"}]}]}}\n' "'$HOME/.agents/agentctx/bin/agentctx'" > "$HOME/.codex/hooks.json"
   cp "$HOME/.codex/hooks.json" "$SB/merged"
   ax install >/dev/null 2>&1
   eq "$(cat "$HOME/.codex/hooks.json")" "$(cat "$SB/merged")" "merged file never rewritten"
@@ -345,7 +349,7 @@ test_dry_run_and_skip() {
   ax install --no-claude >/dev/null 2>&1
   links_to "$CODEX_HOME/AGENTS.md" "$HOME/.agents/AGENTS.md"
   is_file "$COPILOT_HOME/hooks/agentctx.json"
-  links_to "$COPILOT_HOME/skills/effort" "$ROOT/skills/effort" "COPILOT_HOME skill link"
+  links_to "$COPILOT_HOME/skills/effort" "$HOME/.agents/agentctx/skills/effort" "COPILOT_HOME skill link"
   unset CODEX_HOME COPILOT_HOME
 }
 
@@ -358,7 +362,7 @@ test_uninstall() {
   [ -L "$HOME/.codex/AGENTS.md" ] && flunk "codex file still a link"
   contains "$(cat "$HOME/.codex/AGENTS.md")" "my rule" "codex keeps a copy"
   contains "$(cat "$HOME/.copilot/copilot-instructions.md")" "my rule" "copilot keeps a copy"
-  no_file "$HOME/.agents/skills/effort"; no_file "$HOME/.local/bin/agentctx"
+  no_file "$HOME/.agents/skills/effort"; no_file "$HOME/.local/bin/agentctx"; no_file "$HOME/.agents/agentctx"
   lacks "$(cat "$HOME/.claude/CLAUDE.md")" "agentctx"
   contains "$(cat "$HOME/.claude/CLAUDE.md")" "my rule" "claude keeps a copy"
   contains "$(cat "$HOME/.agents/AGENTS.md")" "my rule" "data kept"
@@ -418,7 +422,7 @@ test_doctor() {
   out=$(ax doctor 2>&1); contains "$out" "trust entry"
 
   # hook pointing at a moved clone
-  sed "s#'$BIN'#'/nowhere/agentctx'#" "$HOME/.codex/hooks.json" > "$SB/h" && cat "$SB/h" > "$HOME/.codex/hooks.json"
+  sed "s#'$HOME/.agents/agentctx/bin/agentctx'#'/nowhere/agentctx'#" "$HOME/.codex/hooks.json" > "$SB/h" && cat "$SB/h" > "$HOME/.codex/hooks.json"
   out=$(ax doctor 2>&1); contains "$out" "which no longer exists"
 
   t "doctor with spaces and parent CLAUDE.md"; sandbox; prep_agent_dirs; stub_claude
@@ -595,11 +599,36 @@ test_real_claude() {
   out=$(claude plugin list 2>&1); lacks "$out" "agentctx@agentctx" "uninstalled"
 }
 
+test_npm_package() {
+  command -v npm >/dev/null 2>&1 || { echo "skip  npm package: npm not installed"; return 0; }
+  ndir=$(dirname "$(command -v npm)")
+  t "npm package installs and sets up from a global install"; sandbox
+  export PATH="$PATH:$ndir"
+  export npm_config_cache="$SB/npm-cache" npm_config_update_notifier=false
+  (cd "$ROOT" && npm pack --silent --pack-destination "$SB" >/dev/null 2>&1) || { flunk "npm pack"; return; }
+  tgz=$(ls "$SB"/agentctx-*.tgz)
+  list=$(tar -tzf "$tgz")
+  contains "$list" "package/bin/agentctx"; contains "$list" "package/hooks/hooks.json"; contains "$list" "package/.claude-plugin/plugin.json"
+  lacks "$list" "tests/" "tests are not shipped"
+  npm install -g --silent --prefix "$SB/npm" "$tgz" >/dev/null 2>&1 || { flunk "npm install -g"; return; }
+  mkdir -p "$HOME/.codex"
+  out=$("$SB/npm/bin/agentctx" install --no-claude --no-copilot 2>&1); st=$?
+  status $st 0 "install from npm"
+  contains "$(cat "$HOME/.agents/agentctx/.agentctx-runtime")" "source=npm"
+  contains "$(cat "$HOME/.codex/hooks.json")" "'$HOME/.agents/agentctx/bin/agentctx'"
+  # the npm copy can disappear (Node upgrade, uninstall): hooks keep working
+  rm -rf "$SB/npm"
+  new_repo "$SB/r"; cd "$SB/r" || return
+  "$HOME/.agents/agentctx/bin/agentctx" notes >/dev/null; printf 'still here\n' >> "$("$HOME/.agents/agentctx/bin/agentctx" notes --path)"
+  out=$(printf '{"cwd":"%s","source":"startup"}' "$SB/r" | "$HOME/.agents/agentctx/bin/agentctx" context --for codex)
+  contains "$out" "still here" "runtime survives the npm copy going away"
+}
+
 # --------------------------------------------------------------- run ----
 
 for fn in test_cli_basics test_repo_key test_effort_lifecycle test_context test_install_fresh \
           test_install_preserves_user_files test_adopt test_dry_run_and_skip test_uninstall \
-          test_doctor test_verify test_log test_update; do
+          test_doctor test_verify test_log test_update test_npm_package; do
   ( $fn ) > "${TMPDIR:-/tmp}/agentctx-test.$$" 2>&1
   cat "${TMPDIR:-/tmp}/agentctx-test.$$"
   # each test runs in a subshell; count results from its output

@@ -7,14 +7,22 @@ It's a single POSIX shell script that needs only `git`. It never changes your re
 ## Install (one command, once per machine)
 
 ```sh
+npm install -g agentctx && agentctx install
+```
+
+Or without npm:
+
+```sh
 git clone https://github.com/msiric/agentctx ~/.agentctx && ~/.agentctx/bin/agentctx install
 ```
+
+`install` copies the tool to `~/.agents/agentctx/` and points every hook there. After that, the npm package or the clone can move, upgrade or disappear (a Node version switch with nvm or fnm, say) without breaking any hook or Codex's trust in them.
 
 That's the whole setup, and it covers every repo on the machine: the hooks are user-level, so there's nothing to do per repo. If you already have instructions in `~/.claude/CLAUDE.md`, install offers to share them with all three agents.
 
 Codex needs one manual step, because trusting hooks is a security gate Codex deliberately keeps for you. Open `codex`, run `/hooks` and trust the two agentctx hooks once. After that, `agentctx doctor` checks the setup and `agentctx verify` runs a live test with each agent.
 
-Later, `agentctx update` pulls the latest version and re-applies the setup.
+Later, `agentctx update` gets the latest version the same way you installed it (npm or git) and re-applies the setup.
 
 ## The layers
 
@@ -96,7 +104,7 @@ Files it edits are backed up to `~/.agents/backups/` first.
 - `~/.codex/AGENTS.md` and `~/.copilot/copilot-instructions.md` become symlinks to `~/.agents/AGENTS.md`. Existing files with content are left alone, with a warning.
 - Hooks go in through a Claude Code plugin (installed from the clone), `~/.codex/hooks.json` and `~/.copilot/hooks/agentctx.json`. Hook files it didn't create are never edited; it prints what to add instead.
 - The `effort` skill is linked into `~/.agents/skills/`, which Codex and Copilot read. Claude Code gets it from the plugin, at about 60 always-on tokens.
-- `agentctx` is linked into `~/.local/bin`.
+- A copy of the tool goes to `~/.agents/agentctx/`, and `agentctx` is linked into `~/.local/bin`.
 
 `agentctx uninstall` removes all of that. It leaves each agent a plain copy of your personal instructions, and keeps `~/.agents` and any `.agentctx/` folders.
 
@@ -104,6 +112,7 @@ Files it edits are backed up to `~/.agents/backups/` first.
 
 `sh tests/run.sh` runs every test in a throwaway `$HOME`. It covers:
 - install, re-install as a no-op, adopt, dry run, update and uninstall
+- a real `npm pack` and global install, including hooks still working after the npm copy is deleted
 - preservation of your files
 - repo keys and worktrees
 - the effort lifecycle, auto-archive and context output for each agent

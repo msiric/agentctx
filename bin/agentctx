@@ -33,6 +33,11 @@ BIN_DIR=${AGENTCTX_BIN_DIR:-$HOME/.local/bin}
 CLAUDE_DIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 CODEX_DIR=${CODEX_HOME:-$HOME/.codex}
 COPILOT_DIR=${COPILOT_HOME:-$HOME/.copilot}
+# install copies the tool here and points every hook, link and the plugin at
+# it, so moving the clone, npm upgrades or switching Node versions never break
+# hooks (or Codex's per-hook trust).
+RUNTIME=$AGENTCTX_HOME/agentctx
+RT_BIN=$RUNTIME/bin/agentctx
 MAX_CHARS=${AGENTCTX_MAX_CHARS:-9000}    # Claude caps hook text at 10,000 chars
 case $MAX_CHARS in ''|*[!0-9]*) MAX_CHARS=9000 ;; esac
 [ "$MAX_CHARS" -gt 9500 ] && MAX_CHARS=9500
@@ -749,11 +754,11 @@ has_content() { # non-blank, non-comment content
 is_link_to() { [ -L "$1" ] && [ "$(readlink "$1")" = "$2" ]; }
 
 codex_hook_group() {
-  printf '      {\n        "matcher": "startup|clear|compact",\n        "hooks": [\n          { "type": "command", "command": "%s context --for codex", "timeout": 10 }\n        ]\n      }\n' "'$SELF'"
+  printf '      {\n        "matcher": "startup|clear|compact",\n        "hooks": [\n          { "type": "command", "command": "%s context --for codex", "timeout": 10 }\n        ]\n      }\n' "'$RT_BIN'"
 }
 
 codex_end_group() {
-  printf '      {\n        "hooks": [\n          { "type": "command", "command": "%s harvest --for codex", "timeout": 3 }\n        ]\n      }\n' "'$SELF'"
+  printf '      {\n        "hooks": [\n          { "type": "command", "command": "%s harvest --for codex", "timeout": 3 }\n        ]\n      }\n' "'$RT_BIN'"
 }
 
 codex_hooks_json() {
@@ -761,11 +766,11 @@ codex_hooks_json() {
 }
 
 copilot_hook_entry() {
-  printf '      { "type": "command", "bash": "%s context --for copilot", "timeoutSec": 10 }\n' "'$SELF'"
+  printf '      { "type": "command", "bash": "%s context --for copilot", "timeoutSec": 10 }\n' "'$RT_BIN'"
 }
 
 copilot_end_entry() {
-  printf '      { "type": "command", "bash": "%s harvest --for copilot", "timeoutSec": 5 }\n' "'$SELF'"
+  printf '      { "type": "command", "bash": "%s harvest --for copilot", "timeoutSec": 5 }\n' "'$RT_BIN'"
 }
 
 copilot_hooks_json() {
@@ -889,7 +894,7 @@ install_claude() {
   if claude plugin marketplace list 2>/dev/null | grep -q 'agentctx'; then
     act "refresh the agentctx plugin marketplace" quiet claude plugin marketplace update agentctx
   else
-    act "add the agentctx plugin marketplace ($(tilde "$ROOT"))" quiet claude plugin marketplace add "$ROOT" --scope user
+    act "add the agentctx plugin marketplace ($(tilde "$RUNTIME"))" quiet claude plugin marketplace add "$RUNTIME" --scope user
   fi
   if claude plugin list 2>/dev/null | grep -q 'agentctx@agentctx'; then
     act "update the agentctx plugin (SessionStart hook + effort skill)" quiet claude plugin update agentctx@agentctx --scope user
@@ -930,20 +935,44 @@ install_skill() {
 }
 
 link_skill() { # PATH LABEL
-  if is_link_to "$1" "$ROOT/skills/effort"; then ok "$2: $(tilde "$1")"; return 0; fi
+  if is_link_to "$1" "$RUNTIME/skills/effort"; then ok "$2: $(tilde "$1")"; return 0; fi
   if [ -e "$1" ] || [ -L "$1" ]; then
     warn "$(tilde "$1") already exists, left untouched"
     return 0
   fi
-  act "link $(tilde "$1") -> $(tilde "$ROOT/skills/effort")" make_link "$1" "$ROOT/skills/effort"
+  act "link $(tilde "$1") -> $(tilde "$RUNTIME/skills/effort")" make_link "$1" "$RUNTIME/skills/effort"
+}
+
+# Copy the tool into $RUNTIME (atomically swapped), remembering where it came from.
+install_runtime() {
+  if [ -d "$RUNTIME" ] && [ "$ROOT" = "$(cd "$RUNTIME" && pwd -P)" ]; then ok "runtime: $(tilde "$RUNTIME")"; return 0; fi
+  act "copy agentctx $VERSION to $(tilde "$RUNTIME")" copy_runtime
+}
+
+copy_runtime() {
+  new=$RUNTIME.new.$$
+  rm -rf "$new" && mkdir -p "$new" || return 1
+  for x in bin hooks skills .claude-plugin README.md LICENSE; do
+    [ -e "$ROOT/$x" ] && { cp -R "$ROOT/$x" "$new/" || return 1; }
+  done
+  chmod +x "$new/bin/agentctx"
+  src=git; [ -d "$ROOT/.git" ] || src=npm
+  case $ROOT in */node_modules/*) src=npm ;; esac
+  printf 'version=%s\nsource=%s\npath=%s\n' "$VERSION" "$src" "$ROOT" > "$new/.agentctx-runtime"
+  if [ -e "$RUNTIME" ]; then
+    [ -f "$RUNTIME/.agentctx-runtime" ] || { rm -rf "$new"; printf '%s exists and is not an agentctx runtime\n' "$RUNTIME" >&2; return 1; }
+    rm -rf "$RUNTIME.old.$$" && mv "$RUNTIME" "$RUNTIME.old.$$" && mv "$new" "$RUNTIME" && rm -rf "$RUNTIME.old.$$"
+  else
+    mkdir -p "$(dirname "$RUNTIME")" && mv "$new" "$RUNTIME"
+  fi
 }
 
 install_bin() {
   t=$BIN_DIR/agentctx
-  if is_link_to "$t" "$SELF"; then ok "command: $(tilde "$t")"; else
+  if is_link_to "$t" "$RT_BIN"; then ok "command: $(tilde "$t")"; else
     if [ -e "$t" ] && ! [ -L "$t" ]; then warn "$(tilde "$t") exists and is not a link, left untouched"; else
       [ -L "$t" ] && act "remove old link $(tilde "$t")" rm -f "$t"
-      act "link $(tilde "$t") -> $(tilde "$SELF")" make_link "$t" "$SELF"
+      act "link $(tilde "$t") -> $(tilde "$RT_BIN")" make_link "$t" "$RT_BIN"
     fi
   fi
   case ":$PATH:" in *":$BIN_DIR:"*) ;; *) warn "$(tilde "$BIN_DIR") is not on your PATH"; hint "add it in your shell rc so agents can run agentctx" ;; esac
@@ -973,6 +1002,7 @@ cmd_install() {
   say ""; say "Shared"
   ensure_personal || exit 1
   [ "$DRY" -eq 1 ] || mkdir -p "$REPOS"
+  install_runtime || { say "Could not set up $(tilde "$RUNTIME")."; exit 1; }
   install_bin
   any=0
   if want claude "$CLAUDE_DIR"; then install_claude; any=1; fi
@@ -1019,21 +1049,37 @@ cmd_uninstall() {
     if owned "$h"; then act "remove $(tilde "$h")" rm -f "$h"; fi
   done
   for sk in "$SKILLS_DIR/effort" "$COPILOT_DIR/skills/effort"; do
-    if is_link_to "$sk" "$ROOT/skills/effort"; then act "remove link $(tilde "$sk")" rm -f "$sk"; fi
+    if is_link_to "$sk" "$RUNTIME/skills/effort"; then act "remove link $(tilde "$sk")" rm -f "$sk"; fi
   done
-  if is_link_to "$BIN_DIR/agentctx" "$SELF"; then act "remove $(tilde "$BIN_DIR/agentctx")" rm -f "$BIN_DIR/agentctx"; fi
+  if is_link_to "$BIN_DIR/agentctx" "$RT_BIN"; then act "remove $(tilde "$BIN_DIR/agentctx")" rm -f "$BIN_DIR/agentctx"; fi
+  if [ -f "$RUNTIME/.agentctx-runtime" ]; then act "remove $(tilde "$RUNTIME")" rm -rf "$RUNTIME"; fi
   say ""
   say "Each agent keeps a plain copy of your personal instructions."
   say "Kept: $(tilde "$AGENTCTX_HOME") (personal file, notes, archive) and any .agentctx/ folders in your worktrees."
   [ "$FAILS" -eq 0 ] || exit 1
 }
 
+runtime_field() { sed -n "s/^$1=//p" "$RUNTIME/.agentctx-runtime" 2>/dev/null; }
+
 cmd_update() {
-  [ -d "$ROOT/.git" ] || die "$ROOT is not a git clone; update it however you installed it"
-  case " $* " in *" --dry-run "*) say "Dry run: would git pull $(tilde "$ROOT"), then:"; exec "$ROOT/bin/agentctx" install "$@" ;; esac
-  say "Updating $(tilde "$ROOT")"
-  git -C "$ROOT" pull --ff-only || die "git pull failed (local changes?)"
-  exec "$ROOT/bin/agentctx" install "$@"
+  src=$(runtime_field source); path=$(runtime_field path)
+  [ -n "$src" ] || { src=git; [ -d "$ROOT/.git" ] || src=npm; path=$ROOT; }
+  dry=0; case " $* " in *" --dry-run "*) dry=1 ;; esac
+  case $src in
+    git)
+      [ -d "$path/.git" ] || die "the clone at $path is gone; clone agentctx again and run install"
+      if [ "$dry" -eq 1 ]; then say "Dry run: would git pull $(tilde "$path"), then:"
+      else say "Updating $(tilde "$path")"; git -C "$path" pull --ff-only || die "git pull failed (local changes?)"; fi
+      exec "$path/bin/agentctx" install "$@" ;;
+    npm)
+      has npm || die "npm not found"
+      if [ "$dry" -eq 1 ]; then say "Dry run: would run npm install -g agentctx@latest, then install"; exec "$RT_BIN" install "$@"; fi
+      say "Updating with npm"
+      npm install -g agentctx@latest || die "npm install failed"
+      np=$(npm root -g)/agentctx/bin/agentctx
+      [ -x "$np" ] || die "agentctx not found in $(npm root -g)"
+      exec "$np" install "$@" ;;
+  esac
 }
 
 # ---------------------------------------------------------------- doctor ----
@@ -1108,6 +1154,8 @@ hook_target_ok() { # LABEL FILE
 
 doctor_hooks() {
   say "Session hooks"
+  if [ -x "$RT_BIN" ]; then ok "runtime $(runtime_field version) at $(tilde "$RUNTIME") ($(runtime_field source))"
+  else fail "runtime missing at $(tilde "$RUNTIME"), so every hook fails"; hint "run: agentctx install"; fi
   if has claude; then
     if claude plugin list 2>/dev/null | grep -q 'agentctx@agentctx'; then ok "Claude Code plugin installed"
     else fail "Claude Code plugin not installed"; hint "run: agentctx install"; fi
