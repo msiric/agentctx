@@ -1,12 +1,12 @@
 #!/bin/sh
-# agentctx: two-layer context (global knowledge + per-branch task files) for
+# trailkeep: two-layer context (global knowledge + per-branch task files) for
 # Claude Code, Codex CLI and GitHub Copilot CLI. POSIX sh + git, no other deps.
-# https://github.com/msiric/agentctx
+# https://github.com/trailkeep/trailkeep
 
 set -u
 
 VERSION="0.2.0"
-MARKER="managed by agentctx"
+MARKER="managed by trailkeep"
 
 # ---------------------------------------------------------------- paths ----
 
@@ -25,20 +25,20 @@ resolve_self() {
 SELF=$(resolve_self)
 ROOT=$(cd "$(dirname "$SELF")/.." && pwd -P)
 
-AGENTCTX_HOME=${AGENTCTX_HOME:-$HOME/.agents}
-PERSONAL=$AGENTCTX_HOME/AGENTS.md
-REPOS=$AGENTCTX_HOME/repos
+TRAILKEEP_HOME=${TRAILKEEP_HOME:-$HOME/.agents}
+PERSONAL=$TRAILKEEP_HOME/AGENTS.md
+REPOS=$TRAILKEEP_HOME/repos
 SKILLS_DIR=$HOME/.agents/skills          # read by Codex and Copilot
-BIN_DIR=${AGENTCTX_BIN_DIR:-$HOME/.local/bin}
+BIN_DIR=${TRAILKEEP_BIN_DIR:-$HOME/.local/bin}
 CLAUDE_DIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 CODEX_DIR=${CODEX_HOME:-$HOME/.codex}
 COPILOT_DIR=${COPILOT_HOME:-$HOME/.copilot}
 # install copies the tool here and points every hook, link and the plugin at
 # it, so moving the clone, npm upgrades or switching Node versions never break
 # hooks (or Codex's per-hook trust).
-RUNTIME=$AGENTCTX_HOME/agentctx
-RT_BIN=$RUNTIME/bin/agentctx
-MAX_CHARS=${AGENTCTX_MAX_CHARS:-9000}    # Claude caps hook text at 10,000 chars
+RUNTIME=$TRAILKEEP_HOME/trailkeep
+RT_BIN=$RUNTIME/bin/trailkeep
+MAX_CHARS=${TRAILKEEP_MAX_CHARS:-9000}    # Claude caps hook text at 10,000 chars
 case $MAX_CHARS in ''|*[!0-9]*) MAX_CHARS=9000 ;; esac
 [ "$MAX_CHARS" -gt 9500 ] && MAX_CHARS=9500
 
@@ -56,7 +56,7 @@ warn() { printf '%s  warn%s  %s\n' "$C_WARN" "$C_OFF" "$*"; WARNS=$((WARNS + 1))
 fail() { printf '%s  fail%s  %s\n' "$C_FAIL" "$C_OFF" "$*"; FAILS=$((FAILS + 1)); }
 info() { printf '%s  info%s  %s\n' "$C_DIM" "$C_OFF" "$*"; }
 hint() { printf '        %s-> %s%s\n' "$C_DIM" "$*" "$C_OFF"; }
-die()  { printf 'agentctx: %s\n' "$*" >&2; exit 1; }
+die()  { printf 'trailkeep: %s\n' "$*" >&2; exit 1; }
 WARNS=0; FAILS=0
 
 # Pretty-print a path with ~ for $HOME.
@@ -86,7 +86,7 @@ make_link() { mkdir -p "$(dirname "$1")" && ln -s "$2" "$1"; }
 move_file() { mkdir -p "$(dirname "$2")" && mv "$1" "$2"; }
 quiet() { "$@" >/dev/null; }
 
-# Put the agentctx block at the top of FILE (replacing any old block).
+# Put the trailkeep block at the top of FILE (replacing any old block).
 put_block() { # FILE BLOCK
   mkdir -p "$(dirname "$1")" || return 1
   tmp=$(mktemp) || return 1
@@ -114,7 +114,7 @@ backup() { # copy a file (following symlinks) into the backup dir before changin
   [ "$DRY" -eq 1 ] && return 0
   mkdir -p "$BACKUP_DIR" && cp "$1" "$BACKUP_DIR/$(printf '%s' "$1" | sed 's#/#_#g')"
 }
-BACKUP_DIR=$AGENTCTX_HOME/backups/$(date +%Y%m%d-%H%M%S)
+BACKUP_DIR=$TRAILKEEP_HOME/backups/$(date +%Y%m%d-%H%M%S)
 
 # ------------------------------------------------------------ git helpers ----
 
@@ -146,7 +146,7 @@ repo_key() {
 }
 
 current_branch() {
-  if [ -n "${AGENTCTX_EFFORT:-}" ]; then printf '%s\n' "$AGENTCTX_EFFORT"; return 0; fi
+  if [ -n "${TRAILKEEP_EFFORT:-}" ]; then printf '%s\n' "$TRAILKEEP_EFFORT"; return 0; fi
   git symbolic-ref --quiet --short HEAD 2>/dev/null
 }
 
@@ -156,15 +156,15 @@ repo_dir()    { printf '%s/%s\n' "$REPOS" "$1"; }
 notes_path()  { printf '%s/%s/NOTES.md\n' "$REPOS" "$1"; }
 worktree_top() { git rev-parse --show-toplevel 2>/dev/null; }
 # Efforts live in the worktree (inside every agent's writable workspace) under
-# a self-ignoring .agentctx/ folder, so the repo's own files never change.
-effort_dir()  { printf '%s/.agentctx\n' "$(worktree_top)"; }
+# a self-ignoring .trailkeep/ folder, so the repo's own files never change.
+effort_dir()  { printf '%s/.trailkeep\n' "$(worktree_top)"; }
 effort_path() { printf '%s/%s.md\n' "$(effort_dir)" "$(branch_file_id "$2")"; }
 
 ensure_effort_dir() {
   d=$(effort_dir)
   [ -e "$d" ] && [ ! -d "$d" ] && die "$d exists and is not a directory"
   mkdir -p "$d" || die "could not create $d"
-  [ -f "$d/.gitignore" ] || printf '# agentctx: keep this folder out of git\n*\n' > "$d/.gitignore"
+  [ -f "$d/.gitignore" ] || printf '# trailkeep: keep this folder out of git\n*\n' > "$d/.gitignore"
 }
 
 need_repo() {
@@ -173,8 +173,8 @@ need_repo() {
 }
 
 need_branch() {
-  BRANCH=$(current_branch) || die "detached HEAD: check out a branch or set AGENTCTX_EFFORT=<name>"
-  [ -n "$BRANCH" ] || die "detached HEAD: check out a branch or set AGENTCTX_EFFORT=<name>"
+  BRANCH=$(current_branch) || die "detached HEAD: check out a branch or set TRAILKEEP_EFFORT=<name>"
+  [ -n "$BRANCH" ] || die "detached HEAD: check out a branch or set TRAILKEEP_EFFORT=<name>"
 }
 
 remember_repo() { # best effort: note this worktree so `list` can find it (may be sandboxed)
@@ -215,7 +215,7 @@ piece() { # piece LABEL PATH BUDGET -> prints the block, or a pointer if too big
     printf '%s (%s):\n' "$1" "$2"
     cat "$2"
   else
-    printf '%s is at %s (%s chars, over the agentctx budget). Read that file before starting work.\n' "$1" "$2" "$n"
+    printf '%s is at %s (%s chars, over the trailkeep budget). Read that file before starting work.\n' "$1" "$2" "$n"
   fi
 }
 
@@ -238,22 +238,22 @@ build_context() {
 
   budget=$MAX_CHARS
   if [ "$has_notes" -eq 1 ]; then
-    piece "agentctx: private notes for this repository" "$notes" "$((budget / 3))"
+    piece "trailkeep: private notes for this repository" "$notes" "$((budget / 3))"
     budget=$((budget - $(chars "$notes")))
     [ "$budget" -lt $((MAX_CHARS / 2)) ] && budget=$((MAX_CHARS / 2))
     printf '\n'
   fi
   if [ "$has_effort" -eq 1 ]; then
-    printf 'agentctx: this branch has an effort file. It is the source of truth for the current task. Keep it current as you work: tick Plan items, add one dated line under Progress before you stop, and record decisions and dead ends (start a line with "Dead end:" for approaches that failed).\n'
-    piece "agentctx: effort file for branch $b" "$effort" "$budget"
+    printf 'trailkeep: this branch has an effort file. It is the source of truth for the current task. Keep it current as you work: tick Plan items, add one dated line under Progress before you stop, and record decisions and dead ends (start a line with "Dead end:" for approaches that failed).\n'
+    piece "trailkeep: effort file for branch $b" "$effort" "$budget"
     printf '\n'
-  elif [ "${AGENTCTX_HINT:-1}" != 0 ] && [ -n "$effort" ] && db=$(default_branch) && [ "$b" != "$db" ]; then
-    printf 'agentctx: no effort file for branch %s. If this task spans more than one session, run `agentctx new` and keep it current.\n' "$b"
+  elif [ "${TRAILKEEP_HINT:-1}" != 0 ] && [ -n "$effort" ] && db=$(default_branch) && [ "$b" != "$db" ]; then
+    printf 'trailkeep: no effort file for branch %s. If this task spans more than one session, run `trailkeep new` and keep it current.\n' "$b"
   fi
   n=0
   for f in "$(log_dir "$KEY")"/*.tsv; do [ -f "$f" ] && n=$((n + $(lines "$f"))); done
   if [ "$n" -gt 0 ]; then
-    printf 'agentctx: this repo has a decision log (%s entries). Before changing code with history, or to learn why something is the way it is, run `agentctx log --path <file>` or `agentctx log --grep <word>`; `agentctx log show <id>` gives one entry in full.\n' "$n"
+    printf 'trailkeep: this repo has a decision log (%s entries). Before changing code with history, or to learn why something is the way it is, run `trailkeep log --path <file>` or `trailkeep log --grep <word>`; `trailkeep log show <id>` gives one entry in full.\n' "$n"
   fi
 }
 
@@ -291,7 +291,7 @@ cmd_context() {
   # session, and remember this one. In the background so startup stays instant.
   if [ "$target" != text ]; then
     startup_harvest "$(session_ref "$target" "$input")" </dev/null >/dev/null 2>&1 &
-    [ -n "${AGENTCTX_SYNC:-}" ] && wait
+    [ -n "${TRAILKEEP_SYNC:-}" ] && wait
   fi
   exit 0
 }
@@ -462,9 +462,9 @@ cmd_harvest() { # hook entry point (session end)
 
 log_usage() {
   cat <<EOF
-agentctx log [--path P] [--grep TEXT] [--type T] [--branch B] [--since YYYY-MM-DD] [-n N]
-agentctx log show ID
-agentctx log add TYPE TEXT       types: decision, dead-end, progress, note
+trailkeep log [--path P] [--grep TEXT] [--type T] [--branch B] [--since YYYY-MM-DD] [-n N]
+trailkeep log show ID
+trailkeep log add TYPE TEXT       types: decision, dead-end, progress, note
 EOF
 }
 
@@ -472,7 +472,7 @@ cmd_log() {
   need_repo
   case ${1:-} in
     show) shift; log_show "$@"; return ;;
-    add) shift; [ $# -ge 2 ] || die "usage: agentctx log add TYPE TEXT"
+    add) shift; [ $# -ge 2 ] || die "usage: trailkeep log add TYPE TEXT"
          typ=$1; shift
          b=$(current_branch 2>/dev/null) || b=-
          log_append "$KEY" "$typ" "${b:--}" "$(git rev-parse --short HEAD 2>/dev/null || echo -)" - "$*" "manual" - || die "could not write the log"
@@ -514,7 +514,7 @@ cmd_log() {
 }
 
 log_show() { # ID (prefix ok)
-  [ -n "${1:-}" ] || die "usage: agentctx log show ID"
+  [ -n "${1:-}" ] || die "usage: trailkeep log show ID"
   line=$(log_events "$KEY" | awk -F "$TAB" -v id="$1" 'index($1, id) == 1 { print; exit }')
   [ -n "$line" ] || die "no log entry $1"
   printf '%s\n' "$line" | awk -F "$TAB" '{
@@ -561,7 +561,7 @@ cmd_new() {
     say "Effort already exists: $f"
     return 0
   fi
-  kind=branch; [ -n "${AGENTCTX_EFFORT:-}" ] && kind=named
+  kind=branch; [ -n "${TRAILKEEP_EFFORT:-}" ] && kind=named
   ensure_effort_dir
   effort_template "$BRANCH" "$KEY" "$kind" > "$f" || die "could not write $f"
   remember_repo
@@ -595,7 +595,7 @@ open_editor() {
 cmd_edit() {
   need_repo; need_branch
   f=$(effort_path "$KEY" "$BRANCH")
-  [ -e "$f" ] || die "no effort for branch $BRANCH (run: agentctx new)"
+  [ -e "$f" ] || die "no effort for branch $BRANCH (run: trailkeep new)"
   open_editor "$f"
 }
 
@@ -615,7 +615,7 @@ last_progress() {
   section "$1" Progress | awk 'NF { l = $0 } END { print l }'
 }
 
-list_dir() { # print efforts in one .agentctx dir
+list_dir() { # print efforts in one .trailkeep dir
   for f in "$1"/*.md; do
     [ -e "$f" ] || continue
     br=$(effort_branch "$f"); [ -n "$br" ] || br=$(basename "$f" .md)
@@ -632,7 +632,7 @@ cmd_list() {
     [ -f "$reg" ] || continue
     key=$(basename "$(dirname "$reg")")
     while IFS= read -r w; do
-      [ -d "$w/.agentctx" ] || continue
+      [ -d "$w/.trailkeep" ] || continue
       case "
 $seen
 " in *"
@@ -640,7 +640,7 @@ $w
 "*) continue ;; esac
       seen="$seen
 $w"
-      list_dir "$w/.agentctx" "$key"
+      list_dir "$w/.trailkeep" "$key"
     done < "$reg"
   done
   if in_repo && KEY=$(repo_key); then
@@ -649,7 +649,7 @@ $w"
 $seen
 " in *"
 $w
-"*) ;; *) [ -d "$w/.agentctx" ] && list_dir "$w/.agentctx" "$KEY" ;; esac
+"*) ;; *) [ -d "$w/.trailkeep" ] && list_dir "$w/.trailkeep" "$KEY" ;; esac
   fi
   [ "$LISTED" -eq 1 ] || say "No active efforts."
 }
@@ -671,7 +671,7 @@ cmd_close() {
   [ -e "$f" ] || die "no effort for branch $BRANCH"
   dec=$(section "$f" "Decisions and dead ends" | awk 'NF')
   harvest manual - >/dev/null 2>&1
-  dest=$(archive_effort "$f" "$KEY") || die "could not write to $(tilde "$(repo_dir "$KEY")") (sandboxed agent?). Run 'agentctx close' yourself in a terminal."
+  dest=$(archive_effort "$f" "$KEY") || die "could not write to $(tilde "$(repo_dir "$KEY")") (sandboxed agent?). Run 'trailkeep close' yourself in a terminal."
   log_append "$KEY" closed "$BRANCH" "$(git rev-parse --short HEAD 2>/dev/null || echo -)" - "effort closed ($(tilde "$dest"))" manual -
   say "Archived to $dest"
   if [ -n "$dec" ]; then
@@ -680,7 +680,7 @@ cmd_close() {
     printf '%s\n' "$dec"
     say ""
     say "  team-wide, not derivable from code -> repo AGENTS.md"
-    say "  private to you, this repo          -> agentctx notes"
+    say "  private to you, this repo          -> trailkeep notes"
     say "  you, every repo                    -> $(tilde "$PERSONAL")"
   fi
 }
@@ -720,7 +720,7 @@ cmd_prune() {
       say "$br  (branch gone)  $f"
     fi
   done
-  [ "$apply" -eq 1 ] || say "Run 'agentctx prune --apply' to archive them."
+  [ "$apply" -eq 1 ] || say "Run 'trailkeep prune --apply' to archive them."
 }
 
 # --------------------------------------------------------------- install ----
@@ -733,19 +733,19 @@ claude_import_line() {
 }
 
 claude_block() {
-  printf '<!-- agentctx:begin (%s; edit %s instead) -->\n%s\n<!-- agentctx:end -->\n' "$MARKER" "$(tilde "$PERSONAL")" "$(claude_import_line)"
+  printf '<!-- trailkeep:begin (%s; edit %s instead) -->\n%s\n<!-- trailkeep:end -->\n' "$MARKER" "$(tilde "$PERSONAL")" "$(claude_import_line)"
 }
 
-strip_block() { # print FILE without the agentctx block
-  awk '/^<!-- agentctx:begin/ { skip = 1; next } skip && /^<!-- agentctx:end -->[[:space:]]*$/ { skip = 0; next } !skip' "$1"
+strip_block() { # print FILE without the trailkeep block
+  awk '/^<!-- trailkeep:begin/ { skip = 1; next } skip && /^<!-- trailkeep:end -->[[:space:]]*$/ { skip = 0; next } !skip' "$1"
 }
 
 block_ok() { # FILE has no block, or exactly one well-formed block
-  b=$(grep -c '^<!-- agentctx:begin' "$1" 2>/dev/null); e=$(grep -c '^<!-- agentctx:end -->[[:space:]]*$' "$1" 2>/dev/null)
+  b=$(grep -c '^<!-- trailkeep:begin' "$1" 2>/dev/null); e=$(grep -c '^<!-- trailkeep:end -->[[:space:]]*$' "$1" 2>/dev/null)
   [ "${b:-0}" -eq "${e:-0}" ] && [ "${b:-0}" -le 1 ]
 }
 
-block_body() { awk '/^<!-- agentctx:begin/ { s = 1; next } /^<!-- agentctx:end -->[[:space:]]*$/ { s = 0; next } s' "$1"; }
+block_body() { awk '/^<!-- trailkeep:begin/ { s = 1; next } /^<!-- trailkeep:end -->[[:space:]]*$/ { s = 0; next } s' "$1"; }
 
 has_content() { # non-blank, non-comment content
   [ -f "$1" ] && grep -v '^[[:space:]]*$' "$1" | grep -qv '^[[:space:]]*<!--.*-->[[:space:]]*$'
@@ -795,13 +795,13 @@ link_global() { # TOOL PATH
   fi
   if [ -L "$t" ]; then
     warn "$1: $(tilde "$t") is a link to $(readlink "$t"), left untouched"
-    hint "point it at $(tilde "$PERSONAL") yourself if you want agentctx to manage it"
+    hint "point it at $(tilde "$PERSONAL") yourself if you want trailkeep to manage it"
     return 0
   fi
   if [ -e "$t" ]; then
     if has_content "$t"; then
       warn "$1: $(tilde "$t") has its own content, left untouched"
-      hint "merge it into $(tilde "$PERSONAL"), then run: agentctx install  (or use --adopt)"
+      hint "merge it into $(tilde "$PERSONAL"), then run: trailkeep install  (or use --adopt)"
       return 0
     fi
     backup "$t"
@@ -813,7 +813,7 @@ link_global() { # TOOL PATH
 # Write a hook file we own; never overwrite one we don't.
 own_file() { # LABEL PATH CONTENT SNIPPET
   if [ -e "$2" ] && ! owned "$2"; then
-    warn "$1: $(tilde "$2") exists and is not managed by agentctx, left untouched"
+    warn "$1: $(tilde "$2") exists and is not managed by trailkeep, left untouched"
     hint "add these entries to it by hand:"
     printf '%s\n' "$4" | sed 's/^/    /'
     return 0
@@ -844,7 +844,7 @@ ensure_personal() {
       if [ "$srcs" = "$CLAUDE_DIR/CLAUDE.md" ]; then
         act "move your instructions from $(tilde "$srcs") into $(tilde "$PERSONAL")" adopt_claude_md "$srcs" "$PERSONAL"
         if [ -f "$PERSONAL" ] && prose_only "$PERSONAL" | grep -qE '(^|[[:space:]])@[^[:space:]]'; then
-          warn "the adopted text has @imports: they now resolve from $(tilde "$AGENTCTX_HOME"), and Codex/Copilot don't expand them"
+          warn "the adopted text has @imports: they now resolve from $(tilde "$TRAILKEEP_HOME"), and Codex/Copilot don't expand them"
           hint "inline what they point to, or make the paths absolute for Claude"
         fi
       else
@@ -873,13 +873,13 @@ install_claude() {
   say ""; say "Claude Code"
   f=$CLAUDE_DIR/CLAUDE.md
   if [ -f "$f" ] && ! block_ok "$f"; then
-    fail "$(tilde "$f") has a broken or duplicated agentctx block; fix it by hand (keep one begin/end pair)"
-  elif [ -f "$f" ] && grep -q '^<!-- agentctx:begin' "$f"; then
+    fail "$(tilde "$f") has a broken or duplicated trailkeep block; fix it by hand (keep one begin/end pair)"
+  elif [ -f "$f" ] && grep -q '^<!-- trailkeep:begin' "$f"; then
     if [ "$(block_body "$f")" = "$(claude_import_line)" ]; then
       ok "$(tilde "$f") imports $(tilde "$PERSONAL")"
     else
       backup "$f"
-      act "refresh the agentctx block in $(tilde "$f")" put_block "$f" "$(claude_block)"
+      act "refresh the trailkeep block in $(tilde "$f")" put_block "$f" "$(claude_block)"
     fi
   else
     backup "$f"
@@ -888,18 +888,18 @@ install_claude() {
 
   if ! has claude; then
     warn "claude not on PATH: the hook plugin was not installed"
-    hint "install Claude Code, then rerun: agentctx install"
+    hint "install Claude Code, then rerun: trailkeep install"
     return 0
   fi
-  if claude plugin marketplace list 2>/dev/null | grep -q 'agentctx'; then
-    act "refresh the agentctx plugin marketplace" quiet claude plugin marketplace update agentctx
+  if claude plugin marketplace list 2>/dev/null | grep -q 'trailkeep'; then
+    act "refresh the trailkeep plugin marketplace" quiet claude plugin marketplace update trailkeep
   else
-    act "add the agentctx plugin marketplace ($(tilde "$RUNTIME"))" quiet claude plugin marketplace add "$RUNTIME" --scope user
+    act "add the trailkeep plugin marketplace ($(tilde "$RUNTIME"))" quiet claude plugin marketplace add "$RUNTIME" --scope user
   fi
-  if claude plugin list 2>/dev/null | grep -q 'agentctx@agentctx'; then
-    act "update the agentctx plugin (SessionStart hook + effort skill)" quiet claude plugin update agentctx@agentctx --scope user
+  if claude plugin list 2>/dev/null | grep -q 'trailkeep@trailkeep'; then
+    act "update the trailkeep plugin (SessionStart hook + effort skill)" quiet claude plugin update trailkeep@trailkeep --scope user
   else
-    act "install the agentctx plugin (SessionStart hook + effort skill)" quiet claude plugin install agentctx@agentctx --scope user
+    act "install the trailkeep plugin (SessionStart hook + effort skill)" quiet claude plugin install trailkeep@trailkeep --scope user
   fi
 }
 
@@ -914,13 +914,13 @@ install_codex() {
 $(codex_hook_group)
 SessionEnd:
 $(codex_end_group)"
-  info "Codex runs new hooks only after you trust them: open codex, run /hooks, and trust both agentctx hooks (once per machine)"
+  info "Codex runs new hooks only after you trust them: open codex, run /hooks, and trust both trailkeep hooks (once per machine)"
 }
 
 install_copilot() {
   say ""; say "Copilot CLI"
   link_global "Copilot" "$COPILOT_DIR/copilot-instructions.md"
-  own_file "Copilot hooks" "$COPILOT_DIR/hooks/agentctx.json" "$(copilot_hooks_json)" "sessionStart:
+  own_file "Copilot hooks" "$COPILOT_DIR/hooks/trailkeep.json" "$(copilot_hooks_json)" "sessionStart:
 $(copilot_hook_entry)
 sessionEnd:
 $(copilot_end_entry)"
@@ -931,7 +931,7 @@ install_skill() {
   link_skill "$SKILLS_DIR/effort" "Codex and Copilot"
   # Copilot stops reading ~/.agents/skills when COPILOT_HOME is set.
   [ -n "${COPILOT_HOME:-}" ] && link_skill "$COPILOT_DIR/skills/effort" "Copilot (COPILOT_HOME)"
-  ok "Claude Code gets the skill from the plugin (as agentctx:effort)"
+  ok "Claude Code gets the skill from the plugin (as trailkeep:effort)"
 }
 
 link_skill() { # PATH LABEL
@@ -946,7 +946,7 @@ link_skill() { # PATH LABEL
 # Copy the tool into $RUNTIME (atomically swapped), remembering where it came from.
 install_runtime() {
   if [ -d "$RUNTIME" ] && [ "$ROOT" = "$(cd "$RUNTIME" && pwd -P)" ]; then ok "runtime: $(tilde "$RUNTIME")"; return 0; fi
-  act "copy agentctx $VERSION to $(tilde "$RUNTIME")" copy_runtime
+  act "copy trailkeep $VERSION to $(tilde "$RUNTIME")" copy_runtime
 }
 
 copy_runtime() {
@@ -955,12 +955,12 @@ copy_runtime() {
   for x in bin hooks skills .claude-plugin README.md LICENSE; do
     [ -e "$ROOT/$x" ] && { cp -R "$ROOT/$x" "$new/" || return 1; }
   done
-  chmod +x "$new/bin/agentctx"
+  chmod +x "$new/bin/trailkeep"
   src=git; [ -d "$ROOT/.git" ] || src=npm
   case $ROOT in */node_modules/*) src=npm ;; esac
-  printf 'version=%s\nsource=%s\npath=%s\n' "$VERSION" "$src" "$ROOT" > "$new/.agentctx-runtime"
+  printf 'version=%s\nsource=%s\npath=%s\n' "$VERSION" "$src" "$ROOT" > "$new/.trailkeep-runtime"
   if [ -e "$RUNTIME" ]; then
-    [ -f "$RUNTIME/.agentctx-runtime" ] || { rm -rf "$new"; printf '%s exists and is not an agentctx runtime\n' "$RUNTIME" >&2; return 1; }
+    [ -f "$RUNTIME/.trailkeep-runtime" ] || { rm -rf "$new"; printf '%s exists and is not an trailkeep runtime\n' "$RUNTIME" >&2; return 1; }
     rm -rf "$RUNTIME.old.$$" && mv "$RUNTIME" "$RUNTIME.old.$$" && mv "$new" "$RUNTIME" && rm -rf "$RUNTIME.old.$$"
   else
     mkdir -p "$(dirname "$RUNTIME")" && mv "$new" "$RUNTIME"
@@ -968,14 +968,14 @@ copy_runtime() {
 }
 
 install_bin() {
-  t=$BIN_DIR/agentctx
+  t=$BIN_DIR/trailkeep
   if is_link_to "$t" "$RT_BIN"; then ok "command: $(tilde "$t")"; else
     if [ -e "$t" ] && ! [ -L "$t" ]; then warn "$(tilde "$t") exists and is not a link, left untouched"; else
       [ -L "$t" ] && act "remove old link $(tilde "$t")" rm -f "$t"
       act "link $(tilde "$t") -> $(tilde "$RT_BIN")" make_link "$t" "$RT_BIN"
     fi
   fi
-  case ":$PATH:" in *":$BIN_DIR:"*) ;; *) warn "$(tilde "$BIN_DIR") is not on your PATH"; hint "add it in your shell rc so agents can run agentctx" ;; esac
+  case ":$PATH:" in *":$BIN_DIR:"*) ;; *) warn "$(tilde "$BIN_DIR") is not on your PATH"; hint "add it in your shell rc so agents can run trailkeep" ;; esac
 }
 
 want() { # TOOL DIR -> should we configure this tool?
@@ -998,7 +998,7 @@ cmd_install() {
     shift
   done
   [ "$DRY" -eq 1 ] && say "Dry run: nothing will change."
-  say "agentctx $VERSION install"
+  say "trailkeep $VERSION install"
   say ""; say "Shared"
   ensure_personal || exit 1
   [ "$DRY" -eq 1 ] || mkdir -p "$REPOS"
@@ -1013,7 +1013,7 @@ cmd_install() {
   [ -d "$BACKUP_DIR" ] && { say ""; say "Backups of changed files: $(tilde "$BACKUP_DIR")"; }
   say ""
   if [ "$FAILS" -gt 0 ]; then say "$FAILS step(s) failed; see above."; exit 1; fi
-  say "Next: agentctx doctor   (checks the setup)   then   agentctx verify   (live test with each agent)"
+  say "Next: trailkeep doctor   (checks the setup)   then   trailkeep verify   (live test with each agent)"
 }
 
 # Replace the CLAUDE.md block with a plain copy of the personal file.
@@ -1027,39 +1027,39 @@ inline_block() { # FILE
 copy_over_link() { rm -f "$1" && cp "$PERSONAL" "$1"; }
 
 cmd_uninstall() {
-  say "agentctx uninstall"
+  say "trailkeep uninstall"
   [ "${1:-}" = --dry-run ] && { DRY=1; say "Dry run: nothing will change."; }
   f=$CLAUDE_DIR/CLAUDE.md
-  if [ -f "$f" ] && grep -q '^<!-- agentctx:begin' "$f"; then
+  if [ -f "$f" ] && grep -q '^<!-- trailkeep:begin' "$f"; then
     if block_ok "$f"; then
       backup "$f"
       act "replace the import in $(tilde "$f") with a copy of your personal instructions" inline_block "$f"
     else
-      fail "$(tilde "$f") has a broken agentctx block; remove it by hand"
+      fail "$(tilde "$f") has a broken trailkeep block; remove it by hand"
     fi
   fi
   if has claude; then
-    if claude plugin list 2>/dev/null | grep -q 'agentctx@agentctx'; then act "uninstall the Claude Code plugin" quiet claude plugin uninstall agentctx@agentctx --scope user; fi
-    if claude plugin marketplace list 2>/dev/null | grep -q 'agentctx'; then act "remove the plugin marketplace" quiet claude plugin marketplace remove agentctx; fi
+    if claude plugin list 2>/dev/null | grep -q 'trailkeep@trailkeep'; then act "uninstall the Claude Code plugin" quiet claude plugin uninstall trailkeep@trailkeep --scope user; fi
+    if claude plugin marketplace list 2>/dev/null | grep -q 'trailkeep'; then act "remove the plugin marketplace" quiet claude plugin marketplace remove trailkeep; fi
   fi
   for l in "$CODEX_DIR/AGENTS.md" "$COPILOT_DIR/copilot-instructions.md"; do
     if is_link_to "$l" "$PERSONAL"; then act "replace link $(tilde "$l") with a copy of your personal instructions" copy_over_link "$l"; fi
   done
-  for h in "$CODEX_DIR/hooks.json" "$COPILOT_DIR/hooks/agentctx.json"; do
+  for h in "$CODEX_DIR/hooks.json" "$COPILOT_DIR/hooks/trailkeep.json"; do
     if owned "$h"; then act "remove $(tilde "$h")" rm -f "$h"; fi
   done
   for sk in "$SKILLS_DIR/effort" "$COPILOT_DIR/skills/effort"; do
     if is_link_to "$sk" "$RUNTIME/skills/effort"; then act "remove link $(tilde "$sk")" rm -f "$sk"; fi
   done
-  if is_link_to "$BIN_DIR/agentctx" "$RT_BIN"; then act "remove $(tilde "$BIN_DIR/agentctx")" rm -f "$BIN_DIR/agentctx"; fi
-  if [ -f "$RUNTIME/.agentctx-runtime" ]; then act "remove $(tilde "$RUNTIME")" rm -rf "$RUNTIME"; fi
+  if is_link_to "$BIN_DIR/trailkeep" "$RT_BIN"; then act "remove $(tilde "$BIN_DIR/trailkeep")" rm -f "$BIN_DIR/trailkeep"; fi
+  if [ -f "$RUNTIME/.trailkeep-runtime" ]; then act "remove $(tilde "$RUNTIME")" rm -rf "$RUNTIME"; fi
   say ""
   say "Each agent keeps a plain copy of your personal instructions."
-  say "Kept: $(tilde "$AGENTCTX_HOME") (personal file, notes, archive) and any .agentctx/ folders in your worktrees."
+  say "Kept: $(tilde "$TRAILKEEP_HOME") (personal file, notes, archive) and any .trailkeep/ folders in your worktrees."
   [ "$FAILS" -eq 0 ] || exit 1
 }
 
-runtime_field() { sed -n "s/^$1=//p" "$RUNTIME/.agentctx-runtime" 2>/dev/null; }
+runtime_field() { sed -n "s/^$1=//p" "$RUNTIME/.trailkeep-runtime" 2>/dev/null; }
 
 cmd_update() {
   src=$(runtime_field source); path=$(runtime_field path)
@@ -1067,17 +1067,17 @@ cmd_update() {
   dry=0; case " $* " in *" --dry-run "*) dry=1 ;; esac
   case $src in
     git)
-      [ -d "$path/.git" ] || die "the clone at $path is gone; clone agentctx again and run install"
+      [ -d "$path/.git" ] || die "the clone at $path is gone; clone trailkeep again and run install"
       if [ "$dry" -eq 1 ]; then say "Dry run: would git pull $(tilde "$path"), then:"
       else say "Updating $(tilde "$path")"; git -C "$path" pull --ff-only || die "git pull failed (local changes?)"; fi
-      exec "$path/bin/agentctx" install "$@" ;;
+      exec "$path/bin/trailkeep" install "$@" ;;
     npm)
       has npm || die "npm not found"
-      if [ "$dry" -eq 1 ]; then say "Dry run: would run npm install -g agentctx@latest, then install"; exec "$RT_BIN" install "$@"; fi
+      if [ "$dry" -eq 1 ]; then say "Dry run: would run npm install -g trailkeep@latest, then install"; exec "$RT_BIN" install "$@"; fi
       say "Updating with npm"
-      npm install -g agentctx@latest || die "npm install failed"
-      np=$(npm root -g)/agentctx/bin/agentctx
-      [ -x "$np" ] || die "agentctx not found in $(npm root -g)"
+      npm install -g trailkeep@latest || die "npm install failed"
+      np=$(npm root -g)/trailkeep/bin/trailkeep
+      [ -x "$np" ] || die "trailkeep not found in $(npm root -g)"
       exec "$np" install "$@" ;;
   esac
 }
@@ -1123,7 +1123,7 @@ doctor_personal() {
     if prose_only "$PERSONAL" | grep -qE '(^|[[:space:]])@[^[:space:]]*[/.]'; then
       info "imports in $(tilde "$PERSONAL") work in Claude Code only; Codex and Copilot see them as plain text"
     fi
-  else fail "missing $(tilde "$PERSONAL")"; hint "run: agentctx install"; fi
+  else fail "missing $(tilde "$PERSONAL")"; hint "run: trailkeep install"; fi
 
   f=$CLAUDE_DIR/CLAUDE.md
   if [ -f "$f" ] && grep -qF "$(claude_import_line)" "$f"; then
@@ -1131,13 +1131,13 @@ doctor_personal() {
     rest=$(mktemp); strip_block "$f" > "$rest"
     has_content "$rest" && info "$(tilde "$f") also has its own lines; Codex and Copilot don't see those"
     rm -f "$rest"
-  elif has claude || [ -d "$CLAUDE_DIR" ]; then fail "Claude Code does not import it"; hint "run: agentctx install"; fi
+  elif has claude || [ -d "$CLAUDE_DIR" ]; then fail "Claude Code does not import it"; hint "run: trailkeep install"; fi
 
   for pair in "Codex:$CODEX_DIR/AGENTS.md:codex:$CODEX_DIR" "Copilot:$COPILOT_DIR/copilot-instructions.md:copilot:$COPILOT_DIR"; do
     label=${pair%%:*}; rest=${pair#*:}; path=${rest%%:*}; rest=${rest#*:}; bin=${rest%%:*}; dir=${rest#*:}
     has "$bin" || [ -d "$dir" ] || continue
     if is_link_to "$path" "$PERSONAL"; then ok "$label reads it ($(tilde "$path"))"
-    else fail "$label does not read it ($(tilde "$path") is not a link to it)"; hint "run: agentctx install"; fi
+    else fail "$label does not read it ($(tilde "$path") is not a link to it)"; hint "run: trailkeep install"; fi
   done
   has_content "$CODEX_DIR/AGENTS.override.md" && warn "$(tilde "$CODEX_DIR/AGENTS.override.md") overrides your personal file in Codex"
   say ""
@@ -1148,22 +1148,22 @@ hook_target_ok() { # LABEL FILE
   p=$(sed -n "s/.*\"'\([^']*\)' context --for.*/\1/p" "$2" | head -n 1)
   if [ -n "$p" ] && [ ! -x "$p" ]; then
     fail "$1 hook points at $p, which no longer exists"
-    hint "run agentctx install from the clone's current location"
+    hint "run trailkeep install from the clone's current location"
   fi
 }
 
 doctor_hooks() {
   say "Session hooks"
   if [ -x "$RT_BIN" ]; then ok "runtime $(runtime_field version) at $(tilde "$RUNTIME") ($(runtime_field source))"
-  else fail "runtime missing at $(tilde "$RUNTIME"), so every hook fails"; hint "run: agentctx install"; fi
+  else fail "runtime missing at $(tilde "$RUNTIME"), so every hook fails"; hint "run: trailkeep install"; fi
   if has claude; then
-    if claude plugin list 2>/dev/null | grep -q 'agentctx@agentctx'; then ok "Claude Code plugin installed"
-    else fail "Claude Code plugin not installed"; hint "run: agentctx install"; fi
+    if claude plugin list 2>/dev/null | grep -q 'trailkeep@trailkeep'; then ok "Claude Code plugin installed"
+    else fail "Claude Code plugin not installed"; hint "run: trailkeep install"; fi
   fi
   if has codex || [ -d "$CODEX_DIR" ]; then
-    if [ -f "$CODEX_DIR/hooks.json" ] && grep -q "agentctx' context --for codex" "$CODEX_DIR/hooks.json"; then
+    if [ -f "$CODEX_DIR/hooks.json" ] && grep -q "trailkeep' context --for codex" "$CODEX_DIR/hooks.json"; then
       ok "Codex hook configured"
-      grep -q "agentctx' harvest --for codex" "$CODEX_DIR/hooks.json" || { warn "Codex session-end hook missing, decisions won't be logged"; hint "run: agentctx install"; }
+      grep -q "trailkeep' harvest --for codex" "$CODEX_DIR/hooks.json" || { warn "Codex session-end hook missing, decisions won't be logged"; hint "run: trailkeep install"; }
       hook_target_ok "Codex" "$CODEX_DIR/hooks.json"
       # Trust is stored in config.toml under a key like "file:<dir>/hooks.json:session_start:0:0".
       if [ -f "$CODEX_DIR/config.toml" ] && grep -qF 'hooks.json:session_start' "$CODEX_DIR/config.toml" && grep -qF 'hooks.json:session_end' "$CODEX_DIR/config.toml"; then
@@ -1171,16 +1171,16 @@ doctor_hooks() {
         hint "Codex re-checks trust against the hook's exact definition; after reinstalling from a new path, trust it again in /hooks"
       else
         warn "Codex hooks not trusted yet, so they will not run"
-        hint "open codex, run /hooks, and trust both agentctx hooks"
+        hint "open codex, run /hooks, and trust both trailkeep hooks"
       fi
-    else fail "Codex hook missing"; hint "run: agentctx install"; fi
+    else fail "Codex hook missing"; hint "run: trailkeep install"; fi
   fi
   if has copilot || [ -d "$COPILOT_DIR" ]; then
-    if [ -f "$COPILOT_DIR/hooks/agentctx.json" ]; then ok "Copilot hook configured"; hook_target_ok "Copilot" "$COPILOT_DIR/hooks/agentctx.json"
-      grep -q "harvest --for copilot" "$COPILOT_DIR/hooks/agentctx.json" || { warn "Copilot session-end hook missing"; hint "run: agentctx install"; }
-    else fail "Copilot hook missing"; hint "run: agentctx install"; fi
+    if [ -f "$COPILOT_DIR/hooks/trailkeep.json" ]; then ok "Copilot hook configured"; hook_target_ok "Copilot" "$COPILOT_DIR/hooks/trailkeep.json"
+      grep -q "harvest --for copilot" "$COPILOT_DIR/hooks/trailkeep.json" || { warn "Copilot session-end hook missing"; hint "run: trailkeep install"; }
+    else fail "Copilot hook missing"; hint "run: trailkeep install"; fi
   fi
-  if has agentctx; then ok "agentctx on PATH"; else warn "agentctx is not on PATH (agents can't run it)"; fi
+  if has trailkeep; then ok "trailkeep on PATH"; else warn "trailkeep is not on PATH (agents can't run it)"; fi
   say ""
 }
 
@@ -1282,31 +1282,31 @@ doctor_task() {
   KEY=$(repo_key) || return 0
   say "Task layer (key: $KEY)"
   n=$(notes_path "$KEY")
-  if [ -s "$n" ]; then ok "private notes: $(chars "$n") chars"; else info "no private notes (agentctx notes)"; fi
+  if [ -s "$n" ]; then ok "private notes: $(chars "$n") chars"; else info "no private notes (trailkeep notes)"; fi
   d=$(effort_dir)
-  if [ -d "$d" ] && [ -n "$(git -C "$(worktree_top)" status --porcelain --ignored=no -- .agentctx 2>/dev/null)" ]; then
-    fail ".agentctx/ is not ignored by git, so efforts could get committed"
+  if [ -d "$d" ] && [ -n "$(git -C "$(worktree_top)" status --porcelain --ignored=no -- .trailkeep 2>/dev/null)" ]; then
+    fail ".trailkeep/ is not ignored by git, so efforts could get committed"
     hint "restore $(tilde "$d/.gitignore") with a single line: *"
   fi
   if b=$(current_branch) && [ -n "$b" ]; then
     e=$(effort_path "$KEY" "$b")
     if [ -s "$e" ]; then ok "effort for $b: $(lines "$e") lines, $(chars "$e") chars"
-    else info "no effort for branch $b (agentctx new)"; fi
+    else info "no effort for branch $b (trailkeep new)"; fi
   else info "detached HEAD: no effort lookup"; fi
   out=$(build_context 2>/dev/null)
-  case $out in *"over the agentctx budget"*)
+  case $out in *"over the trailkeep budget"*)
     warn "notes or effort are too big to inject, so agents only get a pointer to them"
     hint "fold old Progress lines into a summary; notes get up to $((MAX_CHARS / 3)) chars, the effort the rest of $MAX_CHARS" ;;
   esac
   n=0; for f in "$(log_dir "$KEY")"/*.tsv; do [ -f "$f" ] && n=$((n + $(lines "$f"))); done
-  if [ "$n" -gt 0 ]; then ok "decision log: $n entries (agentctx log)"; else info "decision log is empty (it fills from effort files at session end)"; fi
+  if [ "$n" -gt 0 ]; then ok "decision log: $n entries (trailkeep log)"; else info "decision log is empty (it fills from effort files at session end)"; fi
   gone=$(gone_efforts | awk 'NF' | wc -l | tr -d ' ')
-  if [ "$gone" -gt 0 ]; then warn "$gone effort(s) belong to deleted branches"; hint "agentctx prune --apply"; fi
+  if [ "$gone" -gt 0 ]; then warn "$gone effort(s) belong to deleted branches"; hint "trailkeep prune --apply"; fi
   say ""
 }
 
 cmd_doctor() {
-  say "agentctx $VERSION doctor"
+  say "trailkeep $VERSION doctor"
   say ""
   doctor_personal
   doctor_hooks
@@ -1325,12 +1325,12 @@ rand() { od -An -N4 -tu4 /dev/urandom | tr -d ' \n'; }
 cmd_verify() {
   agents="claude codex copilot"
   [ "${1:-}" = --agents ] && { agents=$(printf '%s' "${2:-}" | tr ',' ' '); }
-  [ -f "$PERSONAL" ] || die "no personal file yet: run agentctx install"
+  [ -f "$PERSONAL" ] || die "no personal file yet: run trailkeep install"
 
   id=$(rand)
   P=ACX-P$id; R=ACX-R$id; N=ACX-N$id; E=ACX-E$id; D=ACX-D$id
   work=$(mktemp -d) || die "mktemp failed"
-  repo=$work/agentctx-verify-$id
+  repo=$work/trailkeep-verify-$id
   personal_backup=$work/personal.bak
   cp "$PERSONAL" "$personal_backup" || die "could not back up $PERSONAL"
   vkey=
@@ -1346,18 +1346,18 @@ cmd_verify() {
   trap 'cleanup; exit 130' INT TERM HUP
 
   mkdir -p "$repo"
-  ( cd "$repo" && git init -q && git symbolic-ref HEAD refs/heads/agentctx-verify ) || die "git init failed"
+  ( cd "$repo" && git init -q && git symbolic-ref HEAD refs/heads/trailkeep-verify ) || die "git init failed"
   printf '# Test repo\n\nVerification marker: %s\n' "$R" > "$repo/AGENTS.md"
   printf '\nVerification marker: %s\n' "$P" >> "$PERSONAL"
   vkey=$(cd "$repo" && repo_key)
-  mkdir -p "$REPOS/$vkey" "$repo/.agentctx"
-  printf '*\n' > "$repo/.agentctx/.gitignore"
+  mkdir -p "$REPOS/$vkey" "$repo/.trailkeep"
+  printf '*\n' > "$repo/.trailkeep/.gitignore"
   printf '# Notes\n\nVerification marker: %s\n' "$N" > "$REPOS/$vkey/NOTES.md"
-  printf '# agentctx-verify\n\nBranch: agentctx-verify · Repo: %s · Kind: branch · Created: %s\n\n## Goal\n\nVerification marker: %s\n\n## Decisions and dead ends\n\n- verify decision %s\n' "$vkey" "$(today)" "$E" "$D" > "$repo/.agentctx/agentctx-verify.md"
+  printf '# trailkeep-verify\n\nBranch: trailkeep-verify · Repo: %s · Kind: branch · Created: %s\n\n## Goal\n\nVerification marker: %s\n\n## Decisions and dead ends\n\n- verify decision %s\n' "$vkey" "$(today)" "$E" "$D" > "$repo/.trailkeep/trailkeep-verify.md"
 
   q='Without using any tools, reading files or running commands, list every token that starts with "ACX-" that appears anywhere in your instructions or context. Reply with the tokens separated by spaces and nothing else. If there are none, reply NONE.'
 
-  say "agentctx verify: asking each agent which layers it can see (a few hundred tokens each)"
+  say "trailkeep verify: asking each agent which layers it can see (a few hundred tokens each)"
   say ""
   printf '  %-9s %-10s %-10s %-10s %-10s %-10s\n' agent personal repo notes effort logged
   for a in $agents; do
@@ -1386,9 +1386,9 @@ cmd_verify() {
     say "$a missed something. Its reply:"
     tail -n 5 "$work/$a.out" | sed 's/^/    /'
     case $a in
-      claude) hint "notes/effort/logged missing: check 'claude plugin list' shows agentctx@agentctx enabled" ;;
+      claude) hint "notes/effort/logged missing: check 'claude plugin list' shows trailkeep@trailkeep enabled" ;;
       codex) hint "notes/effort/logged missing: the hooks are probably untrusted; open codex, run /hooks, trust both" ;;
-      copilot) hint "personal missing: Copilot may not follow the symlink; set COPILOT_CUSTOM_INSTRUCTIONS_DIRS=$(tilde "$AGENTCTX_HOME") in your shell rc" ;;
+      copilot) hint "personal missing: Copilot may not follow the symlink; set COPILOT_CUSTOM_INSTRUCTIONS_DIRS=$(tilde "$TRAILKEEP_HOME") in your shell rc" ;;
     esac
     say ""
   done
@@ -1399,7 +1399,7 @@ cmd_verify() {
 
 usage() {
   cat <<EOF
-agentctx $VERSION: global knowledge + per-branch task context for coding agents
+trailkeep $VERSION: global knowledge + per-branch task context for coding agents
 
 Setup
   install [--adopt] [--dry-run] [--no-claude|--no-codex|--no-copilot] [--no-skill]
@@ -1426,7 +1426,7 @@ Internal
   context --for claude|codex|copilot|text   (session-start hook)
   harvest --for claude|codex|copilot        (session-end hook)
 
-Data: $(tilde "$AGENTCTX_HOME")  (override with AGENTCTX_HOME)
+Data: $(tilde "$TRAILKEEP_HOME")  (override with TRAILKEEP_HOME)
 EOF
 }
 
@@ -1449,7 +1449,7 @@ case $cmd in
   harvest) cmd_harvest "$@" ;;
   log) cmd_log "$@" ;;
   update) cmd_update "$@" ;;
-  version|--version|-V) say "agentctx $VERSION" ;;
+  version|--version|-V) say "trailkeep $VERSION" ;;
   help|--help|-h) usage ;;
   *) usage >&2; exit 2 ;;
 esac

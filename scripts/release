@@ -11,16 +11,16 @@ case $v in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "usage: sh scripts/release X.Y.Z [--
 [ "$(git symbolic-ref --short HEAD)" = main ] || { echo "release from main" >&2; exit 1; }
 git rev-parse -q --verify "refs/tags/v$v" >/dev/null && { echo "tag v$v already exists" >&2; exit 1; }
 
-sed "s/^VERSION=\".*\"$/VERSION=\"$v\"/" bin/agentctx > bin/agentctx.tmp && cat bin/agentctx.tmp > bin/agentctx && rm bin/agentctx.tmp
+sed "s/^VERSION=\".*\"$/VERSION=\"$v\"/" bin/trailkeep > bin/trailkeep.tmp && cat bin/trailkeep.tmp > bin/trailkeep && rm bin/trailkeep.tmp
 for f in package.json .claude-plugin/plugin.json; do
   sed "s/^  \"version\": \".*\",$/  \"version\": \"$v\",/" "$f" > "$f.tmp" && mv "$f.tmp" "$f"
 done
 sh scripts/check-version "$v" || exit 1
-if [ -z "${AGENTCTX_RELEASE_SKIP_TESTS:-}" ]; then
+if [ -z "${TRAILKEEP_RELEASE_SKIP_TESTS:-}" ]; then
   sh tests/run.sh >/dev/null 2>&1 || { echo "tests failed; nothing committed (versions are bumped in the working tree)" >&2; exit 1; }
 fi
 
-git add bin/agentctx package.json .claude-plugin/plugin.json
+git add bin/trailkeep package.json .claude-plugin/plugin.json
 # Releasing the version already in the files (e.g. the first release) needs no commit.
 git diff --cached --quiet || git commit -q -m "Release v$v"
 git tag -a "v$v" -m "v$v"

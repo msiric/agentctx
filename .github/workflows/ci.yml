@@ -24,15 +24,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: shellcheck
         if: matrix.os == 'ubuntu-latest' && matrix.shell == 'default'
-        run: shellcheck -s sh bin/agentctx tests/run.sh scripts/check-version scripts/release && sh scripts/check-version
+        run: shellcheck -s sh bin/trailkeep tests/run.sh scripts/check-version scripts/release && sh scripts/check-version
       - name: tests
         env:
-          AGENTCTX_TEST_SHELL: ${{ matrix.shell != 'default' && matrix.shell || '' }}
+          TRAILKEEP_TEST_SHELL: ${{ matrix.shell != 'default' && matrix.shell || '' }}
         run: sh tests/run.sh
 
   real-clis:
     # Installs the current Claude Code and Codex CLIs and checks, offline
-    # (no model calls), that they load what agentctx sets up.
+    # (no model calls), that they load what trailkeep sets up.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -47,5 +47,5 @@ jobs:
           codex --version
       - name: tests against real CLIs
         env:
-          AGENTCTX_REAL: "1"
+          TRAILKEEP_REAL: "1"
         run: sh tests/run.sh

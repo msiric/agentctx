@@ -3,12 +3,12 @@
 #   sh scripts/check-version [X.Y.Z]
 set -u
 cd "$(dirname "$0")/.." || exit 1
-cli=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' bin/agentctx)
+cli=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' bin/trailkeep)
 pkg=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' package.json)
 plg=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' .claude-plugin/plugin.json)
 want=${1:-$cli}
 bad=0
-for pair in "bin/agentctx:$cli" "package.json:$pkg" ".claude-plugin/plugin.json:$plg"; do
+for pair in "bin/trailkeep:$cli" "package.json:$pkg" ".claude-plugin/plugin.json:$plg"; do
   f=${pair%%:*}; v=${pair#*:}
   if [ "$v" != "$want" ]; then echo "version mismatch: $f has '$v', expected '$want'"; bad=1; fi
 done

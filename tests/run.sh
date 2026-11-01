@@ -1,16 +1,16 @@
 #!/bin/sh
-# agentctx test suite. POSIX sh, no deps beyond git. Every test runs with a
+# trailkeep test suite. POSIX sh, no deps beyond git. Every test runs with a
 # throwaway $HOME, so it never touches your real setup.
 #
 #   sh tests/run.sh            unit + integration tests (stubs for the agents)
-#   AGENTCTX_REAL=1 sh tests/run.sh
+#   TRAILKEEP_REAL=1 sh tests/run.sh
 #                              also run against the real claude / codex CLIs
 #                              if installed (offline: no model calls)
 
 set -u
 HERE=$(cd "$(dirname "$0")" && pwd -P)
 ROOT=$(cd "$HERE/.." && pwd -P)
-BIN=$ROOT/bin/agentctx
+BIN=$ROOT/bin/trailkeep
 REAL_PATH=$PATH
 PASS=0; FAIL=0; CURRENT=
 
@@ -33,8 +33,8 @@ sandbox() {
   SB=$(cd "$(mktemp -d)" && pwd -P)   # macOS: /var is a symlink to /private/var
   export HOME="$SB/home"
   mkdir -p "$HOME" "$SB/stubs" "$HOME/.local/bin"
-  unset AGENTCTX_HOME CODEX_HOME COPILOT_HOME CLAUDE_CONFIG_DIR AGENTCTX_EFFORT AGENTCTX_MAX_CHARS CLAUDECODE
-  export AGENTCTX_SYNC=1   # run the background startup harvest in the foreground
+  unset TRAILKEEP_HOME CODEX_HOME COPILOT_HOME CLAUDE_CONFIG_DIR TRAILKEEP_EFFORT TRAILKEEP_MAX_CHARS CLAUDECODE
+  export TRAILKEEP_SYNC=1   # run the background startup harvest in the foreground
   export PATH="$SB/stubs:$HOME/.local/bin:/usr/bin:/bin"
   export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
   git config --global init.defaultBranch main
@@ -47,7 +47,7 @@ new_repo() { # new_repo DIR [REMOTE]
   return 0
 }
 
-ax() { ${AGENTCTX_TEST_SHELL:-} "$BIN" "$@"; }
+ax() { ${TRAILKEEP_TEST_SHELL:-} "$BIN" "$@"; }
 
 tree_snapshot() { # deterministic listing + contents of HOME
   (cd "$HOME" && find . \( -type f -o -type l \) | LC_ALL=C sort | while IFS= read -r f; do
@@ -61,10 +61,10 @@ stub_claude() {
 #!/bin/sh
 printf '%s\n' "$*" >> "$HOME/claude.calls"
 case "$1 $2" in
-  "plugin list") [ -f "$HOME/.stub-installed" ] && echo "agentctx@agentctx" ;;
+  "plugin list") [ -f "$HOME/.stub-installed" ] && echo "trailkeep@trailkeep" ;;
   "plugin marketplace")
     case $3 in
-      list) [ -f "$HOME/.stub-mkt" ] && echo "agentctx" ;;
+      list) [ -f "$HOME/.stub-mkt" ] && echo "trailkeep" ;;
       add) touch "$HOME/.stub-mkt" ;;
       remove) rm -f "$HOME/.stub-mkt" ;;
     esac ;;
@@ -97,7 +97,7 @@ EOF
 
 test_cli_basics() {
   t "cli basics"; sandbox
-  out=$(ax --version); contains "$out" "agentctx 0."
+  out=$(ax --version); contains "$out" "trailkeep 0."
   out=$(ax help); contains "$out" "install"
   ax nope >/dev/null 2>&1; status $? 2
 }
@@ -129,10 +129,10 @@ test_effort_lifecycle() {
   git checkout -q -b feat/login
   out=$(ax new); contains "$out" "Created"
   f=$(ax path); is_file "$f"
-  eq "$f" "$SB/r/.agentctx/feat__login.md" "lives in the worktree"
+  eq "$f" "$SB/r/.trailkeep/feat__login.md" "lives in the worktree"
   contains "$(cat "$f")" "Branch: feat/login · Repo: github.com__me__app · Kind: branch"
   eq "$(git status --porcelain)" "" "git status stays clean"
-  eq "$(git status --porcelain --ignored | grep -c agentctx)" "1" "folder is ignored"
+  eq "$(git status --porcelain --ignored | grep -c trailkeep)" "1" "folder is ignored"
   out=$(ax new); contains "$out" "already exists" "idempotent"
 
   printf '2026-11-01: wired the form, next: tests\n' > "$SB/p"
@@ -155,14 +155,14 @@ test_effort_lifecycle() {
   # detached HEAD
   git checkout -q --detach
   ax new >/dev/null 2>&1; status $? 1 "detached new"
-  out=$(AGENTCTX_EFFORT=spike ax new); contains "$out" "spike.md"
+  out=$(TRAILKEEP_EFFORT=spike ax new); contains "$out" "spike.md"
   git checkout -q main
   out=$(ax prune); lacks "$out" "spike" "named efforts are never pruned"
 
   # worktrees get their own efforts
   git worktree add -q "$SB/wt" -b feat/wt
   (cd "$SB/wt" && ax new >/dev/null)
-  is_file "$SB/wt/.agentctx/feat__wt.md"
+  is_file "$SB/wt/.trailkeep/feat__wt.md"
   out=$(cd / && ax list); contains "$out" "feat/wt"
 
   # close reports clearly when ~/.agents isn't writable (sandboxed agent)
@@ -170,8 +170,8 @@ test_effort_lifecycle() {
    out=$(ax close 2>&1); st=$?
    chmod -R u+w "$HOME/.agents/repos/github.com__me__app"
    if [ "$(id -u)" -ne 0 ]; then
-     status $st 1 "close fails when sandboxed"; contains "$out" "Run 'agentctx close' yourself"
-     is_file "$SB/wt/.agentctx/feat__wt.md"
+     status $st 1 "close fails when sandboxed"; contains "$out" "Run 'trailkeep close' yourself"
+     is_file "$SB/wt/.trailkeep/feat__wt.md"
    fi)
 }
 
@@ -212,7 +212,7 @@ test_context() {
   # over budget: pointer instead of content
   i=0; while [ $i -lt 400 ]; do echo "line $i of a very long effort file with lots of text" >> "$(ax path)"; i=$((i + 1)); done
   out=$(ax context --for claude </dev/null)
-  contains "$out" "over the agentctx budget"; lacks "$out" "line 399"
+  contains "$out" "over the trailkeep budget"; lacks "$out" "line 399"
   n=$(printf '%s' "$out" | wc -c | tr -d ' ')
   if [ "$n" -lt 10000 ]; then pass; else flunk "context must stay under Claude's 10000-char cap (got $n)"; fi
 
@@ -231,21 +231,21 @@ test_install_fresh() {
   contains "$(cat "$HOME/.claude/CLAUDE.md")" "@~/.agents/AGENTS.md"
   links_to "$HOME/.codex/AGENTS.md" "$HOME/.agents/AGENTS.md"
   links_to "$HOME/.copilot/copilot-instructions.md" "$HOME/.agents/AGENTS.md"
-  links_to "$HOME/.local/bin/agentctx" "$HOME/.agents/agentctx/bin/agentctx"
-  links_to "$HOME/.agents/skills/effort" "$HOME/.agents/agentctx/skills/effort"
-  is_file "$HOME/.agents/agentctx/bin/agentctx"; is_file "$HOME/.agents/agentctx/.claude-plugin/plugin.json"
-  contains "$(cat "$HOME/.agents/agentctx/.agentctx-runtime")" "source=git"
-  contains "$(cat "$HOME/.codex/hooks.json")" "'$HOME/.agents/agentctx/bin/agentctx' context" "hooks use the stable runtime path"
-  [ -d "$HOME/.agents/agentctx/tests" ] && flunk "runtime should not carry tests"
+  links_to "$HOME/.local/bin/trailkeep" "$HOME/.agents/trailkeep/bin/trailkeep"
+  links_to "$HOME/.agents/skills/effort" "$HOME/.agents/trailkeep/skills/effort"
+  is_file "$HOME/.agents/trailkeep/bin/trailkeep"; is_file "$HOME/.agents/trailkeep/.claude-plugin/plugin.json"
+  contains "$(cat "$HOME/.agents/trailkeep/.trailkeep-runtime")" "source=git"
+  contains "$(cat "$HOME/.codex/hooks.json")" "'$HOME/.agents/trailkeep/bin/trailkeep' context" "hooks use the stable runtime path"
+  [ -d "$HOME/.agents/trailkeep/tests" ] && flunk "runtime should not carry tests"
   contains "$(cat "$HOME/.codex/hooks.json")" "context --for codex"
-  contains "$(cat "$HOME/.copilot/hooks/agentctx.json")" '"sessionStart"'
-  contains "$(cat "$HOME/.copilot/hooks/agentctx.json")" '"sessionEnd"'
+  contains "$(cat "$HOME/.copilot/hooks/trailkeep.json")" '"sessionStart"'
+  contains "$(cat "$HOME/.copilot/hooks/trailkeep.json")" '"sessionEnd"'
   contains "$(cat "$HOME/.codex/hooks.json")" "harvest --for codex"
   calls=$(cat "$HOME/claude.calls")
-  contains "$calls" "plugin marketplace add $HOME/.agents/agentctx --scope user"
-  contains "$calls" "plugin install agentctx@agentctx --scope user"
+  contains "$calls" "plugin marketplace add $HOME/.agents/trailkeep --scope user"
+  contains "$calls" "plugin install trailkeep@trailkeep --scope user"
   if command -v python3 >/dev/null 2>&1; then
-    for j in "$HOME/.codex/hooks.json" "$HOME/.copilot/hooks/agentctx.json" "$ROOT/hooks/hooks.json" "$ROOT/.claude-plugin/plugin.json" "$ROOT/.claude-plugin/marketplace.json"; do
+    for j in "$HOME/.codex/hooks.json" "$HOME/.copilot/hooks/trailkeep.json" "$ROOT/hooks/hooks.json" "$ROOT/.claude-plugin/plugin.json" "$ROOT/.claude-plugin/marketplace.json"; do
       if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$j"; then pass; else flunk "invalid JSON $j"; fi
     done
   fi
@@ -255,8 +255,8 @@ test_install_fresh() {
   ax install >/dev/null 2>&1
   after=$(tree_snapshot | grep -v claude.calls)
   eq "$after" "$before" "second install is a no-op"
-  contains "$(tail -n 2 "$HOME/claude.calls")" "plugin update agentctx@agentctx" "second run updates"
-  n=$(grep -c 'agentctx:begin' "$HOME/.claude/CLAUDE.md"); eq "$n" 1 "single block"
+  contains "$(tail -n 2 "$HOME/claude.calls")" "plugin update trailkeep@trailkeep" "second run updates"
+  n=$(grep -c 'trailkeep:begin' "$HOME/.claude/CLAUDE.md"); eq "$n" 1 "single block"
 
   t "appended lines survive"; sandbox; prep_agent_dirs; stub_claude
   ax install >/dev/null 2>&1
@@ -267,7 +267,7 @@ test_install_fresh() {
   contains "$(cat "$HOME/.claude/CLAUDE.md")" "Appended rule." "uninstall"
 
   t "broken block is not edited"; sandbox; prep_agent_dirs; stub_claude
-  printf '<!-- agentctx:begin (x) -->\n@~/.agents/AGENTS.md\nMy rule\n' > "$HOME/.claude/CLAUDE.md"
+  printf '<!-- trailkeep:begin (x) -->\n@~/.agents/AGENTS.md\nMy rule\n' > "$HOME/.claude/CLAUDE.md"
   out=$(ax install 2>&1); st=$?
   status $st 1; contains "$out" "broken or duplicated"
   contains "$(cat "$HOME/.claude/CLAUDE.md")" "My rule"
@@ -280,13 +280,13 @@ test_install_preserves_user_files() {
   printf '{"hooks":{"Stop":[]}}\n' > "$HOME/.codex/hooks.json"
   out=$(ax install 2>&1)
   contains "$out" "has its own content, left untouched"
-  contains "$out" "is not managed by agentctx, left untouched"
+  contains "$out" "is not managed by trailkeep, left untouched"
   eq "$(cat "$HOME/.codex/AGENTS.md")" "Codex-only rule." "codex file untouched"
   eq "$(cat "$HOME/.codex/hooks.json")" '{"hooks":{"Stop":[]}}' "foreign hooks.json untouched"
-  lacks "$out" "\"description\": \"managed by agentctx" "snippet carries no ownership marker"
+  lacks "$out" "\"description\": \"managed by trailkeep" "snippet carries no ownership marker"
   contains "$out" "context --for codex"
   # user merges the snippet: still not ours
-  printf '{"hooks":{"Stop":[],"SessionStart":[{"hooks":[{"type":"command","command":"%s context --for codex"}]}]}}\n' "'$HOME/.agents/agentctx/bin/agentctx'" > "$HOME/.codex/hooks.json"
+  printf '{"hooks":{"Stop":[],"SessionStart":[{"hooks":[{"type":"command","command":"%s context --for codex"}]}]}}\n' "'$HOME/.agents/trailkeep/bin/trailkeep'" > "$HOME/.codex/hooks.json"
   cp "$HOME/.codex/hooks.json" "$SB/merged"
   ax install >/dev/null 2>&1
   eq "$(cat "$HOME/.codex/hooks.json")" "$(cat "$SB/merged")" "merged file never rewritten"
@@ -299,7 +299,7 @@ test_install_preserves_user_files() {
   # uninstall keeps the user's own CLAUDE.md lines and drops only our block
   ax uninstall >/dev/null 2>&1
   c=$(cat "$HOME/.claude/CLAUDE.md")
-  contains "$c" "Never add co-author trailers." "uninstall keeps user lines"; lacks "$c" "agentctx:begin"
+  contains "$c" "Never add co-author trailers." "uninstall keeps user lines"; lacks "$c" "trailkeep:begin"
   eq "$(cat "$HOME/.codex/hooks.json")" "$(cat "$SB/merged")" "merged file never deleted"
 }
 
@@ -335,7 +335,7 @@ test_dry_run_and_skip() {
 
   t "skip flags"; sandbox; prep_agent_dirs; stub_claude
   ax install --no-codex --no-copilot --no-skill >/dev/null 2>&1
-  no_file "$HOME/.codex/AGENTS.md"; no_file "$HOME/.copilot/hooks/agentctx.json"; no_file "$HOME/.agents/skills/effort"
+  no_file "$HOME/.codex/AGENTS.md"; no_file "$HOME/.copilot/hooks/trailkeep.json"; no_file "$HOME/.agents/skills/effort"
 
   t "only configures tools that exist"; sandbox
   mkdir -p "$HOME/.codex"
@@ -348,8 +348,8 @@ test_dry_run_and_skip() {
   mkdir -p "$CODEX_HOME" "$COPILOT_HOME"
   ax install --no-claude >/dev/null 2>&1
   links_to "$CODEX_HOME/AGENTS.md" "$HOME/.agents/AGENTS.md"
-  is_file "$COPILOT_HOME/hooks/agentctx.json"
-  links_to "$COPILOT_HOME/skills/effort" "$HOME/.agents/agentctx/skills/effort" "COPILOT_HOME skill link"
+  is_file "$COPILOT_HOME/hooks/trailkeep.json"
+  links_to "$COPILOT_HOME/skills/effort" "$HOME/.agents/trailkeep/skills/effort" "COPILOT_HOME skill link"
   unset CODEX_HOME COPILOT_HOME
 }
 
@@ -358,15 +358,15 @@ test_uninstall() {
   ax install >/dev/null 2>&1
   printf 'my rule\n' >> "$HOME/.agents/AGENTS.md"
   ax uninstall >/dev/null 2>&1
-  no_file "$HOME/.codex/hooks.json"; no_file "$HOME/.copilot/hooks/agentctx.json"
+  no_file "$HOME/.codex/hooks.json"; no_file "$HOME/.copilot/hooks/trailkeep.json"
   [ -L "$HOME/.codex/AGENTS.md" ] && flunk "codex file still a link"
   contains "$(cat "$HOME/.codex/AGENTS.md")" "my rule" "codex keeps a copy"
   contains "$(cat "$HOME/.copilot/copilot-instructions.md")" "my rule" "copilot keeps a copy"
-  no_file "$HOME/.agents/skills/effort"; no_file "$HOME/.local/bin/agentctx"; no_file "$HOME/.agents/agentctx"
-  lacks "$(cat "$HOME/.claude/CLAUDE.md")" "agentctx"
+  no_file "$HOME/.agents/skills/effort"; no_file "$HOME/.local/bin/trailkeep"; no_file "$HOME/.agents/trailkeep"
+  lacks "$(cat "$HOME/.claude/CLAUDE.md")" "trailkeep"
   contains "$(cat "$HOME/.claude/CLAUDE.md")" "my rule" "claude keeps a copy"
   contains "$(cat "$HOME/.agents/AGENTS.md")" "my rule" "data kept"
-  calls=$(cat "$HOME/claude.calls"); contains "$calls" "plugin uninstall agentctx@agentctx"
+  calls=$(cat "$HOME/claude.calls"); contains "$calls" "plugin uninstall trailkeep@trailkeep"
 }
 
 test_doctor() {
@@ -412,17 +412,17 @@ test_doctor() {
   out=$(ax doctor 2>&1); contains "$out" "agents only get a pointer"
   rm -f "$(ax notes --path)"
 
-  # .agentctx not ignored -> fail
-  ax new >/dev/null; rm -f .agentctx/.gitignore
+  # .trailkeep not ignored -> fail
+  ax new >/dev/null; rm -f .trailkeep/.gitignore
   out=$(ax doctor 2>&1); contains "$out" "not ignored by git"
-  printf '*\n' > .agentctx/.gitignore
+  printf '*\n' > .trailkeep/.gitignore
 
   # trust entry present -> ok
   printf '[hooks.state."file:%s/.codex/hooks.json:session_start:0:0"]\ntrusted_hash = "abc"\n[hooks.state."file:%s/.codex/hooks.json:session_end:0:0"]\ntrusted_hash = "def"\n' "$HOME" "$HOME" > "$HOME/.codex/config.toml"
   out=$(ax doctor 2>&1); contains "$out" "trust entry"
 
   # hook pointing at a moved clone
-  sed "s#'$HOME/.agents/agentctx/bin/agentctx'#'/nowhere/agentctx'#" "$HOME/.codex/hooks.json" > "$SB/h" && cat "$SB/h" > "$HOME/.codex/hooks.json"
+  sed "s#'$HOME/.agents/trailkeep/bin/trailkeep'#'/nowhere/trailkeep'#" "$HOME/.codex/hooks.json" > "$SB/h" && cat "$SB/h" > "$HOME/.codex/hooks.json"
   out=$(ax doctor 2>&1); contains "$out" "which no longer exists"
 
   t "doctor with spaces and parent CLAUDE.md"; sandbox; prep_agent_dirs; stub_claude
@@ -448,7 +448,7 @@ test_verify() {
   out=$(ax verify 2>&1); st=$?
   status $st 0 "verify passes"; contains "$out" "Every agent sees every layer"
   eq "$(cksum < "$HOME/.agents/AGENTS.md")" "$before" "personal file restored"
-  n=$(find "$HOME/.agents/repos" -name '*agentctx-verify*' | wc -l | tr -d ' '); eq "$n" 0 "verify data cleaned"
+  n=$(find "$HOME/.agents/repos" -name '*trailkeep-verify*' | wc -l | tr -d ' '); eq "$n" 0 "verify data cleaned"
 
   stub_agent codex "$HOME/.codex/AGENTS.md" codex skip-effort
   out=$(ax verify --agents codex 2>&1); st=$?
@@ -469,7 +469,7 @@ test_log() {
   echo a > a.ts; git add a.ts; git commit -qm a
   git checkout -q -b feat/auth
   out=$(hook_json s0 | ax context --for claude); contains "$out" "no effort file for branch feat/auth" "hint on feature branch"
-  out=$(AGENTCTX_HINT=0 ax context --for claude </dev/null); eq "$out" "" "hint can be turned off"
+  out=$(TRAILKEEP_HINT=0 ax context --for claude </dev/null); eq "$out" "" "hint can be turned off"
   git checkout -q main
   out=$(hook_json s0 | ax context --for claude); eq "$out" "" "no hint on default branch"
   git checkout -q feat/auth
@@ -536,8 +536,8 @@ test_log() {
   add_line "$(ax path)" "## Decisions and dead ends" "rename-me decision"
   git branch -m feat/old feat/new
   hook_json s10 | ax context --for claude >/dev/null
-  is_file "$SB/r/.agentctx/feat__new.md"; no_file "$SB/r/.agentctx/feat__old.md"
-  contains "$(cat "$SB/r/.agentctx/feat__new.md")" "Branch: feat/new" "header updated"
+  is_file "$SB/r/.trailkeep/feat__new.md"; no_file "$SB/r/.trailkeep/feat__old.md"
+  contains "$(cat "$SB/r/.trailkeep/feat__new.md")" "Branch: feat/new" "header updated"
   out=$(hook_json s11 | ax context --for claude); contains "$out" "effort file for branch feat/new"
   git checkout -q feat/auth
 
@@ -545,7 +545,7 @@ test_log() {
   out=$(ax close); contains "$(ax log -n 1)" "effort closed"
   git checkout -q -b feat/tmp; ax new >/dev/null; git checkout -q main; git branch -q -D feat/tmp
   hook_json s5 | ax context --for claude >/dev/null
-  no_file "$SB/r/.agentctx/feat__tmp.md"
+  no_file "$SB/r/.trailkeep/feat__tmp.md"
   contains "$(ax log -n 1)" "auto-archived" "auto-archive on session start"
 
   # a brand-new repo's first branch has no commits yet: its effort must survive
@@ -554,7 +554,7 @@ test_log() {
   ax new >/dev/null
   out=$(hook_json s6 | ax context --for claude)
   contains "$out" "effort file for branch start" "unborn branch keeps its effort"
-  is_file "$SB/fresh/.agentctx/start.md"
+  is_file "$SB/fresh/.trailkeep/start.md"
 }
 
 test_update() {
@@ -563,7 +563,7 @@ test_update() {
   cp -R "$ROOT" "$SB/src" && rm -rf "$SB/src/.git"
   (cd "$SB/src" && git init -q && git add -A && git commit -qm snapshot) || { flunk "snapshot"; return; }
   git clone -q "$SB/src" "$SB/clone" 2>/dev/null || { flunk "clone"; return; }
-  out=$("$SB/clone/bin/agentctx" update --no-claude --no-copilot 2>&1); st=$?
+  out=$("$SB/clone/bin/trailkeep" update --no-claude --no-copilot 2>&1); st=$?
   status $st 0 "update"; contains "$out" "Updating"; contains "$out" "install"
   links_to "$HOME/.codex/AGENTS.md" "$HOME/.agents/AGENTS.md"
 }
@@ -593,10 +593,10 @@ test_real_claude() {
   out=$(claude plugin validate "$ROOT" 2>&1); contains "$out" "Validation passed"
   mkdir -p "$HOME/.claude"
   ax install --no-codex --no-copilot >/dev/null 2>&1
-  out=$(claude plugin list 2>&1); contains "$out" "agentctx@agentctx"; contains "$out" "enabled"
-  out=$(claude plugin details agentctx@agentctx 2>&1); contains "$out" "SessionStart"; contains "$out" "effort"
+  out=$(claude plugin list 2>&1); contains "$out" "trailkeep@trailkeep"; contains "$out" "enabled"
+  out=$(claude plugin details trailkeep@trailkeep 2>&1); contains "$out" "SessionStart"; contains "$out" "effort"
   ax uninstall >/dev/null 2>&1
-  out=$(claude plugin list 2>&1); lacks "$out" "agentctx@agentctx" "uninstalled"
+  out=$(claude plugin list 2>&1); lacks "$out" "trailkeep@trailkeep" "uninstalled"
 }
 
 test_npm_package() {
@@ -606,45 +606,45 @@ test_npm_package() {
   export PATH="$PATH:$ndir"
   export npm_config_cache="$SB/npm-cache" npm_config_update_notifier=false
   (cd "$ROOT" && npm pack --silent --pack-destination "$SB" >/dev/null 2>&1) || { flunk "npm pack"; return; }
-  tgz=$(ls "$SB"/agentctx-*.tgz)
+  tgz=$(ls "$SB"/trailkeep-*.tgz)
   list=$(tar -tzf "$tgz")
-  contains "$list" "package/bin/agentctx"; contains "$list" "package/hooks/hooks.json"; contains "$list" "package/.claude-plugin/plugin.json"
+  contains "$list" "package/bin/trailkeep"; contains "$list" "package/hooks/hooks.json"; contains "$list" "package/.claude-plugin/plugin.json"
   lacks "$list" "tests/" "tests are not shipped"
   npm install -g --silent --prefix "$SB/npm" "$tgz" >/dev/null 2>&1 || { flunk "npm install -g"; return; }
   mkdir -p "$HOME/.codex"
-  out=$("$SB/npm/bin/agentctx" install --no-claude --no-copilot 2>&1); st=$?
+  out=$("$SB/npm/bin/trailkeep" install --no-claude --no-copilot 2>&1); st=$?
   status $st 0 "install from npm"
-  contains "$(cat "$HOME/.agents/agentctx/.agentctx-runtime")" "source=npm"
-  contains "$(cat "$HOME/.codex/hooks.json")" "'$HOME/.agents/agentctx/bin/agentctx'"
+  contains "$(cat "$HOME/.agents/trailkeep/.trailkeep-runtime")" "source=npm"
+  contains "$(cat "$HOME/.codex/hooks.json")" "'$HOME/.agents/trailkeep/bin/trailkeep'"
   # the npm copy can disappear (Node upgrade, uninstall): hooks keep working
   rm -rf "$SB/npm"
   new_repo "$SB/r"; cd "$SB/r" || return
-  "$HOME/.agents/agentctx/bin/agentctx" notes >/dev/null; printf 'still here\n' >> "$("$HOME/.agents/agentctx/bin/agentctx" notes --path)"
-  out=$(printf '{"cwd":"%s","source":"startup"}' "$SB/r" | "$HOME/.agents/agentctx/bin/agentctx" context --for codex)
+  "$HOME/.agents/trailkeep/bin/trailkeep" notes >/dev/null; printf 'still here\n' >> "$("$HOME/.agents/trailkeep/bin/trailkeep" notes --path)"
+  out=$(printf '{"cwd":"%s","source":"startup"}' "$SB/r" | "$HOME/.agents/trailkeep/bin/trailkeep" context --for codex)
   contains "$out" "still here" "runtime survives the npm copy going away"
 }
 
 test_release() {
   t "versions and release script"; sandbox
   out=$(sh "$ROOT/scripts/check-version" 2>&1); status $? 0 "all version fields agree"
-  eq "$(ax --version)" "agentctx $(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$ROOT/package.json")" "cli matches package.json"
+  eq "$(ax --version)" "trailkeep $(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$ROOT/package.json")" "cli matches package.json"
   cp -R "$ROOT" "$SB/rel" && rm -rf "$SB/rel/.git"
   (cd "$SB/rel" && git init -q -b main && git add -A && git commit -qm base) || { flunk "snapshot"; return; }
   printf 'dirty\n' >> "$SB/rel/README.md"
   out=$(cd "$SB/rel" && sh scripts/release 9.8.7 --no-push 2>&1); status $? 1 "refuses a dirty tree"
   (cd "$SB/rel" && git checkout -q README.md)
-  out=$(cd "$SB/rel" && AGENTCTX_RELEASE_SKIP_TESTS=1 sh scripts/release 9.8.7 --no-push 2>&1); st=$?
+  out=$(cd "$SB/rel" && TRAILKEEP_RELEASE_SKIP_TESTS=1 sh scripts/release 9.8.7 --no-push 2>&1); st=$?
   status $st 0 "release"; contains "$out" "Tagged v9.8.7"
-  eq "$("$SB/rel/bin/agentctx" --version)" "agentctx 9.8.7"
+  eq "$("$SB/rel/bin/trailkeep" --version)" "trailkeep 9.8.7"
   contains "$(cat "$SB/rel/package.json")" '"version": "9.8.7"'; contains "$(cat "$SB/rel/.claude-plugin/plugin.json")" '"version": "9.8.7"'
   eq "$(cd "$SB/rel" && git tag)" "v9.8.7"; eq "$(cd "$SB/rel" && git log -1 --format=%s)" "Release v9.8.7"
-  out=$(cd "$SB/rel" && AGENTCTX_RELEASE_SKIP_TESTS=1 sh scripts/release 9.8.7 --no-push 2>&1); status $? 1 "refuses an existing tag"
+  out=$(cd "$SB/rel" && TRAILKEEP_RELEASE_SKIP_TESTS=1 sh scripts/release 9.8.7 --no-push 2>&1); status $? 1 "refuses an existing tag"
   out=$(cd "$SB/rel" && sh scripts/release banana 2>&1); status $? 2 "rejects a bad version"
   # releasing the version already in the files (the first release) tags without an empty commit
   cp -R "$ROOT" "$SB/rel2" && rm -rf "$SB/rel2/.git"
   (cd "$SB/rel2" && git init -q -b main && git add -A && git commit -qm base)
-  cur=$("$SB/rel2/bin/agentctx" --version | cut -d' ' -f2)
-  out=$(cd "$SB/rel2" && AGENTCTX_RELEASE_SKIP_TESTS=1 sh scripts/release "$cur" --no-push 2>&1); status $? 0 "release the current version"
+  cur=$("$SB/rel2/bin/trailkeep" --version | cut -d' ' -f2)
+  out=$(cd "$SB/rel2" && TRAILKEEP_RELEASE_SKIP_TESTS=1 sh scripts/release "$cur" --no-push 2>&1); status $? 0 "release the current version"
   eq "$(cd "$SB/rel2" && git rev-list --count HEAD)" "1" "no empty commit"; eq "$(cd "$SB/rel2" && git tag)" "v$cur"
 }
 
@@ -653,23 +653,23 @@ test_release() {
 for fn in test_cli_basics test_repo_key test_effort_lifecycle test_context test_install_fresh \
           test_install_preserves_user_files test_adopt test_dry_run_and_skip test_uninstall \
           test_doctor test_verify test_log test_update test_npm_package test_release; do
-  ( $fn ) > "${TMPDIR:-/tmp}/agentctx-test.$$" 2>&1
-  cat "${TMPDIR:-/tmp}/agentctx-test.$$"
+  ( $fn ) > "${TMPDIR:-/tmp}/trailkeep-test.$$" 2>&1
+  cat "${TMPDIR:-/tmp}/trailkeep-test.$$"
   # each test runs in a subshell; count results from its output
-  f=$(grep -c '^FAIL' "${TMPDIR:-/tmp}/agentctx-test.$$")
+  f=$(grep -c '^FAIL' "${TMPDIR:-/tmp}/trailkeep-test.$$")
   FAIL=$((FAIL + f))
   [ "$f" -eq 0 ] && printf 'ok    %s\n' "$fn"
 done
-if [ "${AGENTCTX_REAL:-0}" = 1 ]; then
+if [ "${TRAILKEEP_REAL:-0}" = 1 ]; then
   for fn in test_real_codex test_real_claude; do
     PATH=$REAL_PATH
-    ( $fn ) > "${TMPDIR:-/tmp}/agentctx-test.$$" 2>&1
-    cat "${TMPDIR:-/tmp}/agentctx-test.$$"
-    f=$(grep -c '^FAIL' "${TMPDIR:-/tmp}/agentctx-test.$$")
+    ( $fn ) > "${TMPDIR:-/tmp}/trailkeep-test.$$" 2>&1
+    cat "${TMPDIR:-/tmp}/trailkeep-test.$$"
+    f=$(grep -c '^FAIL' "${TMPDIR:-/tmp}/trailkeep-test.$$")
     FAIL=$((FAIL + f))
-    [ "$f" -eq 0 ] && ! grep -q '^skip' "${TMPDIR:-/tmp}/agentctx-test.$$" && printf 'ok    %s\n' "$fn"
+    [ "$f" -eq 0 ] && ! grep -q '^skip' "${TMPDIR:-/tmp}/trailkeep-test.$$" && printf 'ok    %s\n' "$fn"
   done
 fi
-rm -f "${TMPDIR:-/tmp}/agentctx-test.$$"
+rm -f "${TMPDIR:-/tmp}/trailkeep-test.$$"
 echo
 if [ "$FAIL" -eq 0 ]; then echo "All tests passed."; else echo "$FAIL failure(s)."; exit 1; fi
