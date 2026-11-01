@@ -1,7 +1,7 @@
 #!/bin/sh
 # trailkeep: two-layer context (global knowledge + per-branch task files) for
 # Claude Code, Codex CLI and GitHub Copilot CLI. POSIX sh + git, no other deps.
-# https://github.com/trailkeep/trailkeep
+# https://github.com/msiric/trailkeep
 
 set -u
 
@@ -1073,10 +1073,10 @@ cmd_update() {
       exec "$path/bin/trailkeep" install "$@" ;;
     npm)
       has npm || die "npm not found"
-      if [ "$dry" -eq 1 ]; then say "Dry run: would run npm install -g trailkeep@latest, then install"; exec "$RT_BIN" install "$@"; fi
+      if [ "$dry" -eq 1 ]; then say "Dry run: would run npm install -g @trailkeep/trailkeep@latest, then install"; exec "$RT_BIN" install "$@"; fi
       say "Updating with npm"
-      npm install -g trailkeep@latest || die "npm install failed"
-      np=$(npm root -g)/trailkeep/bin/trailkeep
+      npm install -g @trailkeep/trailkeep@latest || die "npm install failed"
+      np=$(npm root -g)/@trailkeep/trailkeep/bin/trailkeep
       [ -x "$np" ] || die "trailkeep not found in $(npm root -g)"
       exec "$np" install "$@" ;;
   esac

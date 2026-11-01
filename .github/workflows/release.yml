@@ -40,8 +40,8 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           v="${GITHUB_REF_NAME#v}"
-          if npm view "trailkeep@$v" version >/dev/null 2>&1; then
-            echo "trailkeep@$v is already on npm; skipping publish"
+          if npm view "@trailkeep/trailkeep@$v" version >/dev/null 2>&1; then
+            echo "@trailkeep/trailkeep@$v is already on npm; skipping publish"
           else
             npm publish
           fi

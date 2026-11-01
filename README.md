@@ -7,13 +7,13 @@ It's a single POSIX shell script that needs only `git`. It never changes your re
 ## Install (one command, once per machine)
 
 ```sh
-npm install -g trailkeep && trailkeep install
+npm install -g @trailkeep/trailkeep && trailkeep install
 ```
 
 Or without npm:
 
 ```sh
-git clone https://github.com/trailkeep/trailkeep ~/.trailkeep && ~/.trailkeep/bin/trailkeep install
+git clone https://github.com/msiric/trailkeep ~/.trailkeep && ~/.trailkeep/bin/trailkeep install
 ```
 
 `install` copies the tool to `~/.agents/trailkeep/` and points every hook there. After that, the npm package or the clone can move, upgrade or disappear (a Node version switch with nvm or fnm, say) without breaking any hook or Codex's trust in them.
