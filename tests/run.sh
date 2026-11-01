@@ -33,7 +33,8 @@ sandbox() {
   SB=$(mktemp -d)
   export HOME="$SB/home"
   mkdir -p "$HOME" "$SB/stubs" "$HOME/.local/bin"
-  unset AGENTCTX_HOME CODEX_HOME COPILOT_HOME CLAUDE_CONFIG_DIR AGENTCTX_EFFORT AGENTCTX_MAX_CHARS
+  unset AGENTCTX_HOME CODEX_HOME COPILOT_HOME CLAUDE_CONFIG_DIR AGENTCTX_EFFORT AGENTCTX_MAX_CHARS CLAUDECODE
+  export AGENTCTX_SYNC=1   # run the background startup harvest in the foreground
   export PATH="$SB/stubs:$HOME/.local/bin:/usr/bin:/bin"
   export GIT_CONFIG_NOSYSTEM=1 GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
   git config --global init.defaultBranch main
@@ -85,6 +86,7 @@ stub_agent() { # NAME GLOBAL_FILE HOOK_TARGET [skip-effort]
   cat "$2" 2>/dev/null
   cat AGENTS.md 2>/dev/null
   if [ "${4:-}" != skip-effort ]; then echo '{"cwd":"'"\$PWD"'","source":"startup"}' | "$BIN" context --for $3; fi
+  if [ "${4:-}" != skip-effort ]; then echo '{"cwd":"'"\$PWD"'"}' | "$BIN" harvest --for $3; fi
 } | grep -o 'ACX-[A-Z0-9]*' | tr '\n' ' '
 echo
 EOF
@@ -233,6 +235,8 @@ test_install_fresh() {
   links_to "$HOME/.agents/skills/effort" "$ROOT/skills/effort"
   contains "$(cat "$HOME/.codex/hooks.json")" "context --for codex"
   contains "$(cat "$HOME/.copilot/hooks/agentctx.json")" '"sessionStart"'
+  contains "$(cat "$HOME/.copilot/hooks/agentctx.json")" '"sessionEnd"'
+  contains "$(cat "$HOME/.codex/hooks.json")" "harvest --for codex"
   calls=$(cat "$HOME/claude.calls")
   contains "$calls" "plugin marketplace add $ROOT --scope user"
   contains "$calls" "plugin install agentctx@agentctx --scope user"
@@ -368,7 +372,7 @@ test_doctor() {
   cd "$SB/r" || return
 
   out=$(ax doctor 2>&1); contains "$out" "Claude Code imports it"; contains "$out" "Codex reads it"
-  contains "$out" "Codex hook not trusted yet"
+  contains "$out" "Codex hooks not trusted yet"
 
   printf '# App\nRun `pnpm test`.\n' > AGENTS.md
   printf 'Claude bits\n' > CLAUDE.md
@@ -410,7 +414,7 @@ test_doctor() {
   printf '*\n' > .agentctx/.gitignore
 
   # trust entry present -> ok
-  printf '[hooks.state."file:%s/.codex/hooks.json:session_start:0:0"]\ntrusted_hash = "abc"\n' "$HOME" > "$HOME/.codex/config.toml"
+  printf '[hooks.state."file:%s/.codex/hooks.json:session_start:0:0"]\ntrusted_hash = "abc"\n[hooks.state."file:%s/.codex/hooks.json:session_end:0:0"]\ntrusted_hash = "def"\n' "$HOME" "$HOME" > "$HOME/.codex/config.toml"
   out=$(ax doctor 2>&1); contains "$out" "trust entry"
 
   # hook pointing at a moved clone
@@ -448,6 +452,118 @@ test_verify() {
   eq "$(cksum < "$HOME/.agents/AGENTS.md")" "$before" "restored after failure"
 }
 
+add_line() { # add_line FILE "## Section" LINE  (insert right after the heading's blank line)
+  awk -v h="$2" -v l="$3" '{ print } $0 == h { getline; print; print "- " l }' "$1" > "$1.tmp" && mv "$1.tmp" "$1"
+}
+
+hook_json() { printf '{"session_id":"%s","transcript_path":"/tmp/%s.jsonl","cwd":"%s","source":"startup"}' "$1" "$1" "$PWD"; }
+
+test_log() {
+  t "decision log"; sandbox
+  new_repo "$SB/r" git@github.com:me/app.git
+  cd "$SB/r" || return
+  echo a > a.ts; git add a.ts; git commit -qm a
+  git checkout -q -b feat/auth
+  out=$(hook_json s0 | ax context --for claude); contains "$out" "no effort file for branch feat/auth" "hint on feature branch"
+  out=$(AGENTCTX_HINT=0 ax context --for claude </dev/null); eq "$out" "" "hint can be turned off"
+  git checkout -q main
+  out=$(hook_json s0 | ax context --for claude); eq "$out" "" "no hint on default branch"
+  git checkout -q feat/auth
+
+  ax new >/dev/null; f=$(ax path)
+  add_line "$f" "## Decisions and dead ends" "Chose cookie sessions over JWT: need server-side revoke"
+  add_line "$f" "## Decisions and dead ends" "Dead end: edge middleware can't read httpOnly cookies"
+  add_line "$f" "## Progress" "2026-11-01: login form done"
+  mkdir -p src/auth; echo x > src/auth/session.ts; git add src; git commit -qm auth
+  hook_json s1 | ax harvest --for claude; status $? 0 "harvest exits 0"
+  hook_json s2 | ax harvest --for codex
+  out=$(ax log); n=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
+  eq "$n" 3 "each line logged once"
+  contains "$out" "decision  feat/auth"; contains "$out" "dead-end  feat/auth"; contains "$out" "progress"
+  out=$(ax log --path src/auth --type dead-end); contains "$out" "edge middleware" "path + type filter"
+  out=$(ax log --path src/auth/session.ts); contains "$out" "cookie sessions" "file under a logged path"
+  out=$(ax log --grep JWT); contains "$out" "cookie sessions" "case-insensitive grep"
+  out=$(ax log --grep nothing-like-this); contains "$out" "No matching"
+  out=$(ax log -n 1); n=$(printf '%s\n' "$out" | wc -l | tr -d ' '); eq "$n" 1 "limit"
+  id=$(ax log --type decision | cut -d' ' -f1)
+  out=$(ax log show "$id"); contains "$out" "session:    claude:s1"; contains "$out" "transcript: /tmp/s1.jsonl"
+  contains "$out" "paths:      src/auth/session.ts"; contains "$out" "git show"
+  ax log show zzzzzz >/dev/null 2>&1; status $? 1 "unknown id"
+
+  # tabs/newlines in text can't break the format
+  add_line "$f" "## Decisions and dead ends" "tab	inside"
+  hook_json s3 | ax harvest --for copilot
+  bad=$(cat "$HOME"/.agents/repos/*/log/*.tsv | awk -F '\t' 'NF != 9' | wc -l | tr -d ' ')
+  eq "$bad" 0 "every row has 9 fields"
+
+  # session start mentions the log, and harvests leftovers from a killed session
+  add_line "$f" "## Progress" "2026-11-02: left without a clean exit"
+  out=$(hook_json s4 | ax context --for claude)
+  contains "$out" "decision log (4 entries)"
+  contains "$(ax log)" "left without a clean exit" "startup harvest"
+  id=$(ax log --grep "clean exit" | cut -d' ' -f1)
+  contains "$(ax log show "$id")" "session:    claude:s0" "recovered line credited to the last session started here"
+
+  # concurrent harvests never duplicate
+  i=0; while [ $i -lt 40 ]; do add_line "$f" "## Progress" "parallel line $i"; i=$((i + 1)); done
+  hook_json p1 | ax harvest --for claude & hook_json p2 | ax harvest --for codex & hook_json p3 | ax harvest --for copilot & wait
+  n=$(ax log --grep "parallel line" -n 500 | wc -l | tr -d ' '); eq "$n" 40 "no duplicates under concurrency"
+
+  # path matching: exact file or directory, never a name prefix; relative paths work
+  out=$(ax log --path src/au); contains "$out" "No matching" "prefix of a name doesn't match"
+  out=$(ax log --path ./src/auth/); contains "$out" "cookie sessions" "./ and trailing slash"
+  out=$(cd src && ax log --path auth/session.ts); contains "$out" "cookie sessions" "relative to subdirectory"
+  ax log --grep >/dev/null 2>&1; status $? 1 "missing value is an error, not a loop"
+
+  # manual add
+  ax log add note "remember the staging flag" >/dev/null
+  contains "$(ax log -n 1)" "remember the staging flag"
+
+  # a decision written just before the branch is deleted still gets logged
+  git checkout -q -b feat/late; ax new >/dev/null
+  add_line "$(ax path)" "## Decisions and dead ends" "late decision before delete"
+  git checkout -q main; git branch -q -D feat/late
+  hook_json s9 | ax harvest --for claude
+  contains "$(ax log --grep 'late decision')" "late decision" "harvested before archiving"
+  git checkout -q feat/auth
+
+  # renamed branch: the effort follows it
+  git checkout -q -b feat/old; ax new >/dev/null
+  add_line "$(ax path)" "## Decisions and dead ends" "rename-me decision"
+  git branch -m feat/old feat/new
+  hook_json s10 | ax context --for claude >/dev/null
+  is_file "$SB/r/.agentctx/feat__new.md"; no_file "$SB/r/.agentctx/feat__old.md"
+  contains "$(cat "$SB/r/.agentctx/feat__new.md")" "Branch: feat/new" "header updated"
+  out=$(hook_json s11 | ax context --for claude); contains "$out" "effort file for branch feat/new"
+  git checkout -q feat/auth
+
+  # close logs, deleted branches auto-archive
+  out=$(ax close); contains "$(ax log -n 1)" "effort closed"
+  git checkout -q -b feat/tmp; ax new >/dev/null; git checkout -q main; git branch -q -D feat/tmp
+  hook_json s5 | ax context --for claude >/dev/null
+  no_file "$SB/r/.agentctx/feat__tmp.md"
+  contains "$(ax log -n 1)" "auto-archived" "auto-archive on session start"
+
+  # a brand-new repo's first branch has no commits yet: its effort must survive
+  mkdir -p "$SB/fresh" && (cd "$SB/fresh" && git init -q && git symbolic-ref HEAD refs/heads/start)
+  cd "$SB/fresh" || return
+  ax new >/dev/null
+  out=$(hook_json s6 | ax context --for claude)
+  contains "$out" "effort file for branch start" "unborn branch keeps its effort"
+  is_file "$SB/fresh/.agentctx/start.md"
+}
+
+test_update() {
+  t "update"; sandbox; mkdir -p "$HOME/.codex"
+  # snapshot the working tree as a repo, so update pulls exactly what is being tested
+  cp -R "$ROOT" "$SB/src" && rm -rf "$SB/src/.git"
+  (cd "$SB/src" && git init -q && git add -A && git commit -qm snapshot) || { flunk "snapshot"; return; }
+  git clone -q "$SB/src" "$SB/clone" 2>/dev/null || { flunk "clone"; return; }
+  out=$("$SB/clone/bin/agentctx" update --no-claude --no-copilot 2>&1); st=$?
+  status $st 0 "update"; contains "$out" "Updating"; contains "$out" "install"
+  links_to "$HOME/.codex/AGENTS.md" "$HOME/.agents/AGENTS.md"
+}
+
 # ----------------------------------------------- real CLIs (offline only) ----
 
 test_real_codex() {
@@ -483,7 +599,7 @@ test_real_claude() {
 
 for fn in test_cli_basics test_repo_key test_effort_lifecycle test_context test_install_fresh \
           test_install_preserves_user_files test_adopt test_dry_run_and_skip test_uninstall \
-          test_doctor test_verify; do
+          test_doctor test_verify test_log test_update; do
   ( $fn ) > "${TMPDIR:-/tmp}/agentctx-test.$$" 2>&1
   cat "${TMPDIR:-/tmp}/agentctx-test.$$"
   # each test runs in a subshell; count results from its output

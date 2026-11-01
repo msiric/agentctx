@@ -1,6 +1,6 @@
 ---
 name: effort
-description: Start, hand off or close the per-branch effort file (goal, plan, progress, decisions) managed by agentctx. Use when the user wants to start or plan a task, save progress or hand off to a fresh session, or wrap up a branch.
+description: Start, hand off or close the per-branch effort file (goal, plan, progress, decisions), and search the repo's decision log, managed by agentctx. Use when the user wants to start or plan a task, save progress or hand off, wrap up a branch, or asks why something was done.
 ---
 
 # Effort files
@@ -23,9 +23,22 @@ directly with your file tools.
 
 - Tick Plan items as they are done.
 - Add one line under **Progress** per session: `YYYY-MM-DD: what changed, what's next`.
-- Record approaches that failed and why under **Decisions and dead ends**, so
-  the next session doesn't retry them.
+- Record decisions with their reason under **Decisions and dead ends**, one
+  line each. Start a line with `Dead end:` for an approach that failed, and say
+  why, so no later session retries it.
 - Keep the file under about 150 lines: fold old Progress lines into one summary line.
+
+Every new Decisions and Progress line is copied to the repo's append-only
+decision log when the session ends, with the commit, changed files and
+session id. Don't write to the log yourself.
+
+## Find out why something is the way it is
+
+Search the log instead of guessing. It returns short lines, newest first:
+
+- `agentctx log --path src/auth` (entries that touched a path)
+- `agentctx log --grep jwt` (text search), `--type dead-end`, `--since 2026-10-01`
+- `agentctx log show <id>` for one entry in full, then `git show <commit>` for the change
 
 ## Hand off
 

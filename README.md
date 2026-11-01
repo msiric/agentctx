@@ -1,109 +1,128 @@
 # agentctx
 
-Context for coding agents in three layers: what's always true about you, what's always true about a repo, and what matters only for the branch you're on. It works the same in **Claude Code**, **Codex CLI** and **GitHub Copilot CLI**.
+Context for coding agents that works the same in **Claude Code**, **Codex CLI** and **GitHub Copilot CLI**. It keeps three kinds of knowledge apart: what's always true about you, what's always true about a repo, and what matters only for the branch you're on. It also keeps an append-only log of why things were decided.
 
-It's a single POSIX shell script that needs only `git`. It never changes your repos' tracked files, and it adds nothing to a session that has nothing to add.
+It's a single POSIX shell script that needs only `git`. It never changes your repos' tracked files. In a repo with no notes, effort or log, it adds at most one hint line to a session, and none at all with `AGENTCTX_HINT=0`.
 
-## The three layers
+## Install (one command, once per machine)
+
+```sh
+git clone https://github.com/msiric/agentctx ~/.agentctx && ~/.agentctx/bin/agentctx install
+```
+
+That's the whole setup, and it covers every repo on the machine: the hooks are user-level, so there's nothing to do per repo. If you already have instructions in `~/.claude/CLAUDE.md`, install offers to share them with all three agents.
+
+Codex needs one manual step, because trusting hooks is a security gate Codex deliberately keeps for you. Open `codex`, run `/hooks` and trust the two agentctx hooks once. After that, `agentctx doctor` checks the setup and `agentctx verify` runs a live test with each agent.
+
+Later, `agentctx update` pulls the latest version and re-applies the setup.
+
+## The layers
 
 | Layer | File | Who writes it | Loaded |
 |---|---|---|---|
 | **Personal**: you, in every repo | `~/.agents/AGENTS.md` | you | every session, by all three agents |
 | **Repo**: true for every task here | the repo's own `AGENTS.md` (committed) | you and your team | natively by all three agents |
 | **Private repo notes**: things you can't commit | `~/.agents/repos/<repo>/NOTES.md` | you | at session start, by a hook |
-| **Effort**: this branch's goal, plan, progress, decisions | `.agentctx/<branch>.md` in the worktree, ignored by git | the agent, reviewed by you | at session start and after compaction, by a hook |
+| **Effort**: this branch's goal, plan, progress, decisions | `.agentctx/<branch>.md` in the worktree, ignored by git | the agent | at session start and after compaction, by a hook |
+| **Decision log**: why things happened, append-only | `~/.agents/repos/<repo>/log/YYYY-MM.tsv` | the session-end hook | never loaded; agents search it |
 
-`<repo>` comes from the origin URL, so every clone and worktree of a repo shares the same private notes.
+`<repo>` comes from the origin URL, so every clone and worktree of a repo shares the same notes and log.
 
-Effort files live inside the worktree because that's the only place every agent can write without asking. Codex's sandbox and Claude Code's and Copilot's permission rules block or prompt on edits outside the working folder, and Codex keeps `.git/`, `.agents/` and `.codex/` read-only even inside it (codex source, `PROTECTED_METADATA_PATH_NAMES`). `.agentctx/` contains a `.gitignore` with just `*`, so git ignores it and no repo file changes. Each worktree gets its own efforts. `close` copies finished ones to `~/.agents/repos/<repo>/archive/`, so they outlive the worktree. One caveat: `git clean -fdx` deletes `.agentctx/`.
+## What happens on its own
 
-## Install
+| When | What happens automatically |
+|---|---|
+| Any session starts in any repo | Notes and the branch's effort file are injected. A one-line pointer mentions the decision log if it has entries. Leftovers from a session that didn't exit cleanly are logged first. |
+| You're on a feature branch with no effort file | One line tells the agent it can run `agentctx new` for multi-session work. Turn it off with `AGENTCTX_HINT=0`. |
+| The agent works | It keeps the effort file current: plan ticks, a progress line per session, decisions and dead ends. That's the effort skill's job. |
+| Context gets compacted | The effort file is re-injected fresh. |
+| A session ends | New Decisions and Progress lines from every effort in the worktree go into the decision log, stamped with the commit, the branch's changed files, branch and session id. It takes under 0.1 s, well inside Codex's 3-second limit for this hook. Anything a killed session missed is picked up at the next start, in the background. |
+| A branch is renamed | Its effort file follows the new name. Git's reflog records renames. |
+| A branch is deleted, locally and on the remote | Its last lines are logged, then its effort file is archived and the archive is logged. |
+
+The one deliberate manual step is promoting a lasting lesson into a permanent file (`AGENTS.md`, notes, personal). The agent proposes it at close, and you approve. Permanent files that agents edit without review drift and bloat. That's the failure this design exists to avoid.
+
+## The decision log
+
+Git already records what changed, when and where, and each agent keeps its own transcripts. The log adds the missing part, **why**, with pointers to both. It's write-everything, read-narrowly, because unfiltered history in context hurts more than it helps ([SWE Context Bench](https://arxiv.org/abs/2602.08316)), while a plain chronological log works well ([DreamBench-SWE](https://arxiv.org/abs/2608.20664)).
 
 ```sh
-git clone https://github.com/msiric/agentctx ~/src/agentctx
-~/src/agentctx/bin/agentctx install --dry-run   # see what it would change
-~/src/agentctx/bin/agentctx install             # do it (add --adopt to move an existing ~/.claude/CLAUDE.md into the shared file)
-agentctx doctor                                 # check the setup
-agentctx verify                                 # live test: asks each agent what it can see
+agentctx log --path src/auth          # entries whose changed files include src/auth
+agentctx log --grep jwt --type dead-end --since 2026-10-01
+agentctx log show 73a8b76             # one entry in full: commit, files, session, transcript
+git show <commit>                     # then the actual change
 ```
 
-Codex only runs hooks you've trusted. After installing, open `codex`, run `/hooks` and trust the agentctx hook once.
+Results are one short line each, newest first, at most 20 by default. Agents learn this from the effort skill and the one-line pointer, and they never write the log directly. Writes happen in hooks, which run outside the agent's sandbox.
 
-What `install` changes. Files it edits are backed up to `~/.agents/backups/` first:
+The format is one event per line, tab-separated, one file per month: `id time type branch commit paths text session transcript`. It needs no parser or database, `grep` works on it, and appends never rewrite history. In the effort file, start a line with `Dead end:` to log it as a failed approach.
 
-- `~/.claude/CLAUDE.md` gets a 3-line block that imports `~/.agents/AGENTS.md`. Your own lines stay.
-- `~/.codex/AGENTS.md` and `~/.copilot/copilot-instructions.md` become symlinks to `~/.agents/AGENTS.md`. Existing files with content are left alone, with a warning.
-- The session-start hook goes in as a Claude Code plugin (installed from this folder), `~/.codex/hooks.json` and `~/.copilot/hooks/agentctx.json`. Existing hook files it didn't create are never edited; it prints the snippet to add instead.
-- The `effort` skill is linked into `~/.agents/skills/`, which Codex and Copilot read. Claude Code gets it from the plugin.
-- `agentctx` is linked into `~/.local/bin`.
+## Across repos, sessions and machines
 
-## Daily use
+- **Repos:** nothing to set up per repo. An agent in a repo you've never touched just gets your personal file plus that repo's `AGENTS.md`.
+- **Sessions and agents:** state lives in files, not chats. End a session in Claude and continue in Codex, and the effort file and log carry over.
+- **Worktrees:** each one has its own `.agentctx/`, so parallel agents on different branches never share task state. Notes and the log are shared per repo.
+- **Machines:** `~/.agents` is local. To sync it, put it in a private git repo (it's plain text). Effort files travel with the worktree; the log and notes stay with `~/.agents`.
+
+## Daily commands
 
 ```sh
-git switch -c feat/login
-agentctx new        # creates the effort file; or ask the agent ("start an effort for ...")
-# work in as many fresh sessions as you like; each one starts with the effort file
+agentctx new        # start an effort for this branch (or ask the agent to)
 agentctx show       # exactly what agents get here at session start
-agentctx list       # every active effort across all repos, with its last progress line
-agentctx close      # archive it; lists its decisions so you can promote the durable ones
-agentctx prune      # efforts in this worktree whose branches were deleted (--apply to archive)
-agentctx notes      # your private notes for this repo
+agentctx list       # active efforts across all repos, with their last progress line
+agentctx close      # archive the effort; lists decisions worth promoting
+agentctx notes      # private notes for this repo
+agentctx log ...    # search the decision log
+agentctx doctor     # check setup and this repo's instruction files
 ```
-
-The effort file has six short sections: Goal, Done when, Plan, Progress, Decisions and dead ends, Open questions. The agent keeps it current. When you're done, `close` (or the skill's close step) asks where each lasting decision belongs: the repo's `AGENTS.md`, your private notes, your personal file, or nowhere. That step is what keeps the permanent files small and correct.
 
 ## Why it's built this way
 
 Every rule below comes from vendor documentation, the CLIs' source code or published evaluations. None of it is taste.
 
-- **Global files stay short and hold only what code can't tell an agent.** In a controlled study, context files didn't improve task success but raised cost by over 20%. Repository overviews didn't help at all ([Gloaguen et al., ICLR 2026](https://arxiv.org/abs/2602.11988)). Anthropic says to keep CLAUDE.md under 200 lines and to stop describing architecture ([memory](https://code.claude.com/docs/en/memory), [best practices](https://code.claude.com/docs/en/best-practices)). `doctor` flags files over 200 lines.
-- **Task state lives in a file, not in the chat.** Anthropic's long-running agent harness and OpenAI's ExecPlans both rebuild state from a progress file at the start of every session ([Anthropic](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents), [OpenAI](https://developers.openai.com/cookbook/articles/codex_exec_plans)). The hook runs again after compaction (the `compact` matcher), so the agent gets the file fresh instead of a lossy summary of it ([hooks](https://code.claude.com/docs/en/hooks)).
-- **Nothing is injected when there's nothing to inject.** No notes and no effort means no output, and a session costs zero extra tokens. The plugin's always-on cost is about 60 tokens for the skill's description (`claude plugin details agentctx@agentctx`).
-- **The output fits each tool's limits.** Claude caps hook text at 10,000 characters ([hooks](https://code.claude.com/docs/en/hooks)). Codex moves hook text over about 2,500 tokens to a file (codex source, `DEFAULT_HOOK_OUTPUT_TOKEN_LIMIT`). agentctx stays under 9,000 characters (`AGENTCTX_MAX_CHARS`). A file larger than that is replaced with its path and an instruction to read it, never truncated.
-- **AGENTS.md is the one repo file.** Claude Code reads AGENTS.md natively from v2.1.277, but only when no CLAUDE.md exists. Codex and Copilot read it too ([memory docs](https://code.claude.com/docs/en/memory)). `doctor` warns when a CLAUDE.md hides an AGENTS.md from Claude, and when a CLAUDE.md that only says `@AGENTS.md` is no longer needed.
-- **Codex has a hard size limit.** Codex loads one file per directory from the git root down and stops at 32 KiB combined (`project_doc_max_bytes`, [docs](https://learn.chatgpt.com/docs/agent-configuration/agents-md)). `doctor` adds up the chain for your current directory.
-- **Copilot needs JSON and ignores `~/` imports.** Copilot reads only `additionalContext` from session-start hooks, and doesn't load `@~/` or absolute imports ([hooks reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference), [instructions](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-custom-instructions)). So it gets a symlink, not an import, and the hook prints JSON for it.
+- **Global files stay short and hold only what code can't tell an agent.** In a controlled study, context files didn't improve task success but raised cost by over 20% ([ICLR 2026](https://arxiv.org/abs/2602.11988)). Anthropic says to keep CLAUDE.md under 200 lines ([memory](https://code.claude.com/docs/en/memory)), and `doctor` flags files over 200 lines.
+- **Task state lives in a file, not in the chat.** Anthropic's long-running harness and OpenAI's ExecPlans both rebuild state from a file at the start of every session ([Anthropic](https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents), [OpenAI](https://developers.openai.com/cookbook/articles/codex_exec_plans)).
+- **Effort files live in the worktree** because that's the only place every agent can write without prompting. Codex also keeps `.git/`, `.agents/` and `.codex/` read-only inside the workspace (codex source, `PROTECTED_METADATA_PATH_NAMES`). `.agentctx/` ignores itself with a one-line `.gitignore`. `git clean -fdx` deletes it.
+- **Output fits each tool's limits.** Claude caps hook text at 10,000 characters ([hooks](https://code.claude.com/docs/en/hooks)), and Codex spills hook text over about 2,500 tokens to a file. agentctx stays under 9,000 characters. A file larger than that is replaced with its path, never silently truncated.
+- **AGENTS.md is the one repo file.** Claude Code reads it natively from v2.1.277, but only when no CLAUDE.md exists. `doctor` warns when a CLAUDE.md hides it. Codex stops at 32 KiB of project instructions (`project_doc_max_bytes`), and `doctor` adds up the files for your current directory.
+- **Copilot is handled differently.** It needs JSON from hooks and ignores `~/` imports ([hooks](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-hooks-reference), [instructions](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-custom-instructions)), so it gets a symlink and JSON output.
+- **There's no vector database, MCP server or generated AGENTS.md.** A plain log did about as well as a memory product, MCP tool definitions cost context in every session ([Anthropic](https://www.anthropic.com/engineering/advanced-tool-use)), and LLM-generated context files slightly lowered success.
+
+## What `install` changes
+
+Files it edits are backed up to `~/.agents/backups/` first.
+
+- `~/.claude/CLAUDE.md` gets a 3-line block importing `~/.agents/AGENTS.md`; your own lines stay. HTML comments are stripped by Claude, so the markers cost nothing.
+- `~/.codex/AGENTS.md` and `~/.copilot/copilot-instructions.md` become symlinks to `~/.agents/AGENTS.md`. Existing files with content are left alone, with a warning.
+- Hooks go in through a Claude Code plugin (installed from the clone), `~/.codex/hooks.json` and `~/.copilot/hooks/agentctx.json`. Hook files it didn't create are never edited; it prints what to add instead.
+- The `effort` skill is linked into `~/.agents/skills/`, which Codex and Copilot read. Claude Code gets it from the plugin, at about 60 always-on tokens.
+- `agentctx` is linked into `~/.local/bin`.
+
+`agentctx uninstall` removes all of that. It leaves each agent a plain copy of your personal instructions, and keeps `~/.agents` and any `.agentctx/` folders.
 
 ## What's tested
 
-`sh tests/run.sh` runs every test in a throwaway `$HOME`:
-- install, re-install (must change nothing), `--adopt`, dry run, uninstall
-- user files are preserved: your CLAUDE.md lines, foreign hook files, your own symlinks
-- repo keys for every URL form, worktrees, and directory names with spaces
-- the effort lifecycle, and the context output for each agent, including JSON escaping and the size budget
-- every doctor check, and `verify`
+`sh tests/run.sh` runs every test in a throwaway `$HOME`. It covers:
+- install, re-install as a no-op, adopt, dry run, update and uninstall
+- preservation of your files
+- repo keys and worktrees
+- the effort lifecycle, auto-archive and context output for each agent
+- the decision log: harvesting, dedupe, filters, show, malformed text, and recovery from killed sessions
+- every doctor check, and verify
 
-`AGENTCTX_REAL=1 sh tests/run.sh` also runs the real CLIs offline, with no model calls:
-- Codex's own prompt renderer (`codex debug prompt-input`) must show the personal file through the symlink, plus root and nested AGENTS.md
-- Claude Code must validate, install, enable and uninstall the plugin
+`AGENTCTX_REAL=1` also checks the real CLIs offline. Codex's own prompt renderer must show the personal and nested files, and must parse the hooks file. Claude Code must validate, install and remove the plugin.
 
-CI runs the suite on Linux and macOS, under dash and `bash --posix`. It also runs a weekly job against the latest Claude Code and Codex releases, to catch upstream changes.
+CI runs the suite on Linux and macOS, under dash and `bash --posix`. A weekly job runs against the latest CLIs to catch upstream changes.
 
 Last verified with Claude Code 2.1.316, Codex CLI 0.166.0 and Copilot CLI 1.0.105.
 
-**These can't be tested offline, so `agentctx verify` checks them on your machine.** It plants a random marker in each layer, asks each agent which markers it sees without using tools, prints a table, and restores everything:
-- that Claude Code follows the `@~/.agents/AGENTS.md` import and runs the plugin hook
-- that Codex runs the trusted hook
-- that Copilot follows the symlinked instructions file and runs its hook. If Copilot misses your personal file, set `COPILOT_CUSTOM_INSTRUCTIONS_DIRS=~/.agents` ([docs](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-custom-instructions)).
-
-Run `verify` again after upgrading any of the agents.
-
-## Not included, on purpose
-
-- No vector or graph memory, MCP server or database. A plain log did about as well as Mem0 on cross-session tasks ([DreamBench-SWE](https://arxiv.org/abs/2608.20664)), and MCP tool definitions cost context in every session ([Anthropic](https://www.anthropic.com/engineering/advanced-tool-use)).
-- No generated AGENTS.md content. LLM-generated context files slightly lowered success in the ETH study.
-- No changes to auto memory (Claude) or memories (Codex). Both vendors treat them as recall aids, not a place for rules.
-
-## Uninstall
-
-```sh
-agentctx uninstall   # removes hooks, plugin, skill and command; keeps ~/.agents
-```
-
-Uninstall replaces the links and the CLAUDE.md import with plain copies of your personal file, so each agent keeps your instructions. It never touches hook files it didn't create.
+Live-session behavior can't be tested offline: hooks running, the Claude import being followed, Copilot reading the symlink. `agentctx verify` checks it on your machine. It plants a random marker in each layer and a decision in an effort file, asks each agent what it sees, and checks the decision reached the log. Then it restores everything. If Copilot misses your personal file, set `COPILOT_CUSTOM_INSTRUCTIONS_DIRS=~/.agents`.
 
 ## Environment
 
-`AGENTCTX_HOME` (default `~/.agents`), `AGENTCTX_MAX_CHARS` (default 9000, max 9500), `AGENTCTX_EFFORT` (use a named effort instead of the branch). It also honours `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `COPILOT_HOME`.
+- `AGENTCTX_HOME` (default `~/.agents`)
+- `AGENTCTX_MAX_CHARS` (default 9000, max 9500)
+- `AGENTCTX_HINT=0` (no hint on branches without an effort file)
+- `AGENTCTX_EFFORT` (use a named effort instead of the branch)
 
-It works on Linux and macOS. On Windows, use it inside WSL.
+It also honours `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `COPILOT_HOME`. It works on Linux and macOS; on Windows, use WSL.

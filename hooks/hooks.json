@@ -1,5 +1,5 @@
 {
-  "description": "agentctx: inject private repo notes and the active effort file",
+  "description": "agentctx: inject private repo notes and the active effort file; log decisions at session end",
   "hooks": {
     "SessionStart": [
       {
@@ -8,6 +8,17 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/agentctx\" context --for claude",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/agentctx\" harvest --for claude",
             "timeout": 10
           }
         ]

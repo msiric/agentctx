@@ -5,7 +5,7 @@
 
 set -u
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 MARKER="managed by agentctx"
 
 # ---------------------------------------------------------------- paths ----
@@ -214,6 +214,12 @@ piece() { # piece LABEL PATH BUDGET -> prints the block, or a pointer if too big
   fi
 }
 
+default_branch() {
+  d=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null) && { printf '%s\n' "${d#origin/}"; return 0; }
+  for d in main master trunk develop; do git show-ref --verify --quiet "refs/heads/$d" && { printf '%s\n' "$d"; return 0; }; done
+  return 1
+}
+
 build_context() {
   in_repo || return 0
   KEY=$(repo_key) || return 0
@@ -224,18 +230,25 @@ build_context() {
   has_notes=0; has_effort=0
   [ -s "$notes" ] && has_notes=1
   [ -n "$effort" ] && [ -s "$effort" ] && has_effort=1
-  [ "$has_notes" -eq 0 ] && [ "$has_effort" -eq 0 ] && return 0
 
   budget=$MAX_CHARS
   if [ "$has_notes" -eq 1 ]; then
     piece "agentctx: private notes for this repository" "$notes" "$((budget / 3))"
     budget=$((budget - $(chars "$notes")))
     [ "$budget" -lt $((MAX_CHARS / 2)) ] && budget=$((MAX_CHARS / 2))
-    [ "$has_effort" -eq 1 ] && printf '\n'
+    printf '\n'
   fi
   if [ "$has_effort" -eq 1 ]; then
-    printf 'agentctx: this branch has an effort file. It is the source of truth for the current task. Keep it current as you work: tick Plan items, add one dated line under Progress before you stop, and record decisions and dead ends.\n'
+    printf 'agentctx: this branch has an effort file. It is the source of truth for the current task. Keep it current as you work: tick Plan items, add one dated line under Progress before you stop, and record decisions and dead ends (start a line with "Dead end:" for approaches that failed).\n'
     piece "agentctx: effort file for branch $b" "$effort" "$budget"
+    printf '\n'
+  elif [ "${AGENTCTX_HINT:-1}" != 0 ] && [ -n "$effort" ] && db=$(default_branch) && [ "$b" != "$db" ]; then
+    printf 'agentctx: no effort file for branch %s. If this task spans more than one session, run `agentctx new` and keep it current.\n' "$b"
+  fi
+  n=0
+  for f in "$(log_dir "$KEY")"/*.tsv; do [ -f "$f" ] && n=$((n + $(lines "$f"))); done
+  if [ "$n" -gt 0 ]; then
+    printf 'agentctx: this repo has a decision log (%s entries). Before changing code with history, or to learn why something is the way it is, run `agentctx log --path <file>` or `agentctx log --grep <word>`; `agentctx log show <id>` gives one entry in full.\n' "$n"
   fi
 }
 
@@ -261,14 +274,250 @@ cmd_context() {
   fi
 
   out=$(build_context 2>/dev/null) || out=
-  [ -n "$out" ] || exit 0
-  if [ "$target" = copilot ]; then
-    # Copilot only reads {"additionalContext": "..."} from sessionStart hooks.
-    printf '{"additionalContext":"%s"}\n' "$(printf '%s\n' "$out" | json_escape)"
-  else
-    printf '%s\n' "$out"
+  if [ -n "$(printf '%s' "$out" | tr -d '[:space:]')" ]; then
+    if [ "$target" = copilot ]; then
+      # Copilot only reads {"additionalContext": "..."} from sessionStart hooks.
+      printf '{"additionalContext":"%s"}\n' "$(printf '%s\n' "$out" | json_escape)"
+    else
+      printf '%s\n' "$out"
+    fi
+  fi
+  # After the output: pick up what a killed session didn't log, credited to that
+  # session, and remember this one. In the background so startup stays instant.
+  if [ "$target" != text ]; then
+    startup_harvest "$(session_ref "$target" "$input")" </dev/null >/dev/null 2>&1 &
+    [ -n "${AGENTCTX_SYNC:-}" ] && wait
   fi
   exit 0
+}
+
+startup_harvest() { # NEW_SESSION
+  in_repo || return 0
+  KEY=$(repo_key) || return 0
+  ld=$(log_dir "$KEY")
+  mkdir -p "$ld/.seen" 2>/dev/null || return 0
+  w=$ld/.seen/last-session-$(worktree_top | cksum | cut -d' ' -f1)
+  prev=$(cat "$w" 2>/dev/null) || prev=
+  harvest "${prev:-unknown}" ""
+  [ -n "$1" ] && printf '%s\n' "$1" > "$w"
+  return 0
+}
+
+# ------------------------------------------------------------------- log ----
+# Append-only decision log, one file per repo per month:
+#   ~/.agents/repos/<repo>/log/YYYY-MM.tsv
+# One event per line, tab-separated:
+#   id  time  type  branch  commit  paths  text  session  transcript
+# Agents never write it (sandboxes would block that). They write Decisions and
+# Progress in the effort file; the session hooks copy new lines in here.
+
+TAB=$(printf '\t')
+
+log_dir() { printf '%s/log\n' "$(repo_dir "$1")"; }
+
+one_line() { tr '\t\r\n' '   ' | sed 's/  */ /g; s/^ //; s/ $//'; }
+
+new_id() { od -An -N4 -tx1 /dev/urandom | tr -d ' \n' | cut -c1-7; }
+
+log_append() { # KEY TYPE BRANCH COMMIT PATHS TEXT SESSION TRANSCRIPT
+  d=$(log_dir "$1")
+  mkdir -p "$d" 2>/dev/null || return 1
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(new_id)" "$(date +%Y-%m-%dT%H:%M)" "$2" "$3" "${4:--}" "${5:--}" \
+    "$(printf '%s' "$6" | one_line)" "${7:--}" "${8:--}" >> "$d/$(date +%Y-%m).tsv"
+}
+
+# All events for a repo, newest first.
+log_events() { # KEY
+  d=$(log_dir "$1")
+  for f in "$d"/*.tsv; do [ -f "$f" ] && cat "$f"; done | awk '{ a[NR] = $0 } END { for (i = NR; i > 0; i--) print a[i] }'
+}
+
+# Files touched since the last harvest on this branch (committed + uncommitted).
+# Files a branch touched since LAST (or since it split from the default
+# branch), excluding upstream changes merged in; plus uncommitted changes when
+# it's the current branch. Up to 50 paths.
+changed_paths() { # BRANCH LAST_SHA
+  tip=refs/heads/$1
+  git show-ref --verify --quiet "$tip" || tip=HEAD
+  set --  "$tip" "${2:-}"
+  excl=
+  if [ -n "$2" ] && git cat-file -e "$2^{commit}" 2>/dev/null; then excl=$2; fi
+  db=$(default_branch 2>/dev/null) || db=
+  { if [ -n "$excl" ] || { [ -n "$db" ] && [ "refs/heads/$db" != "$1" ]; }; then
+      # shellcheck disable=SC2086
+      git --no-optional-locks log --format= --name-only "$1" --not $excl ${db:+"refs/heads/$db"} 2>/dev/null
+    fi
+    if [ "$1" = HEAD ] || [ "$1" = "refs/heads/$(current_branch 2>/dev/null)" ]; then
+      git --no-optional-locks diff --name-only HEAD 2>/dev/null
+    fi; } | awk 'NF && !seen[$0]++' |
+  awk 'NR <= 50 { printf "%s%s", (NR > 1 ? "," : ""), $0 } END { if (NR > 50) printf ",+%d more", NR - 50 }'
+}
+
+# Copy new Decisions/Progress lines from the current branch's effort file into
+# the log, and archive efforts whose branches were deleted. Silent, best effort.
+# Serialise harvests per repo (session end and session start can overlap).
+lock_log() { # DIR
+  l=$1/.lock; i=0
+  while ! mkdir "$l" 2>/dev/null; do
+    if [ -n "$(find "$l" -prune -mmin +1 2>/dev/null)" ]; then rmdir "$l" 2>/dev/null; continue; fi
+    i=$((i + 1)); [ "$i" -ge 30 ] && return 1
+    sleep 0.1 2>/dev/null || sleep 1
+  done
+}
+unlock_log() { rmdir "$1/.lock" 2>/dev/null; }
+
+# A deleted branch that was really renamed: git's reflog says where it went.
+renamed_to() { # OLD_BRANCH
+  gd=$(git rev-parse --git-common-dir 2>/dev/null) || return 1
+  [ -d "$gd/logs/refs/heads" ] || return 1
+  grep -rhF "renamed refs/heads/$1 to refs/heads/" "$gd/logs/refs/heads" 2>/dev/null | tail -n 1 |
+    awk -v m="renamed refs/heads/$1 to refs/heads/" '{ i = index($0, m); if (i) print substr($0, i + length(m)) }' | awk 'NF'
+}
+
+# Copy one effort file's new Decisions/Progress lines into the log (one awk pass).
+harvest_file() { # FILE BRANCH SESSION TRANSCRIPT
+  seen=$ld/.seen/$(branch_file_id "$2")
+  touch "$seen" 2>/dev/null || return 0
+  new=$(awk -v tab="$TAB" -v seenf="$seen" '
+    BEGIN { while ((getline x < seenf) > 0) seen[x] = 1; close(seenf) }
+    /^## / { sec = ($0 == "## Decisions and dead ends") ? "decision" : ($0 == "## Progress") ? "progress" : ""; next }
+    sec != "" {
+      l = $0; sub(/^[[:space:]]*[-*][[:space:]]*/, "", l); gsub(/[\t\r]/, " ", l); sub(/[[:space:]]+$/, "", l)
+      if (l == "" || l ~ /^\[[ xX]\]/ || (l in seen)) next
+      seen[l] = 1; t = sec
+      if (l ~ /^([Dd]ead[ -]end|[Tt]ried |[Rr]ejected|[Rr]everted)/) t = "dead-end"
+      print t tab l
+    }' "$1")
+  [ -n "$new" ] || return 0
+  last=$(cat "$seen.sha" 2>/dev/null)
+  sha=$(git rev-parse --short "refs/heads/$2" 2>/dev/null || git rev-parse --short HEAD 2>/dev/null) || sha=-
+  paths=$(changed_paths "$2" "$last")
+  base=$(od -An -N3 -tx1 /dev/urandom | tr -d ' \n')
+  mkdir -p "$ld" 2>/dev/null || return 0
+  printf '%s\n' "$new" | awk -F "$TAB" -v OFS="$TAB" -v base="$base" -v ts="$(date +%Y-%m-%dT%H:%M)" \
+    -v br="$2" -v sha="${sha:--}" -v paths="${paths:--}" -v ses="${3:--}" -v tr="${4:--}" \
+    '{ printf "%s%x%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n", base, NR, OFS, ts, OFS, $1, OFS, br, OFS, sha, OFS, paths, OFS, $2, OFS, ses, OFS, tr }' \
+    >> "$ld/$(date +%Y-%m).tsv" || return 0
+  printf '%s\n' "$new" | cut -f2- >> "$seen"
+  printf '%s\n' "$sha" > "$seen.sha"
+}
+
+# Harvest every effort in this worktree, follow renamed branches, then
+# archive efforts whose branches are gone. Silent, best effort, locked.
+harvest() { # SESSION TRANSCRIPT
+  in_repo || return 0
+  KEY=$(repo_key) || return 0
+  ld=$(log_dir "$KEY")
+  mkdir -p "$ld/.seen" 2>/dev/null || return 0
+  lock_log "$ld" || return 0
+  ed=$(effort_dir)
+  gone_efforts | while IFS="$TAB" read -r br f; do
+    [ -n "$f" ] || continue
+    nb=$(renamed_to "$br") || nb=
+    if [ -z "$nb" ] || ! git show-ref --verify --quiet "refs/heads/$nb"; then continue; fi
+    nf=$ed/$(branch_file_id "$nb").md
+    [ -e "$nf" ] && continue
+    sed "s/^Branch: .* · Repo:/Branch: $(printf '%s' "$nb" | sed 's/[&/\]/\\&/g') · Repo:/" "$f" > "$nf" && rm -f "$f"
+    for x in "" .sha; do [ -f "$ld/.seen/$(branch_file_id "$br")$x" ] && mv "$ld/.seen/$(branch_file_id "$br")$x" "$ld/.seen/$(branch_file_id "$nb")$x"; done
+    log_append "$KEY" note "$nb" - - "effort followed branch rename from $br" "$1" "$2"
+  done
+  for f in "$ed"/*.md; do
+    [ -f "$f" ] || continue
+    br=$(effort_branch "$f"); [ -n "$br" ] || continue
+    harvest_file "$f" "$br" "$1" "$2"
+  done
+  gone_efforts | while IFS="$TAB" read -r br f; do
+    [ -n "$f" ] || continue
+    if dest=$(archive_effort "$f" "$KEY"); then
+      log_append "$KEY" closed "$br" - - "effort auto-archived: branch deleted ($(tilde "$dest"))" "$1" "$2"
+    fi
+  done
+  unlock_log "$ld"
+  return 0
+}
+
+session_ref() { # TOOL JSON -> tool:session-id
+  sid=$(printf '%s' "$2" | json_field session_id)
+  [ -n "$sid" ] || sid=$(printf '%s' "$2" | json_field sessionId)
+  [ -n "$sid" ] && printf '%s:%s\n' "$1" "$sid"
+}
+
+cmd_harvest() { # hook entry point (session end)
+  target=text
+  case ${1:-} in --for) target=${2:-text} ;; --for=*) target=${1#--for=} ;; esac
+  input=
+  if [ "$target" != text ] && [ ! -t 0 ]; then input=$(cat); fi
+  if [ -n "$input" ]; then
+    cwd=$(printf '%s' "$input" | json_field cwd)
+    if [ -n "$cwd" ] && [ -d "$cwd" ]; then cd "$cwd" || exit 0; fi
+  fi
+  harvest "$(session_ref "$target" "$input")" "$(printf '%s' "$input" | json_field transcript_path)" >/dev/null 2>&1
+  exit 0
+}
+
+log_usage() {
+  cat <<EOF
+agentctx log [--path P] [--grep TEXT] [--type T] [--branch B] [--since YYYY-MM-DD] [-n N]
+agentctx log show ID
+agentctx log add TYPE TEXT       types: decision, dead-end, progress, note
+EOF
+}
+
+cmd_log() {
+  need_repo
+  case ${1:-} in
+    show) shift; log_show "$@"; return ;;
+    add) shift; [ $# -ge 2 ] || die "usage: agentctx log add TYPE TEXT"
+         typ=$1; shift
+         b=$(current_branch 2>/dev/null) || b=-
+         log_append "$KEY" "$typ" "${b:--}" "$(git rev-parse --short HEAD 2>/dev/null || echo -)" - "$*" "manual" - || die "could not write the log"
+         say "Logged."; return ;;
+    -h|--help|help) log_usage; return ;;
+  esac
+  fpath=; fgrep=; ftype=; fbranch=; fsince=; limit=20
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --path|--grep|--type|--branch|--since|-n)
+        [ $# -ge 2 ] || die "$1 needs a value"
+        case $1 in
+          --path) fpath=$2 ;; --grep) fgrep=$2 ;; --type) ftype=$2 ;;
+          --branch) fbranch=$2 ;; --since) fsince=$2 ;; -n) limit=$2 ;;
+        esac
+        shift 2 ;;
+      *) log_usage >&2; exit 2 ;;
+    esac
+  done
+  if [ -n "$fpath" ]; then
+    # make the path repo-relative, like the logged ones
+    case $fpath in /*) top=$(worktree_top); fpath=${fpath#"$top"/} ;; *) fpath=$(git rev-parse --show-prefix 2>/dev/null)${fpath#./} ;; esac
+    fpath=${fpath%/}
+  fi
+  case $limit in ''|*[!0-9]*) die "-n needs a number" ;; esac
+  out=$(log_events "$KEY" | awk -F "$TAB" -v p="$fpath" -v g="$fgrep" -v t="$ftype" -v b="$fbranch" -v s="$fsince" -v n="$limit" '
+    function has_path(list, want,   k, parts, i) {
+      k = split(list, parts, ",")
+      for (i = 1; i <= k; i++) if (parts[i] == want || index(parts[i], want "/") == 1) return 1
+      return 0
+    }
+    (p == "" || has_path($6, p)) && (g == "" || index(tolower($7), tolower(g)) > 0) &&
+    (t == "" || $3 == t) && (b == "" || $4 == b) && (s == "" || substr($2, 1, 10) >= s) {
+      txt = $7; if (length(txt) > 140) txt = substr(txt, 1, 137) "..."
+      printf "%s  %s  %-8s  %s  %s  %s\n", $1, substr($2, 1, 10), $3, $4, $5, txt
+      if (++c >= n) exit
+    }')
+  if [ -n "$out" ]; then printf '%s\n' "$out"; else say "No matching log entries."; fi
+}
+
+log_show() { # ID (prefix ok)
+  [ -n "${1:-}" ] || die "usage: agentctx log show ID"
+  line=$(log_events "$KEY" | awk -F "$TAB" -v id="$1" 'index($1, id) == 1 { print; exit }')
+  [ -n "$line" ] || die "no log entry $1"
+  printf '%s\n' "$line" | awk -F "$TAB" '{
+    print "id:         " $1; print "time:       " $2; print "type:       " $3; print "branch:     " $4
+    print "commit:     " $5 (($5 != "-") ? "   (git show " $5 ")" : "")
+    print "paths:      " $6; print "session:    " $8
+    if ($9 != "-") print "transcript: " $9
+    print ""; print $7 }'
 }
 
 # ----------------------------------------------------------- effort cmds ----
@@ -416,7 +665,9 @@ cmd_close() {
   f=$(effort_path "$KEY" "$BRANCH")
   [ -e "$f" ] || die "no effort for branch $BRANCH"
   dec=$(section "$f" "Decisions and dead ends" | awk 'NF')
+  harvest manual - >/dev/null 2>&1
   dest=$(archive_effort "$f" "$KEY") || die "could not write to $(tilde "$(repo_dir "$KEY")") (sandboxed agent?). Run 'agentctx close' yourself in a terminal."
+  log_append "$KEY" closed "$BRANCH" "$(git rev-parse --short HEAD 2>/dev/null || echo -)" - "effort closed ($(tilde "$dest"))" manual -
   say "Archived to $dest"
   if [ -n "$dec" ]; then
     say ""
@@ -437,12 +688,17 @@ effort_kind() { if grep -q '^Branch: .* · Kind: named ·' "$1"; then echo named
 
 # Efforts in this worktree whose branch no longer exists (named efforts never count).
 gone_efforts() {
+  cur=$(current_branch 2>/dev/null) || cur=
   for f in "$(effort_dir)"/*.md; do
     [ -e "$f" ] || continue
     [ "$(effort_kind "$f")" = named ] && continue
     br=$(effort_branch "$f")
     [ -n "$br" ] || continue
-    git show-ref --verify --quiet "refs/heads/$br" || printf '%s\t%s\n' "$br" "$f"
+    [ "$br" = "$cur" ] && continue   # the branch you're on (maybe with no commits yet)
+    git show-ref --verify --quiet "refs/heads/$br" && continue
+    # still on a remote: not gone yet (it disappears after fetch --prune)
+    [ -n "$(git for-each-ref --format='%(refname)' "refs/remotes/*/$br" 2>/dev/null)" ] && continue
+    printf '%s\t%s\n' "$br" "$f"
   done
 }
 
@@ -493,26 +749,27 @@ has_content() { # non-blank, non-comment content
 is_link_to() { [ -L "$1" ] && [ "$(readlink "$1")" = "$2" ]; }
 
 codex_hook_group() {
-  cat <<EOF
-      {
-        "matcher": "startup|clear|compact",
-        "hooks": [
-          { "type": "command", "command": "'$SELF' context --for codex", "timeout": 10 }
-        ]
-      }
-EOF
+  printf '      {\n        "matcher": "startup|clear|compact",\n        "hooks": [\n          { "type": "command", "command": "%s context --for codex", "timeout": 10 }\n        ]\n      }\n' "'$SELF'"
+}
+
+codex_end_group() {
+  printf '      {\n        "hooks": [\n          { "type": "command", "command": "%s harvest --for codex", "timeout": 3 }\n        ]\n      }\n' "'$SELF'"
 }
 
 codex_hooks_json() {
-  printf '{\n  "description": "%s: injects private repo notes and the active effort file",\n  "hooks": {\n    "SessionStart": [\n%s\n    ]\n  }\n}\n' "$MARKER" "$(codex_hook_group)"
+  printf '{\n  "description": "%s: injects private repo notes and the active effort file, logs decisions at session end",\n  "hooks": {\n    "SessionStart": [\n%s\n    ],\n    "SessionEnd": [\n%s\n    ]\n  }\n}\n' "$MARKER" "$(codex_hook_group)" "$(codex_end_group)"
 }
 
 copilot_hook_entry() {
   printf '      { "type": "command", "bash": "%s context --for copilot", "timeoutSec": 10 }\n' "'$SELF'"
 }
 
+copilot_end_entry() {
+  printf '      { "type": "command", "bash": "%s harvest --for copilot", "timeoutSec": 5 }\n' "'$SELF'"
+}
+
 copilot_hooks_json() {
-  printf '{\n  "version": 1,\n  "description": "%s",\n  "hooks": {\n    "sessionStart": [\n%s\n    ]\n  }\n}\n' "$MARKER" "$(copilot_hook_entry)"
+  printf '{\n  "version": 1,\n  "description": "%s",\n  "hooks": {\n    "sessionStart": [\n%s\n    ],\n    "sessionEnd": [\n%s\n    ]\n  }\n}\n' "$MARKER" "$(copilot_hook_entry)" "$(copilot_end_entry)"
 }
 
 # We own a hook file only if its description carries our marker.
@@ -552,7 +809,7 @@ link_global() { # TOOL PATH
 own_file() { # LABEL PATH CONTENT SNIPPET
   if [ -e "$2" ] && ! owned "$2"; then
     warn "$1: $(tilde "$2") exists and is not managed by agentctx, left untouched"
-    hint "add this entry to its SessionStart list by hand:"
+    hint "add these entries to it by hand:"
     printf '%s\n' "$4" | sed 's/^/    /'
     return 0
   fi
@@ -594,7 +851,12 @@ ensure_personal() {
       printf '%s\n' "$srcs" | sed 's/^/          /'
       return 1
     fi
-  elif [ "$count" -gt 0 ]; then
+  elif [ "$count" -eq 1 ] && [ "$DRY" -eq 0 ] && [ -t 0 ] && [ -t 1 ] && [ -z "${CLAUDECODE:-}${CODEX_SANDBOX:-}${COPILOT_AGENT:-}" ]; then
+    printf '  Found your instructions in %s.\n  Move them to %s so Claude Code, Codex and Copilot all use them? [y/N] ' "$(tilde "$srcs")" "$(tilde "$PERSONAL")"
+    ans=; read -r ans || ans=
+    case $ans in [Yy]*) ADOPT=1; ensure_personal; return $? ;; esac
+  fi
+  if [ "$ADOPT" -eq 0 ] && [ "$count" -gt 0 ]; then
     info "existing global instructions found (Codex/Copilot/Claude don't share them yet):"
     printf '%s\n' "$srcs" | sed 's/^/          /'
     hint "rerun with --adopt to move a single one into $(tilde "$PERSONAL")"
@@ -643,14 +905,20 @@ install_codex() {
     warn "Codex: $(tilde "$CODEX_DIR/AGENTS.override.md") exists and wins over AGENTS.md"
     hint "move its content into $(tilde "$PERSONAL") and delete it"
   fi
-  own_file "Codex hook" "$CODEX_DIR/hooks.json" "$(codex_hooks_json)" "$(codex_hook_group)"
-  info "Codex runs new hooks only after you trust them: open codex, run /hooks, trust the agentctx SessionStart hook"
+  own_file "Codex hooks" "$CODEX_DIR/hooks.json" "$(codex_hooks_json)" "SessionStart:
+$(codex_hook_group)
+SessionEnd:
+$(codex_end_group)"
+  info "Codex runs new hooks only after you trust them: open codex, run /hooks, and trust both agentctx hooks (once per machine)"
 }
 
 install_copilot() {
   say ""; say "Copilot CLI"
   link_global "Copilot" "$COPILOT_DIR/copilot-instructions.md"
-  own_file "Copilot hook" "$COPILOT_DIR/hooks/agentctx.json" "$(copilot_hooks_json)" "$(copilot_hook_entry)"
+  own_file "Copilot hooks" "$COPILOT_DIR/hooks/agentctx.json" "$(copilot_hooks_json)" "sessionStart:
+$(copilot_hook_entry)
+sessionEnd:
+$(copilot_end_entry)"
 }
 
 install_skill() {
@@ -760,6 +1028,14 @@ cmd_uninstall() {
   [ "$FAILS" -eq 0 ] || exit 1
 }
 
+cmd_update() {
+  [ -d "$ROOT/.git" ] || die "$ROOT is not a git clone; update it however you installed it"
+  case " $* " in *" --dry-run "*) say "Dry run: would git pull $(tilde "$ROOT"), then:"; exec "$ROOT/bin/agentctx" install "$@" ;; esac
+  say "Updating $(tilde "$ROOT")"
+  git -C "$ROOT" pull --ff-only || die "git pull failed (local changes?)"
+  exec "$ROOT/bin/agentctx" install "$@"
+}
+
 # ---------------------------------------------------------------- doctor ----
 
 # Strip fenced code blocks and inline code spans (Claude ignores imports there).
@@ -839,19 +1115,21 @@ doctor_hooks() {
   if has codex || [ -d "$CODEX_DIR" ]; then
     if [ -f "$CODEX_DIR/hooks.json" ] && grep -q "agentctx' context --for codex" "$CODEX_DIR/hooks.json"; then
       ok "Codex hook configured"
+      grep -q "agentctx' harvest --for codex" "$CODEX_DIR/hooks.json" || { warn "Codex session-end hook missing, decisions won't be logged"; hint "run: agentctx install"; }
       hook_target_ok "Codex" "$CODEX_DIR/hooks.json"
       # Trust is stored in config.toml under a key like "file:<dir>/hooks.json:session_start:0:0".
-      if [ -f "$CODEX_DIR/config.toml" ] && grep -qF 'hooks.json:session_start' "$CODEX_DIR/config.toml"; then
+      if [ -f "$CODEX_DIR/config.toml" ] && grep -qF 'hooks.json:session_start' "$CODEX_DIR/config.toml" && grep -qF 'hooks.json:session_end' "$CODEX_DIR/config.toml"; then
         ok "Codex hook has a trust entry in config.toml"
         hint "Codex re-checks trust against the hook's exact definition; after reinstalling from a new path, trust it again in /hooks"
       else
-        warn "Codex hook not trusted yet, so it will not run"
-        hint "open codex, run /hooks, and trust the agentctx SessionStart hook"
+        warn "Codex hooks not trusted yet, so they will not run"
+        hint "open codex, run /hooks, and trust both agentctx hooks"
       fi
     else fail "Codex hook missing"; hint "run: agentctx install"; fi
   fi
   if has copilot || [ -d "$COPILOT_DIR" ]; then
     if [ -f "$COPILOT_DIR/hooks/agentctx.json" ]; then ok "Copilot hook configured"; hook_target_ok "Copilot" "$COPILOT_DIR/hooks/agentctx.json"
+      grep -q "harvest --for copilot" "$COPILOT_DIR/hooks/agentctx.json" || { warn "Copilot session-end hook missing"; hint "run: agentctx install"; }
     else fail "Copilot hook missing"; hint "run: agentctx install"; fi
   fi
   if has agentctx; then ok "agentctx on PATH"; else warn "agentctx is not on PATH (agents can't run it)"; fi
@@ -972,6 +1250,8 @@ doctor_task() {
     warn "notes or effort are too big to inject, so agents only get a pointer to them"
     hint "fold old Progress lines into a summary; notes get up to $((MAX_CHARS / 3)) chars, the effort the rest of $MAX_CHARS" ;;
   esac
+  n=0; for f in "$(log_dir "$KEY")"/*.tsv; do [ -f "$f" ] && n=$((n + $(lines "$f"))); done
+  if [ "$n" -gt 0 ]; then ok "decision log: $n entries (agentctx log)"; else info "decision log is empty (it fills from effort files at session end)"; fi
   gone=$(gone_efforts | awk 'NF' | wc -l | tr -d ' ')
   if [ "$gone" -gt 0 ]; then warn "$gone effort(s) belong to deleted branches"; hint "agentctx prune --apply"; fi
   say ""
@@ -1000,7 +1280,7 @@ cmd_verify() {
   [ -f "$PERSONAL" ] || die "no personal file yet: run agentctx install"
 
   id=$(rand)
-  P=ACX-P$id; R=ACX-R$id; N=ACX-N$id; E=ACX-E$id
+  P=ACX-P$id; R=ACX-R$id; N=ACX-N$id; E=ACX-E$id; D=ACX-D$id
   work=$(mktemp -d) || die "mktemp failed"
   repo=$work/agentctx-verify-$id
   personal_backup=$work/personal.bak
@@ -1025,13 +1305,13 @@ cmd_verify() {
   mkdir -p "$REPOS/$vkey" "$repo/.agentctx"
   printf '*\n' > "$repo/.agentctx/.gitignore"
   printf '# Notes\n\nVerification marker: %s\n' "$N" > "$REPOS/$vkey/NOTES.md"
-  printf '# agentctx-verify\n\nBranch: agentctx-verify · Repo: %s · Kind: branch · Created: %s\n\n## Goal\n\nVerification marker: %s\n' "$vkey" "$(today)" "$E" > "$repo/.agentctx/agentctx-verify.md"
+  printf '# agentctx-verify\n\nBranch: agentctx-verify · Repo: %s · Kind: branch · Created: %s\n\n## Goal\n\nVerification marker: %s\n\n## Decisions and dead ends\n\n- verify decision %s\n' "$vkey" "$(today)" "$E" "$D" > "$repo/.agentctx/agentctx-verify.md"
 
   q='Without using any tools, reading files or running commands, list every token that starts with "ACX-" that appears anywhere in your instructions or context. Reply with the tokens separated by spaces and nothing else. If there are none, reply NONE.'
 
   say "agentctx verify: asking each agent which layers it can see (a few hundred tokens each)"
   say ""
-  printf '  %-9s %-10s %-10s %-10s %-10s\n' agent personal repo notes effort
+  printf '  %-9s %-10s %-10s %-10s %-10s %-10s\n' agent personal repo notes effort logged
   for a in $agents; do
     if ! has "$a"; then printf '  %-9s %s\n' "$a" "not installed, skipped"; continue; fi
     out=$work/$a.out
@@ -1045,6 +1325,10 @@ cmd_verify() {
     for m in "$P" "$R" "$N" "$E"; do
       if grep -q "$m" "$out"; then row="$row$(printf '%-10s ' yes)"; else row="$row$(printf '%-10s ' NO)"; FAILS=$((FAILS + 1)); eval "miss_$a=1"; fi
     done
+    # The session-end (or next session-start) hook should have logged the decision.
+    if cat "$REPOS/$vkey/log/"*.tsv 2>/dev/null | grep -q "$D"; then row="$row$(printf '%-10s ' yes)"
+    else row="$row$(printf '%-10s ' NO)"; FAILS=$((FAILS + 1)); eval "miss_$a=1"; fi
+    rm -rf "$REPOS/$vkey/log"
     printf '  %-9s %s\n' "$a" "$row"
   done
   say ""
@@ -1054,8 +1338,8 @@ cmd_verify() {
     say "$a missed something. Its reply:"
     tail -n 5 "$work/$a.out" | sed 's/^/    /'
     case $a in
-      claude) hint "notes/effort missing: check 'claude plugin list' shows agentctx@agentctx enabled" ;;
-      codex) hint "notes/effort missing: the hook is probably untrusted; open codex, run /hooks, trust it" ;;
+      claude) hint "notes/effort/logged missing: check 'claude plugin list' shows agentctx@agentctx enabled" ;;
+      codex) hint "notes/effort/logged missing: the hooks are probably untrusted; open codex, run /hooks, trust both" ;;
       copilot) hint "personal missing: Copilot may not follow the symlink; set COPILOT_CUSTOM_INSTRUCTIONS_DIRS=$(tilde "$AGENTCTX_HOME") in your shell rc" ;;
     esac
     say ""
@@ -1071,6 +1355,7 @@ agentctx $VERSION: global knowledge + per-branch task context for coding agents
 
 Setup
   install [--adopt] [--dry-run] [--no-claude|--no-codex|--no-copilot] [--no-skill]
+  update            git pull this clone, then re-run install
   uninstall [--dry-run]
   doctor            check the setup and the current repo's instruction files
   verify [--agents claude,codex,copilot]
@@ -1085,9 +1370,13 @@ Per repo / branch (run inside a git repo)
   close             archive this branch's effort and list decisions to promote
   prune [--apply]   archive efforts whose branches no longer exist
   list              all active efforts across repos
+  log [--path P] [--grep TEXT] [--type T] [--branch B] [--since DATE] [-n N]
+  log show ID       one decision log entry in full
+  log add TYPE TEXT add an entry by hand
 
 Internal
-  context --for claude|codex|copilot|text   (used by the session hooks)
+  context --for claude|codex|copilot|text   (session-start hook)
+  harvest --for claude|codex|copilot        (session-end hook)
 
 Data: $(tilde "$AGENTCTX_HOME")  (override with AGENTCTX_HOME)
 EOF
@@ -1109,6 +1398,9 @@ case $cmd in
   prune) cmd_prune "$@" ;;
   list) cmd_list "$@" ;;
   context) cmd_context "$@" ;;
+  harvest) cmd_harvest "$@" ;;
+  log) cmd_log "$@" ;;
+  update) cmd_update "$@" ;;
   version|--version|-V) say "agentctx $VERSION" ;;
   help|--help|-h) usage ;;
   *) usage >&2; exit 2 ;;
