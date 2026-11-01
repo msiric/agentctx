@@ -135,3 +135,15 @@ Live-session behavior can't be tested offline: hooks running, the Claude import 
 - `AGENTCTX_EFFORT` (use a named effort instead of the branch)
 
 It also honours `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `COPILOT_HOME`. It works on Linux and macOS; on Windows, use WSL.
+
+## Releasing (maintainers)
+
+```sh
+sh scripts/release 0.3.0
+```
+
+The script bumps the version in all three places, runs the tests, commits, tags and pushes. The tag triggers the release workflow, which checks that the versions match, runs the tests again, publishes to npm and creates the GitHub release. No machine but GitHub's talks to npm.
+
+npm authentication works one of two ways:
+- **Trusted publishing (preferred):** on npmjs.com, open the package's Settings, then Trusted Publisher, then GitHub Actions. Enter owner `msiric`, repository `agentctx`, workflow `release.yml`. No secret is needed. npm only offers this for packages that already exist.
+- **An `NPM_TOKEN` repository secret,** for the first release only: a granular token with read-and-write access to packages and a short expiry. Delete it once trusted publishing is set up.

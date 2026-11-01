@@ -624,11 +624,34 @@ test_npm_package() {
   contains "$out" "still here" "runtime survives the npm copy going away"
 }
 
+test_release() {
+  t "versions and release script"; sandbox
+  out=$(sh "$ROOT/scripts/check-version" 2>&1); status $? 0 "all version fields agree"
+  eq "$(ax --version)" "agentctx $(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$ROOT/package.json")" "cli matches package.json"
+  cp -R "$ROOT" "$SB/rel" && rm -rf "$SB/rel/.git"
+  (cd "$SB/rel" && git init -q -b main && git add -A && git commit -qm base) || { flunk "snapshot"; return; }
+  printf 'dirty\n' >> "$SB/rel/README.md"
+  out=$(cd "$SB/rel" && sh scripts/release 9.8.7 --no-push 2>&1); status $? 1 "refuses a dirty tree"
+  (cd "$SB/rel" && git checkout -q README.md)
+  out=$(cd "$SB/rel" && AGENTCTX_RELEASE_SKIP_TESTS=1 sh scripts/release 9.8.7 --no-push 2>&1); st=$?
+  status $st 0 "release"; contains "$out" "Tagged v9.8.7"
+  eq "$("$SB/rel/bin/agentctx" --version)" "agentctx 9.8.7"
+  contains "$(cat "$SB/rel/package.json")" '"version": "9.8.7"'; contains "$(cat "$SB/rel/.claude-plugin/plugin.json")" '"version": "9.8.7"'
+  eq "$(cd "$SB/rel" && git tag)" "v9.8.7"; eq "$(cd "$SB/rel" && git log -1 --format=%s)" "Release v9.8.7"
+  out=$(cd "$SB/rel" && AGENTCTX_RELEASE_SKIP_TESTS=1 sh scripts/release 9.8.7 --no-push 2>&1); status $? 1 "refuses an existing tag"
+  out=$(cd "$SB/rel" && sh scripts/release banana 2>&1); status $? 2 "rejects a bad version"
+  cur=$("$SB/rel/bin/agentctx" --version | cut -d' ' -f2); n=$(cd "$SB/rel" && git rev-list --count HEAD)
+  out=$(cd "$SB/rel" && AGENTCTX_RELEASE_SKIP_TESTS=1 sh scripts/release "$cur.0" --no-push 2>&1) # sanity: new version still works
+  (cd "$SB/rel" && git tag -d "v$cur.0" >/dev/null && git reset -q --hard HEAD~1)
+  out=$(cd "$SB/rel" && AGENTCTX_RELEASE_SKIP_TESTS=1 sh scripts/release "$cur" --no-push 2>&1); status $? 0 "release the current version"
+  eq "$(cd "$SB/rel" && git rev-list --count HEAD)" "$n" "no empty commit"; contains "$(cd "$SB/rel" && git tag)" "v$cur"
+}
+
 # --------------------------------------------------------------- run ----
 
 for fn in test_cli_basics test_repo_key test_effort_lifecycle test_context test_install_fresh \
           test_install_preserves_user_files test_adopt test_dry_run_and_skip test_uninstall \
-          test_doctor test_verify test_log test_update test_npm_package; do
+          test_doctor test_verify test_log test_update test_npm_package test_release; do
   ( $fn ) > "${TMPDIR:-/tmp}/agentctx-test.$$" 2>&1
   cat "${TMPDIR:-/tmp}/agentctx-test.$$"
   # each test runs in a subshell; count results from its output

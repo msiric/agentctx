@@ -1,0 +1,16 @@
+#!/bin/sh
+# Check that every version field agrees (and, given one, matches it).
+#   sh scripts/check-version [X.Y.Z]
+set -u
+cd "$(dirname "$0")/.." || exit 1
+cli=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' bin/agentctx)
+pkg=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' package.json)
+plg=$(sed -n 's/^  "version": "\(.*\)",$/\1/p' .claude-plugin/plugin.json)
+want=${1:-$cli}
+bad=0
+for pair in "bin/agentctx:$cli" "package.json:$pkg" ".claude-plugin/plugin.json:$plg"; do
+  f=${pair%%:*}; v=${pair#*:}
+  if [ "$v" != "$want" ]; then echo "version mismatch: $f has '$v', expected '$want'"; bad=1; fi
+done
+[ "$bad" -eq 0 ] && echo "version $want everywhere"
+exit "$bad"
