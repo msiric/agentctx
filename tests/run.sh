@@ -640,11 +640,12 @@ test_release() {
   eq "$(cd "$SB/rel" && git tag)" "v9.8.7"; eq "$(cd "$SB/rel" && git log -1 --format=%s)" "Release v9.8.7"
   out=$(cd "$SB/rel" && AGENTCTX_RELEASE_SKIP_TESTS=1 sh scripts/release 9.8.7 --no-push 2>&1); status $? 1 "refuses an existing tag"
   out=$(cd "$SB/rel" && sh scripts/release banana 2>&1); status $? 2 "rejects a bad version"
-  cur=$("$SB/rel/bin/agentctx" --version | cut -d' ' -f2); n=$(cd "$SB/rel" && git rev-list --count HEAD)
-  out=$(cd "$SB/rel" && AGENTCTX_RELEASE_SKIP_TESTS=1 sh scripts/release "$cur.0" --no-push 2>&1) # sanity: new version still works
-  (cd "$SB/rel" && git tag -d "v$cur.0" >/dev/null && git reset -q --hard HEAD~1)
-  out=$(cd "$SB/rel" && AGENTCTX_RELEASE_SKIP_TESTS=1 sh scripts/release "$cur" --no-push 2>&1); status $? 0 "release the current version"
-  eq "$(cd "$SB/rel" && git rev-list --count HEAD)" "$n" "no empty commit"; contains "$(cd "$SB/rel" && git tag)" "v$cur"
+  # releasing the version already in the files (the first release) tags without an empty commit
+  cp -R "$ROOT" "$SB/rel2" && rm -rf "$SB/rel2/.git"
+  (cd "$SB/rel2" && git init -q -b main && git add -A && git commit -qm base)
+  cur=$("$SB/rel2/bin/agentctx" --version | cut -d' ' -f2)
+  out=$(cd "$SB/rel2" && AGENTCTX_RELEASE_SKIP_TESTS=1 sh scripts/release "$cur" --no-push 2>&1); status $? 0 "release the current version"
+  eq "$(cd "$SB/rel2" && git rev-list --count HEAD)" "1" "no empty commit"; eq "$(cd "$SB/rel2" && git tag)" "v$cur"
 }
 
 # --------------------------------------------------------------- run ----
