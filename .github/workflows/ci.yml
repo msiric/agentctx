@@ -1,0 +1,51 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  schedule:
+    # Weekly run against the latest agent CLIs, to catch upstream changes
+    # (file locations, hook formats, plugin layout) before they bite.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        shell: [default, "bash --posix"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        if: matrix.os == 'ubuntu-latest' && matrix.shell == 'default'
+        run: shellcheck -s sh bin/agentctx tests/run.sh
+      - name: tests
+        env:
+          AGENTCTX_TEST_SHELL: ${{ matrix.shell != 'default' && matrix.shell || '' }}
+        run: sh tests/run.sh
+
+  real-clis:
+    # Installs the current Claude Code and Codex CLIs and checks, offline
+    # (no model calls), that they load what agentctx sets up.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: install CLIs
+        run: npm install -g @anthropic-ai/claude-code @openai/codex
+      - name: versions
+        run: |
+          claude --version
+          codex --version
+      - name: tests against real CLIs
+        env:
+          AGENTCTX_REAL: "1"
+        run: sh tests/run.sh

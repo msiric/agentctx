@@ -1,0 +1,17 @@
+{
+  "description": "agentctx: inject private repo notes and the active effort file",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}/bin/agentctx\" context --for claude",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

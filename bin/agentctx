@@ -1,0 +1,1115 @@
+#!/bin/sh
+# agentctx: two-layer context (global knowledge + per-branch task files) for
+# Claude Code, Codex CLI and GitHub Copilot CLI. POSIX sh + git, no other deps.
+# https://github.com/msiric/agentctx
+
+set -u
+
+VERSION="0.1.0"
+MARKER="managed by agentctx"
+
+# ---------------------------------------------------------------- paths ----
+
+resolve_self() {
+  # Portable "readlink -f" for this script (macOS ships no -f before 12.3).
+  p=$0
+  while [ -L "$p" ]; do
+    d=$(cd "$(dirname "$p")" && pwd -P)
+    l=$(readlink "$p")
+    case $l in /*) p=$l ;; *) p=$d/$l ;; esac
+  done
+  d=$(cd "$(dirname "$p")" && pwd -P)
+  printf '%s/%s\n' "$d" "$(basename "$p")"
+}
+
+SELF=$(resolve_self)
+ROOT=$(cd "$(dirname "$SELF")/.." && pwd -P)
+
+AGENTCTX_HOME=${AGENTCTX_HOME:-$HOME/.agents}
+PERSONAL=$AGENTCTX_HOME/AGENTS.md
+REPOS=$AGENTCTX_HOME/repos
+SKILLS_DIR=$HOME/.agents/skills          # read by Codex and Copilot
+BIN_DIR=${AGENTCTX_BIN_DIR:-$HOME/.local/bin}
+CLAUDE_DIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+CODEX_DIR=${CODEX_HOME:-$HOME/.codex}
+COPILOT_DIR=${COPILOT_HOME:-$HOME/.copilot}
+MAX_CHARS=${AGENTCTX_MAX_CHARS:-9000}    # Claude caps hook text at 10,000 chars
+case $MAX_CHARS in ''|*[!0-9]*) MAX_CHARS=9000 ;; esac
+[ "$MAX_CHARS" -gt 9500 ] && MAX_CHARS=9500
+
+# --------------------------------------------------------------- output ----
+
+if [ -t 1 ]; then
+  C_OK=$(printf '\033[32m'); C_WARN=$(printf '\033[33m'); C_FAIL=$(printf '\033[31m'); C_DIM=$(printf '\033[2m'); C_OFF=$(printf '\033[0m')
+else
+  C_OK=; C_WARN=; C_FAIL=; C_DIM=; C_OFF=
+fi
+
+say()  { printf '%s\n' "$*"; }
+ok()   { printf '%s  ok%s    %s\n' "$C_OK" "$C_OFF" "$*"; }
+warn() { printf '%s  warn%s  %s\n' "$C_WARN" "$C_OFF" "$*"; WARNS=$((WARNS + 1)); }
+fail() { printf '%s  fail%s  %s\n' "$C_FAIL" "$C_OFF" "$*"; FAILS=$((FAILS + 1)); }
+info() { printf '%s  info%s  %s\n' "$C_DIM" "$C_OFF" "$*"; }
+hint() { printf '        %s-> %s%s\n' "$C_DIM" "$*" "$C_OFF"; }
+die()  { printf 'agentctx: %s\n' "$*" >&2; exit 1; }
+WARNS=0; FAILS=0
+
+# Pretty-print a path with ~ for $HOME.
+tilde() { case $1 in "$HOME"/*) printf '~/%s\n' "${1#"$HOME"/}" ;; *) printf '%s\n' "$1" ;; esac; }
+
+has() { command -v "$1" >/dev/null 2>&1; }
+
+# --------------------------------------------------------- dry-run fs ops ----
+
+DRY=0
+act() { # describe + perform unless dry-run; failures are counted
+  printf '  %s\n' "$1"
+  [ "$DRY" -eq 1 ] && return 0
+  shift
+  if ! "$@"; then
+    printf '%s  fail%s  the step above did not complete\n' "$C_FAIL" "$C_OFF"
+    FAILS=$((FAILS + 1))
+    return 1
+  fi
+}
+
+write_file() { # write_file PATH CONTENT
+  mkdir -p "$(dirname "$1")" && printf '%s\n' "$2" > "$1"
+}
+
+make_link() { mkdir -p "$(dirname "$1")" && ln -s "$2" "$1"; }
+move_file() { mkdir -p "$(dirname "$2")" && mv "$1" "$2"; }
+quiet() { "$@" >/dev/null; }
+
+# Put the agentctx block at the top of FILE (replacing any old block).
+put_block() { # FILE BLOCK
+  mkdir -p "$(dirname "$1")" || return 1
+  tmp=$(mktemp) || return 1
+  [ -f "$1" ] && strip_block "$1" > "$tmp"
+  { printf '%s\n' "$2"; if [ -s "$tmp" ]; then printf '\n'; awk 'NF { p = 1 } p' "$tmp"; fi; } > "$1"
+  st=$?; rm -f "$tmp"; return $st
+}
+
+drop_block() { # FILE
+  tmp=$(mktemp)
+  strip_block "$1" | awk 'NF { p = 1 } p' > "$tmp"
+  cat "$tmp" > "$1"
+  rm -f "$tmp"
+}
+
+# Move the user's own lines from ~/.claude/CLAUDE.md into the personal file.
+adopt_claude_md() { # CLAUDE_MD PERSONAL
+  mkdir -p "$(dirname "$2")"
+  strip_block "$1" | awk 'NF { p = 1 } p' > "$2"
+  : > "$1"
+}
+
+backup() { # copy a file (following symlinks) into the backup dir before changing it
+  [ -f "$1" ] || return 0
+  [ "$DRY" -eq 1 ] && return 0
+  mkdir -p "$BACKUP_DIR" && cp "$1" "$BACKUP_DIR/$(printf '%s' "$1" | sed 's#/#_#g')"
+}
+BACKUP_DIR=$AGENTCTX_HOME/backups/$(date +%Y%m%d-%H%M%S)
+
+# ------------------------------------------------------------ git helpers ----
+
+in_repo() { git rev-parse --is-inside-work-tree >/dev/null 2>&1; }
+
+# The main checkout (shared by all worktrees of the repo).
+main_checkout() {
+  cd_=$(git rev-parse --git-common-dir 2>/dev/null) || return 1
+  cd_=$(cd "$cd_" && pwd -P) || return 1
+  case $cd_ in */.git) dirname "$cd_" ;; *) printf '%s\n' "$cd_" ;; esac
+}
+
+# Stable key per repository: from the origin URL when there is one, so every
+# clone and worktree of the same repo shares notes and efforts.
+repo_key() {
+  url=$(git config --get remote.origin.url 2>/dev/null || true)
+  if [ -n "$url" ]; then
+    printf '%s\n' "$url" | sed \
+      -e 's#^[A-Za-z][A-Za-z0-9+.-]*://##' \
+      -e 's#^[^@/]*@##' \
+      -e 's#:#/#' \
+      -e 's#/*$##' -e 's#\.git$##' \
+      | tr 'A-Z' 'a-z' | sed -e 's#/#__#g' -e 's#[^a-z0-9._-]#_#g'
+  else
+    mc=$(main_checkout) || return 1
+    sum=$(printf '%s' "$mc" | cksum | cut -d' ' -f1)
+    printf 'local__%s-%s\n' "$(basename "$mc" | tr 'A-Z' 'a-z' | sed 's#[^a-z0-9._-]#_#g')" "$sum"
+  fi
+}
+
+current_branch() {
+  if [ -n "${AGENTCTX_EFFORT:-}" ]; then printf '%s\n' "$AGENTCTX_EFFORT"; return 0; fi
+  git symbolic-ref --quiet --short HEAD 2>/dev/null
+}
+
+branch_file_id() { printf '%s\n' "$1" | sed 's#/#__#g'; }
+
+repo_dir()    { printf '%s/%s\n' "$REPOS" "$1"; }
+notes_path()  { printf '%s/%s/NOTES.md\n' "$REPOS" "$1"; }
+worktree_top() { git rev-parse --show-toplevel 2>/dev/null; }
+# Efforts live in the worktree (inside every agent's writable workspace) under
+# a self-ignoring .agentctx/ folder, so the repo's own files never change.
+effort_dir()  { printf '%s/.agentctx\n' "$(worktree_top)"; }
+effort_path() { printf '%s/%s.md\n' "$(effort_dir)" "$(branch_file_id "$2")"; }
+
+ensure_effort_dir() {
+  d=$(effort_dir)
+  [ -e "$d" ] && [ ! -d "$d" ] && die "$d exists and is not a directory"
+  mkdir -p "$d" || die "could not create $d"
+  [ -f "$d/.gitignore" ] || printf '# agentctx: keep this folder out of git\n*\n' > "$d/.gitignore"
+}
+
+need_repo() {
+  in_repo || die "not inside a git repository"
+  KEY=$(repo_key) || die "could not identify this repository"
+}
+
+need_branch() {
+  BRANCH=$(current_branch) || die "detached HEAD: check out a branch or set AGENTCTX_EFFORT=<name>"
+  [ -n "$BRANCH" ] || die "detached HEAD: check out a branch or set AGENTCTX_EFFORT=<name>"
+}
+
+remember_repo() { # best effort: note this worktree so `list` can find it (may be sandboxed)
+  d=$(repo_dir "$KEY"); w=$(worktree_top)
+  { mkdir -p "$d" && touch "$d/worktrees" && { grep -qxF "$w" "$d/worktrees" || printf '%s\n' "$w" >> "$d/worktrees"; }; } 2>/dev/null || true
+}
+
+# ------------------------------------------------------------------ text ----
+
+json_escape() {
+  tr -d '\000-\010\013\014\016-\037' | awk 'BEGIN { ORS = "" }
+    { gsub(/\\/, "\\\\"); gsub(/"/, "\\\""); gsub(/\t/, "\\t"); gsub(/\r/, "\\r")
+      if (NR > 1) printf "\\n"; printf "%s", $0 }'
+}
+
+# Extract a top-level string field from a small JSON object on stdin.
+json_field() {
+  sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -n 1 | sed -e 's#\\/#/#g' -e 's#\\\\#\\#g'
+}
+
+chars() { wc -c < "$1" | tr -d ' '; }
+lines() { wc -l < "$1" | tr -d ' '; }
+
+# Lines of a "## Heading" section.
+section() { # section FILE HEADING
+  awk -v h="## $2" '$0 == h { on = 1; next } /^## / { on = 0 } on' "$1"
+}
+
+today() { date +%Y-%m-%d; }
+
+# --------------------------------------------------------------- context ----
+# Called by each agent's SessionStart hook. Prints nothing when there is
+# nothing to add, so repos without notes or efforts cost zero tokens.
+
+piece() { # piece LABEL PATH BUDGET -> prints the block, or a pointer if too big
+  n=$(chars "$2")
+  if [ "$n" -le "$3" ]; then
+    printf '%s (%s):\n' "$1" "$2"
+    cat "$2"
+  else
+    printf '%s is at %s (%s chars, over the agentctx budget). Read that file before starting work.\n' "$1" "$2" "$n"
+  fi
+}
+
+build_context() {
+  in_repo || return 0
+  KEY=$(repo_key) || return 0
+  notes=$(notes_path "$KEY")
+  effort=
+  if b=$(current_branch) && [ -n "$b" ]; then effort=$(effort_path "$KEY" "$b"); fi
+
+  has_notes=0; has_effort=0
+  [ -s "$notes" ] && has_notes=1
+  [ -n "$effort" ] && [ -s "$effort" ] && has_effort=1
+  [ "$has_notes" -eq 0 ] && [ "$has_effort" -eq 0 ] && return 0
+
+  budget=$MAX_CHARS
+  if [ "$has_notes" -eq 1 ]; then
+    piece "agentctx: private notes for this repository" "$notes" "$((budget / 3))"
+    budget=$((budget - $(chars "$notes")))
+    [ "$budget" -lt $((MAX_CHARS / 2)) ] && budget=$((MAX_CHARS / 2))
+    [ "$has_effort" -eq 1 ] && printf '\n'
+  fi
+  if [ "$has_effort" -eq 1 ]; then
+    printf 'agentctx: this branch has an effort file. It is the source of truth for the current task. Keep it current as you work: tick Plan items, add one dated line under Progress before you stop, and record decisions and dead ends.\n'
+    piece "agentctx: effort file for branch $b" "$effort" "$budget"
+  fi
+}
+
+cmd_context() {
+  target=text
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --for) target=${2:-}; shift 2 ;;
+      --for=*) target=${1#--for=}; shift ;;
+      *) die "context: unknown option $1" ;;
+    esac
+  done
+  case $target in claude|codex|copilot|text) ;; *) die "context: --for must be claude, codex, copilot or text" ;; esac
+
+  input=
+  if [ "$target" != text ] && [ ! -t 0 ]; then input=$(cat); fi
+  if [ -n "$input" ]; then
+    src=$(printf '%s' "$input" | json_field source)
+    # Resumed sessions already contain the earlier injection.
+    [ "$src" = resume ] && exit 0
+    cwd=$(printf '%s' "$input" | json_field cwd)
+    if [ -n "$cwd" ] && [ -d "$cwd" ]; then cd "$cwd" || exit 0; fi
+  fi
+
+  out=$(build_context 2>/dev/null) || out=
+  [ -n "$out" ] || exit 0
+  if [ "$target" = copilot ]; then
+    # Copilot only reads {"additionalContext": "..."} from sessionStart hooks.
+    printf '{"additionalContext":"%s"}\n' "$(printf '%s\n' "$out" | json_escape)"
+  else
+    printf '%s\n' "$out"
+  fi
+  exit 0
+}
+
+# ----------------------------------------------------------- effort cmds ----
+
+effort_template() { # NAME KEY KIND
+  cat <<EOF
+# $1
+
+Branch: $1 · Repo: $2 · Kind: $3 · Created: $(today)
+
+## Goal
+
+
+## Done when
+
+
+## Plan
+
+- [ ] 
+
+## Progress
+
+
+## Decisions and dead ends
+
+
+## Open questions
+
+EOF
+}
+
+cmd_new() {
+  need_repo; need_branch
+  f=$(effort_path "$KEY" "$BRANCH")
+  if [ -e "$f" ]; then
+    say "Effort already exists: $f"
+    return 0
+  fi
+  kind=branch; [ -n "${AGENTCTX_EFFORT:-}" ] && kind=named
+  ensure_effort_dir
+  effort_template "$BRANCH" "$KEY" "$kind" > "$f" || die "could not write $f"
+  remember_repo
+  say "Created $f"
+  say "Fill in Goal, Done when and Plan (or ask your agent to, with the effort skill)."
+}
+
+cmd_path() {
+  need_repo
+  case ${1:-} in
+    --notes) notes_path "$KEY" ;;
+    --repo) repo_dir "$KEY" ;;
+    --dir) effort_dir ;;
+    "") need_branch; effort_path "$KEY" "$BRANCH" ;;
+    *) die "path: unknown option $1" ;;
+  esac
+}
+
+cmd_show() {
+  need_repo
+  out=$(build_context)
+  if [ -n "$out" ]; then printf '%s\n' "$out"; else say "Nothing to inject for this repo/branch (no notes, no effort)."; fi
+}
+
+open_editor() {
+  ed=${VISUAL:-${EDITOR:-vi}}
+  # shellcheck disable=SC2086
+  $ed "$1"
+}
+
+cmd_edit() {
+  need_repo; need_branch
+  f=$(effort_path "$KEY" "$BRANCH")
+  [ -e "$f" ] || die "no effort for branch $BRANCH (run: agentctx new)"
+  open_editor "$f"
+}
+
+cmd_notes() {
+  need_repo
+  f=$(notes_path "$KEY")
+  if [ "${1:-}" = --path ]; then printf '%s\n' "$f"; return 0; fi
+  if [ ! -e "$f" ]; then
+    mkdir -p "$(dirname "$f")"
+    printf '# Private notes: %s\n\n' "$KEY" > "$f"
+    remember_repo
+  fi
+  if [ -t 0 ] && [ -t 1 ]; then open_editor "$f"; else printf '%s\n' "$f"; fi
+}
+
+last_progress() {
+  section "$1" Progress | awk 'NF { l = $0 } END { print l }'
+}
+
+list_dir() { # print efforts in one .agentctx dir
+  for f in "$1"/*.md; do
+    [ -e "$f" ] || continue
+    br=$(effort_branch "$f"); [ -n "$br" ] || br=$(basename "$f" .md)
+    lp=$(last_progress "$f")
+    printf '%s  %s  %s\n' "$2" "$br" "$(tilde "$(dirname "$1")")"
+    printf '    %s\n' "${lp:-(no progress yet)}"
+    LISTED=1
+  done
+}
+
+cmd_list() {
+  LISTED=0; seen=
+  for reg in "$REPOS"/*/worktrees; do
+    [ -f "$reg" ] || continue
+    key=$(basename "$(dirname "$reg")")
+    while IFS= read -r w; do
+      [ -d "$w/.agentctx" ] || continue
+      case "
+$seen
+" in *"
+$w
+"*) continue ;; esac
+      seen="$seen
+$w"
+      list_dir "$w/.agentctx" "$key"
+    done < "$reg"
+  done
+  if in_repo && KEY=$(repo_key); then
+    w=$(worktree_top)
+    case "
+$seen
+" in *"
+$w
+"*) ;; *) [ -d "$w/.agentctx" ] && list_dir "$w/.agentctx" "$KEY" ;; esac
+  fi
+  [ "$LISTED" -eq 1 ] || say "No active efforts."
+}
+
+archive_effort() { # FILE KEY -> prints destination; archive lives in ~/.agents, kept after the worktree is gone
+  a=$(repo_dir "$2")/archive
+  mkdir -p "$a" 2>/dev/null || return 1
+  dest=$a/$(today)-$(basename "$1")
+  n=1
+  while [ -e "$dest" ]; do dest=$a/$(today)-$n-$(basename "$1"); n=$((n + 1)); done
+  cp "$1" "$dest" 2>/dev/null || return 1
+  rm -f "$1"
+  printf '%s\n' "$dest"
+}
+
+cmd_close() {
+  need_repo; need_branch
+  f=$(effort_path "$KEY" "$BRANCH")
+  [ -e "$f" ] || die "no effort for branch $BRANCH"
+  dec=$(section "$f" "Decisions and dead ends" | awk 'NF')
+  dest=$(archive_effort "$f" "$KEY") || die "could not write to $(tilde "$(repo_dir "$KEY")") (sandboxed agent?). Run 'agentctx close' yourself in a terminal."
+  say "Archived to $dest"
+  if [ -n "$dec" ]; then
+    say ""
+    say "Decisions recorded for this effort. Promote any that every future task needs:"
+    printf '%s\n' "$dec"
+    say ""
+    say "  team-wide, not derivable from code -> repo AGENTS.md"
+    say "  private to you, this repo          -> agentctx notes"
+    say "  you, every repo                    -> $(tilde "$PERSONAL")"
+  fi
+}
+
+effort_branch() { # original branch/effort name from the header line
+  sed -n 's/^Branch: \([^·]*\) ·.*/\1/p' "$1" | head -n 1 | sed 's/ *$//'
+}
+
+effort_kind() { if grep -q '^Branch: .* · Kind: named ·' "$1"; then echo named; else echo branch; fi; }
+
+# Efforts in this worktree whose branch no longer exists (named efforts never count).
+gone_efforts() {
+  for f in "$(effort_dir)"/*.md; do
+    [ -e "$f" ] || continue
+    [ "$(effort_kind "$f")" = named ] && continue
+    br=$(effort_branch "$f")
+    [ -n "$br" ] || continue
+    git show-ref --verify --quiet "refs/heads/$br" || printf '%s\t%s\n' "$br" "$f"
+  done
+}
+
+cmd_prune() {
+  need_repo
+  apply=0; [ "${1:-}" = --apply ] && apply=1
+  list=$(gone_efforts)
+  if [ -z "$list" ]; then say "No efforts for deleted branches."; return 0; fi
+  printf '%s\n' "$list" | while IFS="$(printf '\t')" read -r br f; do
+    if [ "$apply" -eq 1 ]; then
+      d=$(archive_effort "$f" "$KEY") || die "could not write to $(tilde "$(repo_dir "$KEY")")"
+      say "archived $d  (branch $br is gone)"
+    else
+      say "$br  (branch gone)  $f"
+    fi
+  done
+  [ "$apply" -eq 1 ] || say "Run 'agentctx prune --apply' to archive them."
+}
+
+# --------------------------------------------------------------- install ----
+
+claude_import_line() {
+  case $PERSONAL in
+    "$HOME"/*) printf '@~/%s\n' "${PERSONAL#"$HOME"/}" ;;
+    *) printf '@%s\n' "$PERSONAL" ;;
+  esac
+}
+
+claude_block() {
+  printf '<!-- agentctx:begin (%s; edit %s instead) -->\n%s\n<!-- agentctx:end -->\n' "$MARKER" "$(tilde "$PERSONAL")" "$(claude_import_line)"
+}
+
+strip_block() { # print FILE without the agentctx block
+  awk '/^<!-- agentctx:begin/ { skip = 1; next } skip && /^<!-- agentctx:end -->[[:space:]]*$/ { skip = 0; next } !skip' "$1"
+}
+
+block_ok() { # FILE has no block, or exactly one well-formed block
+  b=$(grep -c '^<!-- agentctx:begin' "$1" 2>/dev/null); e=$(grep -c '^<!-- agentctx:end -->[[:space:]]*$' "$1" 2>/dev/null)
+  [ "${b:-0}" -eq "${e:-0}" ] && [ "${b:-0}" -le 1 ]
+}
+
+block_body() { awk '/^<!-- agentctx:begin/ { s = 1; next } /^<!-- agentctx:end -->[[:space:]]*$/ { s = 0; next } s' "$1"; }
+
+has_content() { # non-blank, non-comment content
+  [ -f "$1" ] && grep -v '^[[:space:]]*$' "$1" | grep -qv '^[[:space:]]*<!--.*-->[[:space:]]*$'
+}
+
+is_link_to() { [ -L "$1" ] && [ "$(readlink "$1")" = "$2" ]; }
+
+codex_hook_group() {
+  cat <<EOF
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "'$SELF' context --for codex", "timeout": 10 }
+        ]
+      }
+EOF
+}
+
+codex_hooks_json() {
+  printf '{\n  "description": "%s: injects private repo notes and the active effort file",\n  "hooks": {\n    "SessionStart": [\n%s\n    ]\n  }\n}\n' "$MARKER" "$(codex_hook_group)"
+}
+
+copilot_hook_entry() {
+  printf '      { "type": "command", "bash": "%s context --for copilot", "timeoutSec": 10 }\n' "'$SELF'"
+}
+
+copilot_hooks_json() {
+  printf '{\n  "version": 1,\n  "description": "%s",\n  "hooks": {\n    "sessionStart": [\n%s\n    ]\n  }\n}\n' "$MARKER" "$(copilot_hook_entry)"
+}
+
+# We own a hook file only if its description carries our marker.
+owned() { [ -f "$1" ] && grep -q "\"description\": \"$MARKER" "$1"; }
+
+personal_template() {
+  cat <<'EOF'
+# Personal instructions
+EOF
+}
+
+# Link a tool's global instruction file to the personal file.
+link_global() { # TOOL PATH
+  t=$2
+  if is_link_to "$t" "$PERSONAL"; then
+    ok "$1 global instructions -> $(tilde "$PERSONAL")"
+    return 0
+  fi
+  if [ -L "$t" ]; then
+    warn "$1: $(tilde "$t") is a link to $(readlink "$t"), left untouched"
+    hint "point it at $(tilde "$PERSONAL") yourself if you want agentctx to manage it"
+    return 0
+  fi
+  if [ -e "$t" ]; then
+    if has_content "$t"; then
+      warn "$1: $(tilde "$t") has its own content, left untouched"
+      hint "merge it into $(tilde "$PERSONAL"), then run: agentctx install  (or use --adopt)"
+      return 0
+    fi
+    backup "$t"
+    act "replace $(tilde "$t") with a link to $(tilde "$PERSONAL")" rm -f "$t"
+  fi
+  act "link $(tilde "$t") -> $(tilde "$PERSONAL")" make_link "$t" "$PERSONAL"
+}
+
+# Write a hook file we own; never overwrite one we don't.
+own_file() { # LABEL PATH CONTENT SNIPPET
+  if [ -e "$2" ] && ! owned "$2"; then
+    warn "$1: $(tilde "$2") exists and is not managed by agentctx, left untouched"
+    hint "add this entry to its SessionStart list by hand:"
+    printf '%s\n' "$4" | sed 's/^/    /'
+    return 0
+  fi
+  if [ -e "$2" ] && [ "$(cat "$2")" = "$3" ]; then ok "$1: $(tilde "$2")"; return 0; fi
+  act "write $(tilde "$2")" write_file "$2" "$3"
+}
+
+adopt_sources() { # list global files that hold instructions we could adopt
+  if [ -f "$CLAUDE_DIR/CLAUDE.md" ]; then
+    tmp=$(mktemp); strip_block "$CLAUDE_DIR/CLAUDE.md" > "$tmp"
+    has_content "$tmp" && printf '%s\n' "$CLAUDE_DIR/CLAUDE.md"
+    rm -f "$tmp"
+  fi
+  for f in "$CODEX_DIR/AGENTS.md" "$COPILOT_DIR/copilot-instructions.md"; do
+    [ -L "$f" ] && continue
+    has_content "$f" && printf '%s\n' "$f"
+  done
+}
+
+ensure_personal() {
+  if [ -e "$PERSONAL" ]; then ok "personal instructions: $(tilde "$PERSONAL")"; return 0; fi
+  srcs=$(adopt_sources)
+  count=$(printf '%s' "$srcs" | awk 'NF' | wc -l | tr -d ' ')
+  if [ "$ADOPT" -eq 1 ]; then
+    if [ "$count" -eq 1 ]; then
+      backup "$srcs"
+      if [ "$srcs" = "$CLAUDE_DIR/CLAUDE.md" ]; then
+        act "move your instructions from $(tilde "$srcs") into $(tilde "$PERSONAL")" adopt_claude_md "$srcs" "$PERSONAL"
+        if [ -f "$PERSONAL" ] && prose_only "$PERSONAL" | grep -qE '(^|[[:space:]])@[^[:space:]]'; then
+          warn "the adopted text has @imports: they now resolve from $(tilde "$AGENTCTX_HOME"), and Codex/Copilot don't expand them"
+          hint "inline what they point to, or make the paths absolute for Claude"
+        fi
+      else
+        act "move $(tilde "$srcs") to $(tilde "$PERSONAL")" move_file "$srcs" "$PERSONAL"
+      fi
+      return 0
+    elif [ "$count" -gt 1 ]; then
+      fail "--adopt: more than one global file has content; merge them by hand into $(tilde "$PERSONAL"):"
+      printf '%s\n' "$srcs" | sed 's/^/          /'
+      return 1
+    fi
+  elif [ "$count" -gt 0 ]; then
+    info "existing global instructions found (Codex/Copilot/Claude don't share them yet):"
+    printf '%s\n' "$srcs" | sed 's/^/          /'
+    hint "rerun with --adopt to move a single one into $(tilde "$PERSONAL")"
+  fi
+  act "create $(tilde "$PERSONAL")" write_file "$PERSONAL" "$(personal_template)"
+}
+
+install_claude() {
+  say ""; say "Claude Code"
+  f=$CLAUDE_DIR/CLAUDE.md
+  if [ -f "$f" ] && ! block_ok "$f"; then
+    fail "$(tilde "$f") has a broken or duplicated agentctx block; fix it by hand (keep one begin/end pair)"
+  elif [ -f "$f" ] && grep -q '^<!-- agentctx:begin' "$f"; then
+    if [ "$(block_body "$f")" = "$(claude_import_line)" ]; then
+      ok "$(tilde "$f") imports $(tilde "$PERSONAL")"
+    else
+      backup "$f"
+      act "refresh the agentctx block in $(tilde "$f")" put_block "$f" "$(claude_block)"
+    fi
+  else
+    backup "$f"
+    act "add an import of $(tilde "$PERSONAL") to $(tilde "$f")" put_block "$f" "$(claude_block)"
+  fi
+
+  if ! has claude; then
+    warn "claude not on PATH: the hook plugin was not installed"
+    hint "install Claude Code, then rerun: agentctx install"
+    return 0
+  fi
+  if claude plugin marketplace list 2>/dev/null | grep -q 'agentctx'; then
+    act "refresh the agentctx plugin marketplace" quiet claude plugin marketplace update agentctx
+  else
+    act "add the agentctx plugin marketplace ($(tilde "$ROOT"))" quiet claude plugin marketplace add "$ROOT" --scope user
+  fi
+  if claude plugin list 2>/dev/null | grep -q 'agentctx@agentctx'; then
+    act "update the agentctx plugin (SessionStart hook + effort skill)" quiet claude plugin update agentctx@agentctx --scope user
+  else
+    act "install the agentctx plugin (SessionStart hook + effort skill)" quiet claude plugin install agentctx@agentctx --scope user
+  fi
+}
+
+install_codex() {
+  say ""; say "Codex CLI"
+  link_global "Codex" "$CODEX_DIR/AGENTS.md"
+  if has_content "$CODEX_DIR/AGENTS.override.md"; then
+    warn "Codex: $(tilde "$CODEX_DIR/AGENTS.override.md") exists and wins over AGENTS.md"
+    hint "move its content into $(tilde "$PERSONAL") and delete it"
+  fi
+  own_file "Codex hook" "$CODEX_DIR/hooks.json" "$(codex_hooks_json)" "$(codex_hook_group)"
+  info "Codex runs new hooks only after you trust them: open codex, run /hooks, trust the agentctx SessionStart hook"
+}
+
+install_copilot() {
+  say ""; say "Copilot CLI"
+  link_global "Copilot" "$COPILOT_DIR/copilot-instructions.md"
+  own_file "Copilot hook" "$COPILOT_DIR/hooks/agentctx.json" "$(copilot_hooks_json)" "$(copilot_hook_entry)"
+}
+
+install_skill() {
+  say ""; say "Effort skill"
+  link_skill "$SKILLS_DIR/effort" "Codex and Copilot"
+  # Copilot stops reading ~/.agents/skills when COPILOT_HOME is set.
+  [ -n "${COPILOT_HOME:-}" ] && link_skill "$COPILOT_DIR/skills/effort" "Copilot (COPILOT_HOME)"
+  ok "Claude Code gets the skill from the plugin (as agentctx:effort)"
+}
+
+link_skill() { # PATH LABEL
+  if is_link_to "$1" "$ROOT/skills/effort"; then ok "$2: $(tilde "$1")"; return 0; fi
+  if [ -e "$1" ] || [ -L "$1" ]; then
+    warn "$(tilde "$1") already exists, left untouched"
+    return 0
+  fi
+  act "link $(tilde "$1") -> $(tilde "$ROOT/skills/effort")" make_link "$1" "$ROOT/skills/effort"
+}
+
+install_bin() {
+  t=$BIN_DIR/agentctx
+  if is_link_to "$t" "$SELF"; then ok "command: $(tilde "$t")"; else
+    if [ -e "$t" ] && ! [ -L "$t" ]; then warn "$(tilde "$t") exists and is not a link, left untouched"; else
+      [ -L "$t" ] && act "remove old link $(tilde "$t")" rm -f "$t"
+      act "link $(tilde "$t") -> $(tilde "$SELF")" make_link "$t" "$SELF"
+    fi
+  fi
+  case ":$PATH:" in *":$BIN_DIR:"*) ;; *) warn "$(tilde "$BIN_DIR") is not on your PATH"; hint "add it in your shell rc so agents can run agentctx" ;; esac
+}
+
+want() { # TOOL DIR -> should we configure this tool?
+  case " $SKIP " in *" $1 "*) return 1 ;; esac
+  has "$1" || [ -d "$2" ]
+}
+
+cmd_install() {
+  SKIP=; ADOPT=0; NO_SKILL=0
+  while [ $# -gt 0 ]; do
+    case $1 in
+      --dry-run) DRY=1 ;;
+      --adopt) ADOPT=1 ;;
+      --no-claude) SKIP="$SKIP claude" ;;
+      --no-codex) SKIP="$SKIP codex" ;;
+      --no-copilot) SKIP="$SKIP copilot" ;;
+      --no-skill) NO_SKILL=1 ;;
+      *) die "install: unknown option $1" ;;
+    esac
+    shift
+  done
+  [ "$DRY" -eq 1 ] && say "Dry run: nothing will change."
+  say "agentctx $VERSION install"
+  say ""; say "Shared"
+  ensure_personal || exit 1
+  [ "$DRY" -eq 1 ] || mkdir -p "$REPOS"
+  install_bin
+  any=0
+  if want claude "$CLAUDE_DIR"; then install_claude; any=1; fi
+  if want codex "$CODEX_DIR"; then install_codex; any=1; fi
+  if want copilot "$COPILOT_DIR"; then install_copilot; any=1; fi
+  [ "$any" -eq 1 ] || warn "no supported agent found (claude, codex, copilot)"
+  [ "$NO_SKILL" -eq 1 ] || install_skill
+  [ -d "$BACKUP_DIR" ] && { say ""; say "Backups of changed files: $(tilde "$BACKUP_DIR")"; }
+  say ""
+  if [ "$FAILS" -gt 0 ]; then say "$FAILS step(s) failed; see above."; exit 1; fi
+  say "Next: agentctx doctor   (checks the setup)   then   agentctx verify   (live test with each agent)"
+}
+
+# Replace the CLAUDE.md block with a plain copy of the personal file.
+inline_block() { # FILE
+  tmp=$(mktemp) || return 1
+  strip_block "$1" | awk 'NF { p = 1 } p' > "$tmp"
+  { cat "$PERSONAL"; if [ -s "$tmp" ]; then printf '\n'; cat "$tmp"; fi; } > "$1"
+  st=$?; rm -f "$tmp"; return $st
+}
+
+copy_over_link() { rm -f "$1" && cp "$PERSONAL" "$1"; }
+
+cmd_uninstall() {
+  say "agentctx uninstall"
+  [ "${1:-}" = --dry-run ] && { DRY=1; say "Dry run: nothing will change."; }
+  f=$CLAUDE_DIR/CLAUDE.md
+  if [ -f "$f" ] && grep -q '^<!-- agentctx:begin' "$f"; then
+    if block_ok "$f"; then
+      backup "$f"
+      act "replace the import in $(tilde "$f") with a copy of your personal instructions" inline_block "$f"
+    else
+      fail "$(tilde "$f") has a broken agentctx block; remove it by hand"
+    fi
+  fi
+  if has claude; then
+    if claude plugin list 2>/dev/null | grep -q 'agentctx@agentctx'; then act "uninstall the Claude Code plugin" quiet claude plugin uninstall agentctx@agentctx --scope user; fi
+    if claude plugin marketplace list 2>/dev/null | grep -q 'agentctx'; then act "remove the plugin marketplace" quiet claude plugin marketplace remove agentctx; fi
+  fi
+  for l in "$CODEX_DIR/AGENTS.md" "$COPILOT_DIR/copilot-instructions.md"; do
+    if is_link_to "$l" "$PERSONAL"; then act "replace link $(tilde "$l") with a copy of your personal instructions" copy_over_link "$l"; fi
+  done
+  for h in "$CODEX_DIR/hooks.json" "$COPILOT_DIR/hooks/agentctx.json"; do
+    if owned "$h"; then act "remove $(tilde "$h")" rm -f "$h"; fi
+  done
+  for sk in "$SKILLS_DIR/effort" "$COPILOT_DIR/skills/effort"; do
+    if is_link_to "$sk" "$ROOT/skills/effort"; then act "remove link $(tilde "$sk")" rm -f "$sk"; fi
+  done
+  if is_link_to "$BIN_DIR/agentctx" "$SELF"; then act "remove $(tilde "$BIN_DIR/agentctx")" rm -f "$BIN_DIR/agentctx"; fi
+  say ""
+  say "Each agent keeps a plain copy of your personal instructions."
+  say "Kept: $(tilde "$AGENTCTX_HOME") (personal file, notes, archive) and any .agentctx/ folders in your worktrees."
+  [ "$FAILS" -eq 0 ] || exit 1
+}
+
+# ---------------------------------------------------------------- doctor ----
+
+# Strip fenced code blocks and inline code spans (Claude ignores imports there).
+prose_only() {
+  awk '/^[[:space:]]*(```|~~~)/ { f = !f; next } !f' "$1" | sed 's/`[^`]*`//g'
+}
+
+check_imports() { # FILE
+  dir=$(dirname "$1")
+  prose_only "$1" | grep -oE '(^|[[:space:]])@[^[:space:]]+' | sed 's/^[[:space:]]*@//' | while IFS= read -r p; do
+    case $p in */*|*.*) ;; *) continue ;; esac   # @mentions are not imports
+    p=${p%[),.;:]}
+    case $p in
+      "~/"*) full=$HOME/${p#"~/"} ;;
+      /*) full=$p ;;
+      *) full=$dir/$p ;;
+    esac
+    if [ -e "$full" ]; then :; else
+      printf '%s\n' "$p"
+    fi
+  done
+}
+
+check_size() { # LABEL FILE
+  n=$(lines "$2")
+  if [ "$n" -gt 200 ]; then
+    warn "$1 is $n lines; Anthropic's guidance is under 200 (longer files reduce adherence)"
+    hint "move area-specific parts to path-scoped rules / nested AGENTS.md, procedures to skills"
+  else
+    ok "$1: $n lines"
+  fi
+}
+
+doctor_personal() {
+  say "Personal layer"
+  if [ -f "$PERSONAL" ]; then
+    check_size "$(tilde "$PERSONAL")" "$PERSONAL"
+    check_imports "$PERSONAL" | while IFS= read -r p; do warn "$(tilde "$PERSONAL"): '@$p' looks like an import but the file doesn't exist"; done
+    if prose_only "$PERSONAL" | grep -qE '(^|[[:space:]])@[^[:space:]]*[/.]'; then
+      info "imports in $(tilde "$PERSONAL") work in Claude Code only; Codex and Copilot see them as plain text"
+    fi
+  else fail "missing $(tilde "$PERSONAL")"; hint "run: agentctx install"; fi
+
+  f=$CLAUDE_DIR/CLAUDE.md
+  if [ -f "$f" ] && grep -qF "$(claude_import_line)" "$f"; then
+    ok "Claude Code imports it ($(tilde "$f"))"
+    rest=$(mktemp); strip_block "$f" > "$rest"
+    has_content "$rest" && info "$(tilde "$f") also has its own lines; Codex and Copilot don't see those"
+    rm -f "$rest"
+  elif has claude || [ -d "$CLAUDE_DIR" ]; then fail "Claude Code does not import it"; hint "run: agentctx install"; fi
+
+  for pair in "Codex:$CODEX_DIR/AGENTS.md:codex:$CODEX_DIR" "Copilot:$COPILOT_DIR/copilot-instructions.md:copilot:$COPILOT_DIR"; do
+    label=${pair%%:*}; rest=${pair#*:}; path=${rest%%:*}; rest=${rest#*:}; bin=${rest%%:*}; dir=${rest#*:}
+    has "$bin" || [ -d "$dir" ] || continue
+    if is_link_to "$path" "$PERSONAL"; then ok "$label reads it ($(tilde "$path"))"
+    else fail "$label does not read it ($(tilde "$path") is not a link to it)"; hint "run: agentctx install"; fi
+  done
+  has_content "$CODEX_DIR/AGENTS.override.md" && warn "$(tilde "$CODEX_DIR/AGENTS.override.md") overrides your personal file in Codex"
+  say ""
+}
+
+# The hook files call this script by absolute path; catch a moved clone.
+hook_target_ok() { # LABEL FILE
+  p=$(sed -n "s/.*\"'\([^']*\)' context --for.*/\1/p" "$2" | head -n 1)
+  if [ -n "$p" ] && [ ! -x "$p" ]; then
+    fail "$1 hook points at $p, which no longer exists"
+    hint "run agentctx install from the clone's current location"
+  fi
+}
+
+doctor_hooks() {
+  say "Session hooks"
+  if has claude; then
+    if claude plugin list 2>/dev/null | grep -q 'agentctx@agentctx'; then ok "Claude Code plugin installed"
+    else fail "Claude Code plugin not installed"; hint "run: agentctx install"; fi
+  fi
+  if has codex || [ -d "$CODEX_DIR" ]; then
+    if [ -f "$CODEX_DIR/hooks.json" ] && grep -q "agentctx' context --for codex" "$CODEX_DIR/hooks.json"; then
+      ok "Codex hook configured"
+      hook_target_ok "Codex" "$CODEX_DIR/hooks.json"
+      # Trust is stored in config.toml under a key like "file:<dir>/hooks.json:session_start:0:0".
+      if [ -f "$CODEX_DIR/config.toml" ] && grep -qF 'hooks.json:session_start' "$CODEX_DIR/config.toml"; then
+        ok "Codex hook has a trust entry in config.toml"
+        hint "Codex re-checks trust against the hook's exact definition; after reinstalling from a new path, trust it again in /hooks"
+      else
+        warn "Codex hook not trusted yet, so it will not run"
+        hint "open codex, run /hooks, and trust the agentctx SessionStart hook"
+      fi
+    else fail "Codex hook missing"; hint "run: agentctx install"; fi
+  fi
+  if has copilot || [ -d "$COPILOT_DIR" ]; then
+    if [ -f "$COPILOT_DIR/hooks/agentctx.json" ]; then ok "Copilot hook configured"; hook_target_ok "Copilot" "$COPILOT_DIR/hooks/agentctx.json"
+    else fail "Copilot hook missing"; hint "run: agentctx install"; fi
+  fi
+  if has agentctx; then ok "agentctx on PATH"; else warn "agentctx is not on PATH (agents can't run it)"; fi
+  say ""
+}
+
+# Codex: global file + one file per directory from git root to cwd, combined
+# limit project_doc_max_bytes (default 32 KiB).
+# Codex: one file per directory from the git root down to cwd. The combined
+# project files share project_doc_max_bytes (32 KiB); the global file doesn't count.
+codex_chain() { # ROOT CWD -> prints project files in load order
+  d=$1
+  rel=${2#"$1"}
+  printf '%s\n' "$d"
+  printf '%s\n' "$rel" | tr '/' '\n' | while IFS= read -r part; do
+    [ -n "$part" ] || continue
+    d=$d/$part
+    printf '%s\n' "$d"
+  done
+}
+
+doctor_repo() {
+  in_repo || { info "not in a git repository: skipped repo checks"; say ""; return 0; }
+  top=$(cd "$(git rev-parse --show-toplevel)" && pwd -P)
+  here=$(pwd -P)
+  say "Repository layer ($(tilde "$top"))"
+
+  # Files Claude Code loads from cwd up to / (the user-level ~/.claude/CLAUDE.md
+  # doesn't count: it never blocks AGENTS.md). Newline-separated: paths may contain spaces.
+  claude_files=; agents_files=
+  d=$here
+  while :; do
+    for n in CLAUDE.md .claude/CLAUDE.md CLAUDE.local.md; do
+      f=$d/$n
+      [ -f "$f" ] || continue
+      [ "$f" = "$CLAUDE_DIR/CLAUDE.md" ] && continue
+      claude_files="$claude_files$f
+"
+    done
+    for n in AGENTS.md .claude/AGENTS.md; do [ -f "$d/$n" ] && agents_files="$agents_files$d/$n
+"; done
+    [ "$d" = / ] && break
+    d=$(dirname "$d")
+  done
+
+  if [ -z "$claude_files$agents_files" ]; then
+    info "no AGENTS.md or CLAUDE.md here; fine for small repos"
+    hint "if you add one, write only what an agent can't learn from the code: exact commands, gotchas, decisions"
+  fi
+
+  printf '%s' "$claude_files$agents_files" | while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    case $f in "$top"/*) rel=${f#"$top"/} ;; *) rel=$(tilde "$f") ;; esac
+    check_size "$rel" "$f"
+    check_imports "$f" | while IFS= read -r p; do warn "$rel: '@$p' looks like an import but the file doesn't exist"; done
+    if prose_only "$f" | grep -qE '(^|[[:space:]])@(~/|/)'; then
+      info "$rel imports a ~/ or absolute path; Copilot CLI ignores those"
+    fi
+  done
+
+  # Claude Code reads AGENTS.md only when no CLAUDE.md exists (v2.1.277+).
+  if [ -n "$claude_files" ] && [ -n "$agents_files" ]; then
+    imported=$(printf '%s' "$claude_files" | while IFS= read -r c; do
+      [ -n "$c" ] && prose_only "$c" | grep -qE '(^|[[:space:]])@(\./)?AGENTS\.md' && echo yes
+    done)
+    if [ -z "$imported" ]; then
+      first=$(printf '%s' "$claude_files" | head -n 1)
+      warn "$(tilde "$first") exists, so Claude Code ignores AGENTS.md here"
+      hint "add '@AGENTS.md' to it, or delete it if it holds nothing Claude-specific"
+    fi
+  fi
+  printf '%s' "$claude_files" | while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    if [ "$(prose_only "$c" | awk 'NF' | grep -v '^[[:space:]]*<!--.*-->[[:space:]]*$')" = "@AGENTS.md" ]; then
+      info "$(tilde "$c") only imports AGENTS.md; Claude Code 2.1.277+ reads AGENTS.md itself, so it can go"
+    fi
+  done
+
+  total=0
+  chain=$(codex_chain "$top" "$here")
+  # (a subshell-free loop so $total survives)
+  oldifs=$IFS; IFS='
+'
+  for dir in $chain; do
+    for n in AGENTS.override.md AGENTS.md; do
+      if [ -s "$dir/$n" ]; then total=$((total + $(chars "$dir/$n"))); break; fi
+    done
+  done
+  IFS=$oldifs
+  if [ "$total" -gt 32768 ]; then
+    fail "Codex project instructions are $total bytes; Codex stops at 32768 (project_doc_max_bytes), the rest is dropped"
+  elif [ "$total" -gt 24576 ]; then
+    warn "Codex project instructions are $total bytes, close to the 32768 limit"
+  elif [ "$total" -gt 0 ]; then
+    ok "Codex project instructions: $total of 32768 bytes"
+  fi
+  say ""
+}
+
+doctor_task() {
+  in_repo || return 0
+  KEY=$(repo_key) || return 0
+  say "Task layer (key: $KEY)"
+  n=$(notes_path "$KEY")
+  if [ -s "$n" ]; then ok "private notes: $(chars "$n") chars"; else info "no private notes (agentctx notes)"; fi
+  d=$(effort_dir)
+  if [ -d "$d" ] && [ -n "$(git -C "$(worktree_top)" status --porcelain --ignored=no -- .agentctx 2>/dev/null)" ]; then
+    fail ".agentctx/ is not ignored by git, so efforts could get committed"
+    hint "restore $(tilde "$d/.gitignore") with a single line: *"
+  fi
+  if b=$(current_branch) && [ -n "$b" ]; then
+    e=$(effort_path "$KEY" "$b")
+    if [ -s "$e" ]; then ok "effort for $b: $(lines "$e") lines, $(chars "$e") chars"
+    else info "no effort for branch $b (agentctx new)"; fi
+  else info "detached HEAD: no effort lookup"; fi
+  out=$(build_context 2>/dev/null)
+  case $out in *"over the agentctx budget"*)
+    warn "notes or effort are too big to inject, so agents only get a pointer to them"
+    hint "fold old Progress lines into a summary; notes get up to $((MAX_CHARS / 3)) chars, the effort the rest of $MAX_CHARS" ;;
+  esac
+  gone=$(gone_efforts | awk 'NF' | wc -l | tr -d ' ')
+  if [ "$gone" -gt 0 ]; then warn "$gone effort(s) belong to deleted branches"; hint "agentctx prune --apply"; fi
+  say ""
+}
+
+cmd_doctor() {
+  say "agentctx $VERSION doctor"
+  say ""
+  doctor_personal
+  doctor_hooks
+  doctor_repo
+  doctor_task
+  if [ "$FAILS" -gt 0 ]; then say "$FAILS problem(s), $WARNS warning(s)."; exit 1; fi
+  say "No problems. $WARNS warning(s)."
+}
+
+# ---------------------------------------------------------------- verify ----
+# Live end-to-end test: plants a random marker in each layer, asks each agent
+# which markers it can see without using tools, then restores everything.
+
+rand() { od -An -N4 -tu4 /dev/urandom | tr -d ' \n'; }
+
+cmd_verify() {
+  agents="claude codex copilot"
+  [ "${1:-}" = --agents ] && { agents=$(printf '%s' "${2:-}" | tr ',' ' '); }
+  [ -f "$PERSONAL" ] || die "no personal file yet: run agentctx install"
+
+  id=$(rand)
+  P=ACX-P$id; R=ACX-R$id; N=ACX-N$id; E=ACX-E$id
+  work=$(mktemp -d) || die "mktemp failed"
+  repo=$work/agentctx-verify-$id
+  personal_backup=$work/personal.bak
+  cp "$PERSONAL" "$personal_backup" || die "could not back up $PERSONAL"
+  vkey=
+
+  cleanup() {
+    trap - EXIT INT TERM HUP
+    # Restore only from a complete backup; never truncate the real file.
+    if [ -f "$personal_backup" ]; then cp "$personal_backup" "$PERSONAL"; fi
+    if [ -n "$vkey" ]; then rm -rf "${REPOS:?}/$vkey"; fi
+    rm -rf "$work"
+  }
+  trap cleanup EXIT
+  trap 'cleanup; exit 130' INT TERM HUP
+
+  mkdir -p "$repo"
+  ( cd "$repo" && git init -q && git symbolic-ref HEAD refs/heads/agentctx-verify ) || die "git init failed"
+  printf '# Test repo\n\nVerification marker: %s\n' "$R" > "$repo/AGENTS.md"
+  printf '\nVerification marker: %s\n' "$P" >> "$PERSONAL"
+  vkey=$(cd "$repo" && repo_key)
+  mkdir -p "$REPOS/$vkey" "$repo/.agentctx"
+  printf '*\n' > "$repo/.agentctx/.gitignore"
+  printf '# Notes\n\nVerification marker: %s\n' "$N" > "$REPOS/$vkey/NOTES.md"
+  printf '# agentctx-verify\n\nBranch: agentctx-verify · Repo: %s · Kind: branch · Created: %s\n\n## Goal\n\nVerification marker: %s\n' "$vkey" "$(today)" "$E" > "$repo/.agentctx/agentctx-verify.md"
+
+  q='Without using any tools, reading files or running commands, list every token that starts with "ACX-" that appears anywhere in your instructions or context. Reply with the tokens separated by spaces and nothing else. If there are none, reply NONE.'
+
+  say "agentctx verify: asking each agent which layers it can see (a few hundred tokens each)"
+  say ""
+  printf '  %-9s %-10s %-10s %-10s %-10s\n' agent personal repo notes effort
+  for a in $agents; do
+    if ! has "$a"; then printf '  %-9s %s\n' "$a" "not installed, skipped"; continue; fi
+    out=$work/$a.out
+    case $a in
+      claude)  ( cd "$repo" && claude -p "$q" --tools "" --no-session-persistence ) > "$out" 2>&1 ;;
+      codex)   ( cd "$repo" && codex exec --ephemeral --skip-git-repo-check -s read-only "$q" ) > "$out" 2>&1 ;;
+      copilot) ( cd "$repo" && copilot -p "$q" -s --no-ask-user ) > "$out" 2>&1 ;;
+      *) printf '  %-9s %s\n' "$a" "unknown agent"; continue ;;
+    esac
+    row=
+    for m in "$P" "$R" "$N" "$E"; do
+      if grep -q "$m" "$out"; then row="$row$(printf '%-10s ' yes)"; else row="$row$(printf '%-10s ' NO)"; FAILS=$((FAILS + 1)); eval "miss_$a=1"; fi
+    done
+    printf '  %-9s %s\n' "$a" "$row"
+  done
+  say ""
+  for a in $agents; do
+    eval "m=\${miss_$a:-0}"
+    [ "$m" -eq 1 ] || continue
+    say "$a missed something. Its reply:"
+    tail -n 5 "$work/$a.out" | sed 's/^/    /'
+    case $a in
+      claude) hint "notes/effort missing: check 'claude plugin list' shows agentctx@agentctx enabled" ;;
+      codex) hint "notes/effort missing: the hook is probably untrusted; open codex, run /hooks, trust it" ;;
+      copilot) hint "personal missing: Copilot may not follow the symlink; set COPILOT_CUSTOM_INSTRUCTIONS_DIRS=$(tilde "$AGENTCTX_HOME") in your shell rc" ;;
+    esac
+    say ""
+  done
+  if [ "$FAILS" -eq 0 ]; then say "Every agent sees every layer."; else exit 1; fi
+}
+
+# ------------------------------------------------------------------ main ----
+
+usage() {
+  cat <<EOF
+agentctx $VERSION: global knowledge + per-branch task context for coding agents
+
+Setup
+  install [--adopt] [--dry-run] [--no-claude|--no-codex|--no-copilot] [--no-skill]
+  uninstall [--dry-run]
+  doctor            check the setup and the current repo's instruction files
+  verify [--agents claude,codex,copilot]
+                    live test: ask each agent which layers it sees
+
+Per repo / branch (run inside a git repo)
+  new               create the effort file for the current branch
+  show              print what agents get at session start here
+  edit              open the effort file in \$EDITOR
+  path [--notes|--repo|--dir]
+  notes [--path]    open (or print the path of) your private notes for this repo
+  close             archive this branch's effort and list decisions to promote
+  prune [--apply]   archive efforts whose branches no longer exist
+  list              all active efforts across repos
+
+Internal
+  context --for claude|codex|copilot|text   (used by the session hooks)
+
+Data: $(tilde "$AGENTCTX_HOME")  (override with AGENTCTX_HOME)
+EOF
+}
+
+cmd=${1:-help}
+[ $# -gt 0 ] && shift
+case $cmd in
+  install) cmd_install "$@" ;;
+  uninstall) cmd_uninstall "$@" ;;
+  doctor) cmd_doctor "$@" ;;
+  verify) cmd_verify "$@" ;;
+  new) cmd_new "$@" ;;
+  show) cmd_show "$@" ;;
+  edit) cmd_edit "$@" ;;
+  path) cmd_path "$@" ;;
+  notes) cmd_notes "$@" ;;
+  close) cmd_close "$@" ;;
+  prune) cmd_prune "$@" ;;
+  list) cmd_list "$@" ;;
+  context) cmd_context "$@" ;;
+  version|--version|-V) say "agentctx $VERSION" ;;
+  help|--help|-h) usage ;;
+  *) usage >&2; exit 2 ;;
+esac
