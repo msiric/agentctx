@@ -1,12 +1,21 @@
 name: release
 
-# Runs when a version tag is pushed (sh scripts/release X.Y.Z does that).
+# Two ways in:
+#   - Actions tab > release > Run workflow (or: gh workflow run release.yml -f version=patch)
+#     bumps the version, tests, commits, tags, pushes and publishes. No local machine needed.
+#   - pushing a vX.Y.Z tag (sh scripts/release X.Y.Z) publishes that tag.
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "patch, minor, major, or an exact X.Y.Z"
+        required: true
+        default: patch
   push:
     tags: ["v*.*.*"]
 
 permissions:
-  contents: write   # create the GitHub release
+  contents: write   # push the release commit and tag, create the GitHub release
   id-token: write   # npm trusted publishing (no token needed once configured)
 
 concurrency:
@@ -18,6 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # tags, so the release script can refuse an existing one
 
       - uses: actions/setup-node@v4
         with:
@@ -27,11 +38,36 @@ jobs:
       - name: Use a current npm (trusted publishing needs a recent one)
         run: npm install -g npm@latest
 
+      - name: Bump, commit and tag (not pushed yet)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          [ "$GITHUB_REF_NAME" = main ] || { echo "run this from main"; exit 1; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          TRAILKEEP_RELEASE_SKIP_TESTS=1 sh scripts/release "$INPUT_VERSION" --no-push
+
+      - name: Resolve version
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            v=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' bin/trailkeep)
+          else
+            v="${GITHUB_REF_NAME#v}"
+          fi
+          echo "V=$v" >> "$GITHUB_ENV"
+          echo "Releasing $v"
+
       - name: Tag matches every version field
-        run: sh scripts/check-version "${GITHUB_REF_NAME#v}"
+        run: sh scripts/check-version "$V"
 
       - name: Tests
         run: sh tests/run.sh
+
+      - name: Push the release commit and tag
+        if: github.event_name == 'workflow_dispatch'
+        # Pushed with GITHUB_TOKEN, so the tag does not start this workflow a second time.
+        run: git push origin main "v$V"
 
       - name: Publish to npm
         env:
@@ -39,10 +75,9 @@ jobs:
           # leave the secret unset afterwards and npm uses OIDC instead.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          v="${GITHUB_REF_NAME#v}"
           name=$(node -p 'require("./package.json").name')
-          if npm view "$name@$v" version >/dev/null 2>&1; then
-            echo "$name@$v is already on npm; skipping publish"
+          if npm view "$name@$V" version >/dev/null 2>&1; then
+            echo "$name@$V is already on npm; skipping publish"
           else
             npm publish
           fi
@@ -51,5 +86,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 ||
-            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+          gh release view "v$V" >/dev/null 2>&1 ||
+            gh release create "v$V" --verify-tag --generate-notes --title "v$V"

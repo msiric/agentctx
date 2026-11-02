@@ -138,11 +138,15 @@ It also honours `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `COPILOT_HOME`. It works o
 
 ## Releasing (maintainers)
 
+From anywhere, with nothing installed: on GitHub, open Actions, then **release**, then **Run workflow**, and pick `patch`, `minor`, `major` or an exact `X.Y.Z`. Or from any terminal with `gh`:
+
 ```sh
-sh scripts/release 0.3.0
+gh workflow run release.yml -R msiric/trailkeep -f version=patch
 ```
 
-The script bumps the version in all three places, runs the tests, commits, tags and pushes. The tag triggers the release workflow, which checks that the versions match, runs the tests again, publishes to npm and creates the GitHub release. No machine but GitHub's talks to npm.
+The workflow bumps the version in all three places, runs the tests, and only then pushes the release commit and tag, publishes to npm and creates the GitHub release. If the tests fail, nothing is pushed.
+
+From a clone, `sh scripts/release patch` (or `X.Y.Z`) does the bump, tests, commit and tag locally and pushes; the tag starts the same workflow, which checks the versions, tests again and publishes. Either way, no machine but GitHub's talks to npm.
 
 npm authentication works one of two ways:
 - **Trusted publishing (preferred):** on npmjs.com, open the package's Settings, then Trusted Publisher, then GitHub Actions. Enter owner `msiric`, repository `trailkeep`, workflow `release.yml`. No secret is needed. npm only offers this for packages that already exist.

@@ -2,11 +2,18 @@
 # Cut a release: bump every version field, run the tests, commit, tag, push.
 # Pushing the tag triggers .github/workflows/release.yml, which publishes to
 # npm and creates the GitHub release.
-#   sh scripts/release 0.2.1 [--no-push]
+# Also runs inside that workflow when it is started by hand (Run workflow).
+#   sh scripts/release X.Y.Z|patch|minor|major [--no-push]
 set -u
 cd "$(dirname "$0")/.." || exit 1
 v=${1:-}; push=1; [ "${2:-}" = --no-push ] && push=0
-case $v in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "usage: sh scripts/release X.Y.Z [--no-push]" >&2; exit 2 ;; esac
+cur=$(sed -n 's/^VERSION="\(.*\)"$/\1/p' bin/trailkeep)
+case $v in
+  patch|minor|major)
+    v=$(printf '%s\n' "${cur%%-*}" | awk -F. -v k="$v" '{
+      if (k == "major") print $1 + 1 ".0.0"; else if (k == "minor") print $1 "." $2 + 1 ".0"; else print $1 "." $2 "." $3 + 1 }') ;;
+esac
+case $v in [0-9]*.[0-9]*.[0-9]*) ;; *) echo "usage: sh scripts/release X.Y.Z|patch|minor|major [--no-push]" >&2; exit 2 ;; esac
 [ -z "$(git status --porcelain)" ] || { echo "commit or stash your changes first" >&2; exit 1; }
 [ "$(git symbolic-ref --short HEAD)" = main ] || { echo "release from main" >&2; exit 1; }
 git rev-parse -q --verify "refs/tags/v$v" >/dev/null && { echo "tag v$v already exists" >&2; exit 1; }

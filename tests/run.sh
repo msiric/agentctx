@@ -644,6 +644,16 @@ test_release() {
   eq "$(cd "$SB/rel" && git tag)" "v9.8.7"; eq "$(cd "$SB/rel" && git log -1 --format=%s)" "Release v9.8.7"
   out=$(cd "$SB/rel" && TRAILKEEP_RELEASE_SKIP_TESTS=1 sh scripts/release 9.8.7 --no-push 2>&1); status $? 1 "refuses an existing tag"
   out=$(cd "$SB/rel" && sh scripts/release banana 2>&1); status $? 2 "rejects a bad version"
+  # patch/minor/major bump from the current version
+  for kind in patch minor major; do
+    cp -R "$ROOT" "$SB/bump-$kind" && rm -rf "$SB/bump-$kind/.git"
+    sed 's/^VERSION=".*"$/VERSION="1.4.2"/' "$ROOT/bin/trailkeep" > "$SB/bump-$kind/bin/trailkeep"
+    (cd "$SB/bump-$kind" && git init -q -b main && git add -A && git commit -qm base)
+    (cd "$SB/bump-$kind" && TRAILKEEP_RELEASE_SKIP_TESTS=1 sh scripts/release "$kind" --no-push >/dev/null 2>&1)
+    case $kind in patch) want=1.4.3 ;; minor) want=1.5.0 ;; major) want=2.0.0 ;; esac
+    eq "$("$SB/bump-$kind/bin/trailkeep" --version)" "trailkeep $want" "release $kind"
+    eq "$(cd "$SB/bump-$kind" && git tag)" "v$want" "release $kind tag"
+  done
   # releasing the version already in the files (the first release) tags without an empty commit
   cp -R "$ROOT" "$SB/rel2" && rm -rf "$SB/rel2/.git"
   (cd "$SB/rel2" && git init -q -b main && git add -A && git commit -qm base)
