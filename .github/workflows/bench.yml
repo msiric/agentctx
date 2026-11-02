@@ -66,6 +66,12 @@ jobs:
           fi
           ls bench/results/runs | wc -l
 
+      - name: Validate the plan's traps (oracle fails at start, passes on good.patch, fails on trap.patch)
+        run: |
+          for t in $(python3 -c "import json,sys; print(' '.join(json.load(open(sys.argv[1]))['traps']))" "bench/plans/${{ inputs.plan }}.json"); do
+            python3 bench/tools/validate-trap "bench/traps/$t"
+          done
+
       - name: Run plan
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
