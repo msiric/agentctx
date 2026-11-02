@@ -37,7 +37,7 @@ def sh(cmd, cwd=None, env=None, check=True, timeout=600):
 def agent_env(home, extra):
     env = {
         "HOME": home, "USER": os.environ.get("USER", "runner"), "TERM": "dumb", "LANG": "C.UTF-8",
-        "PATH": os.environ["PATH"], "IS_SANDBOX": "1",
+        "PATH": f"{home}/.local/bin:" + os.environ["PATH"], "IS_SANDBOX": "1",
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_AUTOUPDATER": "1",
         "TRAILKEEP_SYNC": "1",
     }

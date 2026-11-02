@@ -21,9 +21,9 @@ in `harness/arms/<arm>.sh` and has the hooks `install`, `env`,
 | `oracle-note` | before the last session only, `~/.claude/CLAUDE.md` = "Notes from earlier sessions on this work:" + the trap's live facts, one per line | n/a (ceiling) |
 | `resume` | the last session runs with `--resume <previous session id>` (same repo only) | n/a (ceiling) |
 | `filler` | `~/.claude/CLAUDE.md` = "Reference notes (from an unrelated project):" + Python's `calendar` and `colorsys` docs, cut to `FILLER_CHARS` (set per trap to trailkeep's mean injected size in the dev matrix) | n/a (control) |
-| `claude-mem` | `claude plugin marketplace add thedotmack/claude-mem`, `claude plugin install claude-mem@thedotmack`; defaults; up to 3 min after each session for its summary | none |
-| `basic-memory` | `pip install basic-memory`, `claude mcp add -s user basic-memory basic-memory mcp`, `bm install claude-code`, then `/basic-memory:bm-setup` once per repo | one-time setup command |
-| `hindsight` | `pip install hindsight-api` (server with embedded database and local embedding/reranker models), Gemini as its LLM (`GEMINI_API_KEY`), Claude Code integration via `npx @vectorize-io/hindsight-coding-agents@0.7.0 install claude-code --server self-hosted`; one server per episode; 90 s after each session for retention | none |
+| `claude-mem` | `claude plugin marketplace add thedotmack/claude-mem`, `claude plugin install claude-mem@thedotmack`; defaults; up to 3 min after each session for its summary; `~/.local/bin` on `PATH` (all arms) | none |
+| `basic-memory` | `pip install basic-memory`, `claude mcp add -s user basic-memory basic-memory mcp`, `bm install claude-code --yes`, then `/basic-memory:bm-setup` once per repo, the scripted user accepting every suggested default | one-time setup command |
+| `hindsight` | `pip install hindsight-api` (server with embedded database and local embedding/reranker models), its `claude-code` LLM provider with the sessions' subscription token, Claude Code integration via `npx @vectorize-io/hindsight-coding-agents@0.7.0 install claude-code --server self-hosted`; one server per episode; after each session, wait for its queue to empty (up to 5 min) | none |
 | `trailkeep+native` | `trailkeep`, with auto memory on | none |
 
 Codex CLI arms come after the Claude pilot. Codex native memories are off by

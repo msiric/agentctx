@@ -1,14 +1,15 @@
 #!/bin/sh
 # Hindsight, self-hosted, per its docs: the hindsight-api server (pip package,
-# embedded database, local embedding and reranker models) with Gemini as the
-# LLM, and the Claude Code integration installed with
+# embedded database, local embedding and reranker models) with its claude-code
+# LLM provider (the same subscription token as the sessions, as claude-mem
+# does), and the Claude Code integration installed with
 #   npx -y @vectorize-io/hindsight-coding-agents@0.7.0 install claude-code --server self-hosted --api-url http://localhost:8888
 # One server per episode, its data under the episode's home.
 case $1 in
   install)
     command -v hindsight-api >/dev/null || { echo "hindsight-api not installed" >&2; exit 1; }
-    [ -n "${GEMINI_API_KEY:-}" ] || { echo "GEMINI_API_KEY not set" >&2; exit 1; }
-    HINDSIGHT_API_LLM_PROVIDER=gemini HINDSIGHT_API_LLM_API_KEY="$GEMINI_API_KEY" \
+    [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || { echo "CLAUDE_CODE_OAUTH_TOKEN not set" >&2; exit 1; }
+    HINDSIGHT_API_LLM_PROVIDER=claude-code HINDSIGHT_API_LLM_API_KEY="$CLAUDE_CODE_OAUTH_TOKEN" \
       nohup hindsight-api > "$EPISODE/hindsight-server.log" 2>&1 &
     echo $! > "$EPISODE/hindsight.pid"
     i=0; until curl -s --max-time 2 -o /dev/null http://127.0.0.1:8888/ 2>/dev/null; do
@@ -18,8 +19,14 @@ case $1 in
     npx -y @vectorize-io/hindsight-coding-agents@0.7.0 install claude-code --server self-hosted --api-url http://localhost:8888 > "$EPISODE/hindsight-install.log" 2>&1
     pip show hindsight-api 2>/dev/null | sed -n 's/^Version: /hindsight-api /p' > "$EPISODE/hindsight.version" ;;
   after_session)
-    # retention runs after the session (LLM extraction); allow up to 2 minutes, as a real gap would
-    sleep 90 ;;
+    # Retention runs after the session (LLM extraction). Wait until the
+    # server's queue is empty, as a real gap between sessions would, up to 5 minutes.
+    i=0
+    while [ $i -lt 60 ]; do
+      sleep 5; i=$((i + 1))
+      n=$(grep -o 'global: pending=[0-9]*' "$EPISODE/hindsight-server.log" 2>/dev/null | tail -1 | sed 's/.*=//')
+      [ "${n:-1}" = 0 ] && [ $i -ge 4 ] && break
+    done ;;
   snapshot)
     mkdir -p "$SNAPSHOT"
     cp "$EPISODE"/hindsight*.log "$EPISODE/hindsight.version" "$SNAPSHOT/" 2>/dev/null
