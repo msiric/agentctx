@@ -56,6 +56,9 @@ jobs:
         run: |
           npm install -g "@anthropic-ai/claude-code@${{ inputs.claude_code_version }}"
           npm install -g pnpm
+          npm install -g bun
+          pip install -q basic-memory uv
+          basic-memory --version || true
           claude --version
 
       - name: Load earlier results
