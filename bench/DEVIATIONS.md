@@ -87,3 +87,11 @@ Before the dev matrix, the `bench-results` branch dropped the pilot's
 competitor smoke cells (smoke checks only). The dev matrix re-runs them under
 the current harness. The pilot's `none`, `handoff` and `oracle-note` cells,
 and the gate cells, are kept, since nothing these arms use changed.
+
+## 2026-11-03: trailkeep v0.3.2 dropped from the rest of the dev matrix
+
+After seed 1, trailkeep v0.3.2 passed 1 of 8 fact traps, and all 7 failures
+were capture misses (`results/dev-notes.md`). Its remaining dev seeds were
+dropped to save subscription usage; the cells already run are kept. The
+changed version runs as `trailkeep@capture`. Dev results are exploratory
+either way; the held-out run is unaffected.
