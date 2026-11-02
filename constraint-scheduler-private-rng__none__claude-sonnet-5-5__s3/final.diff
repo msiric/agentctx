@@ -1,0 +1,264 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..56e6ac2 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -50,6 +50,12 @@ from typing import Set, List, Optional, Callable, Union
+ logger = logging.getLogger("schedule")
+ 
+ 
++# Dedicated generator for jitter. SystemRandom draws from os.urandom, so it
++# neither reads nor advances the global `random` state (which callers may seed
++# for reproducibility), and it is safe across forked workers.
++_jitter_rng = random.SystemRandom()
++
++
+ class ScheduleError(Exception):
+     """Base schedule exception"""
+ 
+@@ -227,6 +233,10 @@ class Job:
+     def __init__(self, interval: int, scheduler: Optional[Scheduler] = None):
+         self.interval: int = interval  # pause interval * unit between runs
+         self.latest: Optional[int] = None  # upper limit to the interval
++        self.jitter_seconds: float = 0  # max random delay added to each next_run
++        self.retry_times: int = 0  # max retries after a failed run
++        self.retry_base_delay: float = 0  # first retry delay, doubled each time
++        self._retry_attempt: int = 0  # retries used in the current failure streak
+         self.job_func: Optional[functools.partial] = None  # the job job_func to run
+ 
+         # time units, e.g. 'minutes', 'hours', ...
+@@ -573,6 +583,45 @@ class Job:
+         self.latest = latest
+         return self
+ 
++    def jitter(self, seconds: float):
++        """
++        Delay every run by a random offset between 0 and `seconds`.
++
++        The offset is drawn anew each time the next run is computed, so
++        jobs sharing the same schedule (e.g. many workers doing
++        `every(10).minutes`) do not all fire in the same instant.
++
++        :param seconds: Maximum offset in seconds (must be >= 0)
++        :return: The invoked job instance
++        """
++        if seconds < 0:
++            raise ScheduleValueError("`jitter` must be non-negative")
++        self.jitter_seconds = seconds
++        return self
++
++    def retry(self, times: int, base_delay: float):
++        """
++        Retry a run that raised an exception, with exponential backoff.
++
++        After a failure the job is retried after `base_delay` seconds, then
++        `2 * base_delay`, `4 * base_delay`, ... seconds, each delay plus a
++        random 0 to `base_delay` seconds of jitter. At most `times` retries
++        are made; if they all fail the job gives up and returns to its
++        normal schedule. Exceptions (subclasses of :class:`Exception`) from
++        a job with retries configured are logged, not raised.
++
++        :param times: Maximum number of retries (must be >= 1)
++        :param base_delay: Initial delay in seconds (must be >= 0)
++        :return: The invoked job instance
++        """
++        if times < 1:
++            raise ScheduleValueError("`times` must be at least 1")
++        if base_delay < 0:
++            raise ScheduleValueError("`base_delay` must be non-negative")
++        self.retry_times = times
++        self.retry_base_delay = base_delay
++        return self
++
+     def until(
+         self,
+         until_time: Union[datetime.datetime, datetime.timedelta, datetime.time, str],
+@@ -688,7 +737,36 @@ class Job:
+             return CancelJob
+ 
+         logger.debug("Running job %s", self)
+-        ret = self.job_func()
++        if self.retry_times:
++            try:
++                ret = self.job_func()
++            except Exception:
++                self.last_run = datetime.datetime.now()
++                if self._retry_attempt < self.retry_times:
++                    delay = self.retry_base_delay * 2**self._retry_attempt
++                    delay += _jitter_rng.uniform(0, self.retry_base_delay)
++                    self._retry_attempt += 1
++                    logger.exception(
++                        "Job %s failed, retry %d/%d in %.1fs",
++                        self,
++                        self._retry_attempt,
++                        self.retry_times,
++                        delay,
++                    )
++                    self.next_run = self.last_run + datetime.timedelta(seconds=delay)
++                    if self._is_overdue(self.next_run):
++                        logger.debug("Cancelling job %s", self)
++                        return CancelJob
++                    return None
++                logger.exception(
++                    "Job %s failed, giving up after %d retries",
++                    self,
++                    self.retry_times,
++                )
++                ret = None
++            self._retry_attempt = 0
++        else:
++            ret = self.job_func()
+         self.last_run = datetime.datetime.now()
+         self._schedule_next_run()
+ 
+@@ -745,6 +823,11 @@ class Job:
+ 
+             next_run = next_run.replace(tzinfo=None)
+ 
++        if self.jitter_seconds:
++            next_run += datetime.timedelta(
++                seconds=_jitter_rng.uniform(0, self.jitter_seconds)
++            )
++
+         self.next_run = next_run
+ 
+     def _move_to_at_time(self, moment: datetime.datetime) -> datetime.datetime:
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..2d527ed 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1597,3 +1597,135 @@ class SchedulerTests(TestCase):
+         scheduler.every()
+         scheduler.every(10).seconds
+         scheduler.run_pending()
++
++
++class JitterTest(TestCase):
++    def setUp(self):
++        schedule.clear()
++
++    def test_jitter_within_bounds(self):
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            for _ in range(200):
++                job = every(10).minutes.jitter(30).do(lambda: None)
++                base = datetime.datetime(2024, 1, 1, 12, 10, 0)
++                delta = (job.next_run - base).total_seconds()
++                assert 0 <= delta <= 30
++
++    def test_jitter_varies(self):
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            runs = {
++                every(10).minutes.jitter(30).do(lambda: None).next_run
++                for _ in range(20)
++            }
++            assert len(runs) > 1
++
++    def test_no_jitter_by_default(self):
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            job = every(10).minutes.do(lambda: None)
++            assert job.next_run == datetime.datetime(2024, 1, 1, 12, 10, 0)
++
++    def test_jitter_applied_with_fixed_value(self):
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            with mock.patch.object(schedule._jitter_rng, "uniform", return_value=5):
++                job = every().hour.jitter(10).do(lambda: None)
++            assert job.next_run == datetime.datetime(2024, 1, 1, 13, 0, 5)
++
++    def test_jitter_negative(self):
++        with self.assertRaises(ScheduleValueError):
++            every().minute.jitter(-1)
++
++    def test_jitter_does_not_touch_global_random(self):
++        import random
++
++        random.seed(1234)
++        expected = random.getstate()
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            for _ in range(50):
++                every(10).minutes.jitter(30).do(lambda: None)
++        assert random.getstate() == expected
++
++
++class RetryTest(TestCase):
++    def setUp(self):
++        schedule.clear()
++
++    def _failing(self, fail_times):
++        calls = []
++
++        def func():
++            calls.append(1)
++            if len(calls) <= fail_times:
++                raise ValueError("boom")
++            return "ok"
++
++        return func, calls
++
++    def test_backoff_delays(self):
++        func, calls = self._failing(10)
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            with mock.patch.object(schedule._jitter_rng, "uniform", return_value=0):
++                job = every().hour.do(func).retry(times=3, base_delay=30)
++                job.next_run = datetime.datetime(2024, 1, 1, 12, 0, 0)
++                schedule.run_pending()
++                assert job.next_run == datetime.datetime(2024, 1, 1, 12, 0, 30)
++        for expected_s in (60, 120):
++            with mock_datetime(2024, 1, 1, 12, 5, 0):
++                with mock.patch.object(
++                    schedule._jitter_rng, "uniform", return_value=0
++                ):
++                    schedule.run_pending()
++                    assert job.next_run == datetime.datetime(
++                        2024, 1, 1, 12, 5, 0
++                    ) + datetime.timedelta(seconds=expected_s)
++                    job.next_run = datetime.datetime(2024, 1, 1, 12, 5, 0)
++        assert len(calls) == 3
++
++    def test_jitter_added_to_delay(self):
++        func, _ = self._failing(10)
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            job = every().hour.do(func).retry(times=3, base_delay=30)
++            job.next_run = datetime.datetime(2024, 1, 1, 12, 0, 0)
++            with mock.patch.object(
++                schedule._jitter_rng, "uniform", return_value=7
++            ) as uni:
++                schedule.run_pending()
++            uni.assert_called_once_with(0, 30)
++            assert job.next_run == datetime.datetime(2024, 1, 1, 12, 0, 37)
++
++    def test_gives_up_after_times_retries(self):
++        func, calls = self._failing(100)
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            job = every().hour.do(func).retry(times=2, base_delay=1)
++            for _ in range(3):
++                job.next_run = datetime.datetime(2024, 1, 1, 12, 0, 0)
++                schedule.run_pending()  # must not raise
++            assert len(calls) == 3  # 1 run + 2 retries
++            assert job.next_run == datetime.datetime(2024, 1, 1, 13, 0, 0)
++            assert job._retry_attempt == 0
++
++    def test_success_resets_and_stops_retrying(self):
++        func, calls = self._failing(1)
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            job = every().hour.do(func).retry(times=3, base_delay=1)
++            job.next_run = datetime.datetime(2024, 1, 1, 12, 0, 0)
++            schedule.run_pending()
++            assert job._retry_attempt == 1
++            job.next_run = datetime.datetime(2024, 1, 1, 12, 0, 0)
++            schedule.run_pending()
++            assert len(calls) == 2
++            assert job._retry_attempt == 0
++            assert job.next_run == datetime.datetime(2024, 1, 1, 13, 0, 0)
++
++    def test_without_retry_exception_propagates(self):
++        func, _ = self._failing(1)
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            job = every().hour.do(func)
++            job.next_run = datetime.datetime(2024, 1, 1, 12, 0, 0)
++            with self.assertRaises(ValueError):
++                schedule.run_pending()
++
++    def test_retry_validation(self):
++        with self.assertRaises(ScheduleValueError):
++            every().hour.do(lambda: None).retry(times=0, base_delay=1)
++        with self.assertRaises(ScheduleValueError):
++            every().hour.do(lambda: None).retry(times=1, base_delay=-1)

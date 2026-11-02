@@ -1,0 +1,205 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..cafc63d 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,70 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_crash_during_in_place_write_is_recovered(tmpdir, monkeypatch):
++    path = str(tmpdir.join('db.json'))
++    db = TinyDB(path)
++    db.insert({'a': 1})
++    db.close()
++
++    # Simulate dying after the journal is durable and the db file is half-written
++    real = JSONStorage._write_in_place
++
++    def crash(self, serialized):
++        self._handle.seek(0)
++        self._handle.write(serialized[:5])
++        self._handle.truncate()
++        self._handle.flush()
++        raise KeyboardInterrupt
++
++    storage = JSONStorage(path)
++    monkeypatch.setattr(JSONStorage, '_write_in_place', crash)
++    with pytest.raises(KeyboardInterrupt):
++        storage.write({'_default': {'1': {'a': 1}, '2': {'a': 2}}})
++    monkeypatch.setattr(JSONStorage, '_write_in_place', real)
++    storage._handle.close()
++
++    with open(path) as f:
++        with pytest.raises(ValueError):
++            json.load(f)  # truncated, as after the OOM kill
++
++    db = TinyDB(path)
++    assert db.all() == [{'a': 1}, {'a': 2}]
++    db.close()
++    assert not os.path.exists(path + '.journal')
++
++
++def test_crash_during_journal_write_keeps_old_state(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    db = TinyDB(path)
++    db.insert({'a': 1})
++    db.close()
++
++    # Torn journal (checksum doesn't match) and an untouched database file
++    with open(path + '.journal', 'wb') as f:
++        f.write(b'deadbeef\n{"_default": {"1": {"a"')
++
++    db = TinyDB(path)
++    assert db.all() == [{'a': 1}]
++    db.close()
++    assert not os.path.exists(path + '.journal')
++
++
++def test_journal_removed_after_normal_write(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    db = TinyDB(path)
++    db.insert({'a': 1})
++    assert not os.path.exists(path + '.journal')
++    db.close()
++
++
++def test_write_never_renames_over_database(tmpdir, monkeypatch):
++    def boom(*a, **k):
++        raise AssertionError('rename used')
++    monkeypatch.setattr(os, 'rename', boom)
++    monkeypatch.setattr(os, 'replace', boom)
++    db = TinyDB(str(tmpdir.join('db.json')))
++    db.insert({'a': 1})
++    db.close()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..0c896a1 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -3,6 +3,7 @@ Contains the :class:`base class <tinydb.storages.Storage>` for storages and
+ implementations.
+ """
+ 
++import hashlib
+ import io
+ import json
+ import os
+@@ -119,6 +120,59 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Crash safety: the database file is overwritten in place (it may be a
++        # bind-mounted single file that can't be renamed over), so every write
++        # is first saved to a checksummed journal file. If we were killed
++        # mid-write, finish the interrupted write now.
++        self._journal_path = str(path) + '.journal'
++        if any(c in self._mode for c in ('+', 'w', 'a')):
++            self._recover()
++
++    def _read_journal(self) -> Optional[str]:
++        """Return the journal payload, or ``None`` if missing/incomplete."""
++        try:
++            with open(self._journal_path, 'rb') as f:
++                raw = f.read()
++        except FileNotFoundError:
++            return None
++
++        digest, sep, payload = raw.partition(b'\n')
++        if not sep or hashlib.sha256(payload).hexdigest().encode() != digest:
++            return None  # torn journal: main file was not touched yet
++        try:
++            return payload.decode('utf-8')
++        except UnicodeDecodeError:
++            return None
++
++    def _remove_journal(self) -> None:
++        try:
++            os.remove(self._journal_path)
++        except FileNotFoundError:
++            pass
++
++    def _recover(self) -> None:
++        payload = self._read_journal()
++        if payload is not None:
++            self._write_in_place(payload)
++        self._remove_journal()
++
++    def _write_in_place(self, serialized: str) -> None:
++        # Move the cursor to the beginning of the file just in case
++        self._handle.seek(0)
++
++        try:
++            self._handle.write(serialized)
++        except io.UnsupportedOperation:
++            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
++
++        # Remove data that is behind the new cursor in case the file has
++        # gotten shorter
++        self._handle.truncate()
++
++        # Ensure the file has been written
++        self._handle.flush()
++        os.fsync(self._handle.fileno())
++
+     def close(self) -> None:
+         self._handle.close()
+ 
+@@ -140,25 +194,42 @@ class JSONStorage(Storage):
+             return json.load(self._handle)
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
+-        # Move the cursor to the beginning of the file just in case
+-        self._handle.seek(0)
+-
+         # Serialize the database state using the user-provided arguments
+         serialized = json.dumps(data, **self.kwargs)
+ 
+-        # Write the serialized data to the file
++        if not any(c in self._mode for c in ('+', 'w', 'a')):
++            # Read-only: let the in-place writer raise the usual error
++            self._write_in_place(serialized)
++            return
++
++        # 1. Persist the new state to the journal first. The database file is
++        #    untouched until the journal is complete and durable.
++        payload = serialized.encode('utf-8')
++        digest = hashlib.sha256(payload).hexdigest().encode()
++        with open(self._journal_path, 'wb') as journal:
++            journal.write(digest + b'\n' + payload)
++            journal.flush()
++            os.fsync(journal.fileno())
++        self._fsync_dir()
++
++        # 2. Overwrite the database in place. If we die here, the journal is
++        #    replayed on the next open.
++        self._write_in_place(serialized)
++
++        # 3. The database is consistent again; drop the journal.
++        self._remove_journal()
++
++    def _fsync_dir(self) -> None:
+         try:
+-            self._handle.write(serialized)
+-        except io.UnsupportedOperation:
+-            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
+-
+-        # Ensure the file has been written
+-        self._handle.flush()
+-        os.fsync(self._handle.fileno())
+-
+-        # Remove data that is behind the new cursor in case the file has
+-        # gotten shorter
+-        self._handle.truncate()
++            fd = os.open(os.path.dirname(os.path.abspath(self._journal_path)), os.O_RDONLY)
++        except OSError:
++            return  # e.g. platforms that can't open directories
++        try:
++            os.fsync(fd)
++        except OSError:
++            pass
++        finally:
++            os.close(fd)
+ 
+ 
+ class MemoryStorage(Storage):

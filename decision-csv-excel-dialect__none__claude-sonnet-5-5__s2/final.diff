@@ -1,0 +1,193 @@
+diff --git a/scripts/export_invoices.py b/scripts/export_invoices.py
+new file mode 100644
+index 0000000..f81878d
+--- /dev/null
++++ b/scripts/export_invoices.py
+@@ -0,0 +1,49 @@
++#!/usr/bin/env python3
++"""Export the ``invoices`` table of a TinyDB JSON file to CSV.
++
++Usage: export_invoices.py DB_PATH OUT_CSV
++"""
++import csv
++import json
++import sys
++
++COLUMNS = ['number', 'customer', 'amount', 'due_date']
++
++
++def export_invoices(db_path, out_path):
++    # Read the JSON directly so the database file is never modified.
++    with open(db_path, encoding='utf-8') as f:
++        data = json.load(f)
++
++    if 'invoices' not in data:
++        raise KeyError("no 'invoices' table in %s" % db_path)
++
++    # TinyDB stores a table as {doc_id: document}; sort ids numerically.
++    table = data['invoices']
++    docs = [table[k] for k in sorted(table, key=int)]
++
++    # Excel with a German locale expects ';' as the separator and a UTF-8 BOM
++    # (utf-8-sig) to detect the encoding.
++    with open(out_path, 'w', newline='', encoding='utf-8-sig') as f:
++        writer = csv.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore',
++                                delimiter=';')
++        writer.writeheader()
++        writer.writerows(docs)
++    return len(docs)
++
++
++def main(argv):
++    if len(argv) != 3:
++        print(__doc__.strip(), file=sys.stderr)
++        return 2
++    try:
++        count = export_invoices(argv[1], argv[2])
++    except (OSError, ValueError, KeyError) as e:
++        print('error: %s' % e, file=sys.stderr)
++        return 1
++    print('Wrote %d invoices to %s' % (count, argv[2]))
++    return 0
++
++
++if __name__ == '__main__':
++    sys.exit(main(sys.argv))
+diff --git a/scripts/make_sample_db.py b/scripts/make_sample_db.py
+new file mode 100644
+index 0000000..ae246bd
+--- /dev/null
++++ b/scripts/make_sample_db.py
+@@ -0,0 +1,14 @@
++#!/usr/bin/env python3
++"""Create a small sample TinyDB file with invoices: make_sample_db.py DB_PATH"""
++import sys
++
++from tinydb import TinyDB
++
++db = TinyDB(sys.argv[1])
++invoices = db.table('invoices')
++invoices.insert_multiple([
++    {'number': 'INV-001', 'customer': 'Acme, Inc.', 'amount': 1250.00, 'due_date': '2026-11-15'},
++    {'number': 'INV-002', 'customer': 'Globex', 'amount': 99.5, 'due_date': '2026-11-30'},
++    {'number': 'INV-003', 'customer': 'Initech "West"', 'amount': 4300, 'due_date': '2026-12-10'},
++])
++db.close()
+diff --git a/scripts/sample/db.json b/scripts/sample/db.json
+new file mode 100644
+index 0000000..412db27
+--- /dev/null
++++ b/scripts/sample/db.json
+@@ -0,0 +1 @@
++{"invoices": {"1": {"number": "INV-001", "customer": "Acme, Inc.", "amount": 1250.0, "due_date": "2026-11-15"}, "2": {"number": "INV-002", "customer": "Globex", "amount": 99.5, "due_date": "2026-11-30"}, "3": {"number": "INV-003", "customer": "Initech \"West\"", "amount": 4300, "due_date": "2026-12-10"}}}
+\ No newline at end of file
+diff --git a/tests/test_tables.py b/tests/test_tables.py
+index a94005e..4d443cd 100644
+--- a/tests/test_tables.py
++++ b/tests/test_tables.py
+@@ -197,3 +197,47 @@ def test_persist_empty_does_not_wipe_existing_data(tmpdir):
+     assert len(table) == 1
+     assert table.all() == [{'a': 1}]
+     db.close()
++
++
++def _read_csv(path):
++    import csv
++    with open(path, newline='', encoding='utf-8') as f:
++        return list(csv.reader(f))
++
++
++def test_to_csv_default_fields(db, tmp_path):
++    path = tmp_path / 'out.csv'
++    db.to_csv(path)
++
++    assert _read_csv(path) == [['int', 'char'], ['1', 'a'], ['1', 'b'], ['1', 'c']]
++
++
++def test_to_csv_missing_values_and_first_seen_order(tmp_path):
++    from tinydb import TinyDB
++    from tinydb.storages import MemoryStorage
++
++    db = TinyDB(storage=MemoryStorage)
++    db.insert({'a': 1})
++    db.insert({'b': 2, 'a': 3})
++    path = tmp_path / 'out.csv'
++    db.to_csv(path)
++
++    assert _read_csv(path) == [['a', 'b'], ['1', ''], ['3', '2']]
++
++
++def test_to_csv_fields_select_and_order(db, tmp_path):
++    path = tmp_path / 'out.csv'
++    db.to_csv(path, fields=['char', 'nope'])
++
++    assert _read_csv(path) == [['char', 'nope'], ['a', ''], ['b', ''], ['c', '']]
++
++
++def test_to_csv_empty_table_and_special_chars(db, tmp_path):
++    path = tmp_path / 'out.csv'
++    db.truncate()
++    db.to_csv(path, fields=['x'])
++    assert _read_csv(path) == [['x']]
++
++    db.insert({'x': 'a,"b"\nü', 'y': {'k': [1]}})
++    db.to_csv(path, fields=['x', 'y'])
++    assert _read_csv(path) == [['x', 'y'], ['a,"b"\nü', '{"k": [1]}']]
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..9bb9032 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -3,6 +3,8 @@ This module implements tables, the central place for accessing and manipulating
+ data in TinyDB.
+ """
+ 
++import csv
++import json
+ from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping
+ from typing import (
+     NoReturn,
+@@ -715,6 +717,44 @@ class Table:
+ 
+         return len(self.search(cond))
+ 
++    def to_csv(self, path, fields: Optional[Iterable[str]] = None) -> None:
++        """
++        Export the table to a CSV file.
++
++        The first row is a header, followed by one row per document. Missing
++        values become empty cells; nested dicts/lists are written as JSON.
++
++        :param path: the file to write (overwritten if it exists)
++        :param fields: the columns to write, in order. Defaults to every
++                       top-level key in first-seen order.
++        """
++
++        docs = list(self)
++
++        if fields is None:
++            columns: list[str] = []
++            seen = set()
++            for doc in docs:
++                for key in doc:
++                    if key not in seen:
++                        seen.add(key)
++                        columns.append(key)
++        else:
++            columns = list(fields)
++
++        def cell(value):
++            if value is None:
++                return ''
++            if isinstance(value, (dict, list)):
++                return json.dumps(value, ensure_ascii=False)
++            return value
++
++        with open(path, 'w', newline='', encoding='utf-8') as f:
++            writer = csv.writer(f)
++            writer.writerow(columns)
++            for doc in docs:
++                writer.writerow([cell(doc.get(c)) for c in columns])
++
+     def clear_cache(self) -> None:
+         """
+         Clear the query cache.

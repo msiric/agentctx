@@ -1,0 +1,128 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..a1b4c1f 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -49,6 +49,42 @@ def test_json_kwargs(tmpdir):
+     db.close()
+ 
+ 
++def test_json_sorted_by_default(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file))
++    db.insert({'b': 1, 'a': {'z': 1, 'y': [{'d': 1, 'c': 2}]}})
++    db.close()
++
++    assert db_file.read() == (
++        '{"_default": {"1": {"a": {"y": [{"c": 2, "d": 1}], "z": 1}, '
++        '"b": 1}}}'
++    )
++
++
++def test_json_sort_keys_false(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file), sort_keys=False)
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    assert db_file.read() == '{"_default": {"1": {"b": 1, "a": 2}}}'
++
++
++def test_json_sort_mixed_key_types(tmpdir):
++    path = str(tmpdir.join('test.db'))
++    storage = JSONStorage(path)
++    storage.write({'t': {'other': 1, 500: 2, 200: 3}})
++    storage.close()
++
++    with open(path) as f:
++        assert f.read() == '{"t": {"200": 3, "500": 2, "other": 1}}'
++
++    # An explicit sort_keys=True must cope with mixed keys too
++    storage = JSONStorage(path, sort_keys=True)
++    storage.write({'t': {'other': 1, 200: 3}})
++    storage.close()
++
++
+ def test_json_readwrite(tmpdir):
+     """
+     Regression test for issue #1
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..d141b32 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -33,6 +33,49 @@ def touch(path: str, create_dirs: bool):
+         pass
+ 
+ 
++def _json_key(key: Any) -> str:
++    """
++    Return the string a dict key turns into when serialized by ``json``.
++
++    Keys of unsupported types are returned as ``None`` by the caller's sort
++    key helper so that ``json`` can decide whether to skip or reject them.
++    """
++    if isinstance(key, str):
++        return key
++    return json.dumps(key)
++
++
++def _sort_keys(obj: Any) -> Any:
++    """
++    Recursively sort dict keys by their JSON string form.
++
++    Unlike ``json.dumps(sort_keys=True)`` this also works for dicts with keys
++    of mixed types (e.g. ``int`` and ``str``). Keys of types JSON cannot
++    represent are kept at the end so ``json`` can handle them as usual.
++    """
++    if isinstance(obj, dict):
++        supported = []
++        other = []
++        for key, value in obj.items():
++            if key is None or isinstance(key, (str, int, float, bool)):
++                supported.append((_json_key(key), key, value))
++            else:
++                other.append((key, value))
++
++        # Sorting only on the string form keeps the sort stable and never
++        # compares keys of different types
++        supported.sort(key=lambda item: item[0])
++
++        result = {key: _sort_keys(value) for _, key, value in supported}
++        result.update((key, _sort_keys(value)) for key, value in other)
++        return result
++
++    if isinstance(obj, (list, tuple)):
++        return [_sort_keys(item) for item in obj]
++
++    return obj
++
++
+ class Storage(ABC):
+     """
+     The abstract base class for all Storages.
+@@ -98,11 +141,16 @@ class JSONStorage(Storage):
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
++        :param sort_keys: Whether to write dict keys in sorted order (default:
++                          ``True``). Keys of mixed types are sorted by their
++                          JSON string form. Pass ``False`` to keep insertion
++                          order.
+         """
+ 
+         super().__init__()
+ 
+         self._mode = access_mode
++        self._sort_keys = kwargs.pop('sort_keys', True)
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+@@ -144,6 +192,9 @@ class JSONStorage(Storage):
+         self._handle.seek(0)
+ 
+         # Serialize the database state using the user-provided arguments
++        if self._sort_keys:
++            data = _sort_keys(data)
++
+         serialized = json.dumps(data, **self.kwargs)
+ 
+         # Write the serialized data to the file

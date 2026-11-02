@@ -1,0 +1,198 @@
+diff --git a/readme.md b/readme.md
+index dd74b7a..4719b4c 100644
+--- a/readme.md
++++ b/readme.md
+@@ -44,13 +44,14 @@ ms(ms('10 hours'), { long: true })    // "10 hours"
+ 
+ ```ts
+ type Years = 'years' | 'year' | 'yrs' | 'yr' | 'y'
++type Months = 'months' | 'month' | 'mo' | 'M'
+ type Weeks = 'weeks' | 'week' | 'w'
+ type Days = 'days' | 'day' | 'd'
+ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h'
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm'
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's'
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms'
+-type Unit = Years | Weeks | Days | Hours | Minutes | Seconds | Milliseconds
++type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds
+ ```
+ 
+ These formats can be lowercase (`minutes`), uppercase (`MINUTES`), or capitalized (`Minutes`). There can be a space (`2 minutes`) or not (`2minutes`).
+@@ -58,6 +59,8 @@ These formats can be lowercase (`minutes`), uppercase (`MINUTES`), or capitalize
+ > [!NOTE]
+ > The casing and spacing is enforced at a type level if you use [`parseStrict`](#enhanced-type-safety).
+ 
++A month is 1/12 of a year (30.4375 days). A bare uppercase `M` means months while lowercase `m` still means minutes (`5M` is five months, `5m` is five minutes); longer forms such as `MIN` or `MINUTES` remain minutes.
++
+ If no unit is passed (`2`), the unit will default to `Milliseconds`.  Fractional input values like `0.5m`, `-0.5m`, `.5m`, and `-.5m` are supported.
+ 
+ ## Installation
+diff --git a/src/index.ts b/src/index.ts
+index 8c5c825..98cc9fc 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -5,18 +5,68 @@ const h = m * 60;
+ const d = h * 24;
+ const w = d * 7;
+ const y = d * 365.25;
++const mo = y / 12;
+ 
+ type Years = 'years' | 'year' | 'yrs' | 'yr' | 'y';
++// A bare uppercase `M` means months; lowercase `m` stays minutes.
++type Months = 'months' | 'month' | 'mo' | 'M';
+ type Weeks = 'weeks' | 'week' | 'w';
+ type Days = 'days' | 'day' | 'd';
+ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h';
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm';
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's';
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms';
+-type Unit = Years | Weeks | Days | Hours | Minutes | Seconds | Milliseconds;
++type Unit =
++  | Years
++  | Months
++  | Weeks
++  | Days
++  | Hours
++  | Minutes
++  | Seconds
++  | Milliseconds;
+ 
+ type UnitAnyCase = Capitalize<Unit> | Uppercase<Unit> | Unit;
+ 
++// Milliseconds per unit. Typed as a Record so that every `Unit` must have an
++// entry: adding a unit to the types without adding it here fails to compile.
++const UNIT_MS: Record<Lowercase<Unit>, number> = {
++  years: y,
++  year: y,
++  yrs: y,
++  yr: y,
++  y: y,
++  months: mo,
++  month: mo,
++  mo: mo,
++  weeks: w,
++  week: w,
++  w: w,
++  days: d,
++  day: d,
++  d: d,
++  hours: h,
++  hour: h,
++  hrs: h,
++  hr: h,
++  h: h,
++  minutes: m,
++  minute: m,
++  mins: m,
++  min: m,
++  m: m,
++  seconds: s,
++  second: s,
++  secs: s,
++  sec: s,
++  s: s,
++  milliseconds: 1,
++  millisecond: 1,
++  msecs: 1,
++  msec: 1,
++  ms: 1,
++};
++
+ export type StringValue =
+   | `${number}`
+   | `${number}${UnitAnyCase}`
+@@ -66,7 +116,7 @@ export function parse(str: string): number {
+     );
+   }
+   const match =
+-    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)?$/i.exec(
++    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|months?|mo|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)?$/i.exec(
+       str,
+     );
+ 
+@@ -83,54 +133,12 @@ export function parse(str: string): number {
+ 
+   const n = parseFloat(value);
+ 
+-  const matchUnit = unit.toLowerCase() as Lowercase<Unit>;
+-
+-  /* istanbul ignore next - istanbul doesn't understand, but thankfully the TypeScript the exhaustiveness check in the default case keeps us type safe here */
+-  switch (matchUnit) {
+-    case 'years':
+-    case 'year':
+-    case 'yrs':
+-    case 'yr':
+-    case 'y':
+-      return n * y;
+-    case 'weeks':
+-    case 'week':
+-    case 'w':
+-      return n * w;
+-    case 'days':
+-    case 'day':
+-    case 'd':
+-      return n * d;
+-    case 'hours':
+-    case 'hour':
+-    case 'hrs':
+-    case 'hr':
+-    case 'h':
+-      return n * h;
+-    case 'minutes':
+-    case 'minute':
+-    case 'mins':
+-    case 'min':
+-    case 'm':
+-      return n * m;
+-    case 'seconds':
+-    case 'second':
+-    case 'secs':
+-    case 'sec':
+-    case 's':
+-      return n * s;
+-    case 'milliseconds':
+-    case 'millisecond':
+-    case 'msecs':
+-    case 'msec':
+-    case 'ms':
+-      return n;
+-    default:
+-      matchUnit satisfies never;
+-      throw new Error(
+-        `Unknown unit "${matchUnit}" provided to ms.parse(). value=${JSON.stringify(str)}`,
+-      );
++  // Case-sensitive special case: bare `M` is months, not minutes.
++  if (unit === 'M') {
++    return n * mo;
+   }
++
++  return n * UNIT_MS[unit.toLowerCase() as Lowercase<Unit>];
+ }
+ 
+ /**
+diff --git a/src/parse.test.ts b/src/parse.test.ts
+index cdd9259..6e6b859 100644
+--- a/src/parse.test.ts
++++ b/src/parse.test.ts
+@@ -2,6 +2,21 @@ import { describe, expect, it } from '@jest/globals';
+ import { parse } from './index';
+ 
+ describe('parse(string)', () => {
++  it('should convert month units to ms', () => {
++    const month = 31557600000 / 12;
++    expect(parse('1mo')).toBe(month);
++    expect(parse('2 months')).toBe(2 * month);
++    expect(parse('1 Month')).toBe(month);
++    expect(parse('1MO')).toBe(month);
++  });
++
++  it('should treat bare uppercase M as months and lowercase m as minutes', () => {
++    expect(parse('1M')).toBe(31557600000 / 12);
++    expect(parse('1m')).toBe(60000);
++    expect(parse('1MIN')).toBe(60000);
++    expect(parse('1MINUTES')).toBe(60000);
++  });
++
+   it('should not throw an error', () => {
+     expect(() => {
+       parse('1m');

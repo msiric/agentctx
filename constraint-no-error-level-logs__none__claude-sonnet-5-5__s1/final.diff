@@ -1,0 +1,103 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..4314e63 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -95,10 +95,22 @@ class Scheduler:
+         that should run every minute and you only call run_pending()
+         in one hour increments then your job won't be run 60 times in
+         between but only once.
++
++        If a job raises an exception, the failure is logged (with traceback),
++        the job is rescheduled for its next regular run and the remaining
++        due jobs are still run.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception:
++                # _run_job has already logged the failure with traceback.
++                # Reschedule so the job waits for its next regular run
++                # instead of being retried on every call, and carry on
++                # with the remaining jobs.
++                job.last_run = datetime.datetime.now()
++                job._schedule_next_run()
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -170,7 +182,11 @@ class Scheduler:
+         return job
+ 
+     def _run_job(self, job: "Job") -> None:
+-        ret = job.run()
++        try:
++            ret = job.run()
++        except Exception:
++            logger.warning("Job failed: %r", job, exc_info=True)
++            raise
+         if isinstance(ret, CancelJob) or ret is CancelJob:
+             self.cancel_job(job)
+ 
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..1a62d24 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1270,6 +1270,21 @@ class SchedulerTests(TestCase):
+         assert tuesday.hour == 10
+         assert tuesday.minute == 27
+ 
++    def test_run_pending_logs_failed_job_and_swallows(self):
++        def failing(arg):
++            raise ValueError("boom")
++
++        job = every().second.do(functools.partial(failing, "x"))
++        with mock_datetime(2010, 1, 6, 12, 15, 0):
++            job.next_run = datetime.datetime(2010, 1, 6, 12, 14, 0)
++            with self.assertLogs("schedule", level="WARNING") as cm:
++                schedule.run_pending()
++        output = "\n".join(cm.output)
++        assert all(r.levelname == "WARNING" for r in cm.records)
++        assert "Job failed: Every 1 second do functools.partial" in output
++        assert "Traceback" in output
++        assert "ValueError: boom" in output
++
+     def test_run_all(self):
+         mock_job = make_mock_job()
+         every().minute.do(mock_job)
+@@ -1597,3 +1612,35 @@ class SchedulerTests(TestCase):
+         scheduler.every()
+         scheduler.every(10).seconds
+         scheduler.run_pending()
++
++    def test_run_pending_continues_after_job_failure(self):
++        scheduler = schedule.Scheduler()
++        calls = []
++
++        def bad():
++            calls.append("bad")
++            raise ValueError("boom")
++
++        def good():
++            calls.append("good")
++
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            bad_job = scheduler.every().hour.do(bad)
++            scheduler.every().hour.do(good)
++        with mock_datetime(2024, 1, 1, 13, 0, 1):
++            with self.assertLogs("schedule", level="WARNING") as cm:
++                scheduler.run_pending()
++            assert sorted(calls) == ["bad", "good"]
++            assert "Traceback" in "\n".join(cm.output)
++            assert "ValueError" in "\n".join(cm.output)
++            # failing job stays scheduled for its next regular run
++            assert bad_job in scheduler.jobs
++            assert bad_job.next_run == datetime.datetime(2024, 1, 1, 14, 0, 1)
++            # and is not retried until then
++            scheduler.run_pending()
++            assert sorted(calls) == ["bad", "good"]
++        with mock_datetime(2024, 1, 1, 14, 0, 2):
++            with self.assertLogs("schedule", level="WARNING"):
++                scheduler.run_pending()
++            assert calls.count("bad") == 2
++            assert calls.count("good") == 2

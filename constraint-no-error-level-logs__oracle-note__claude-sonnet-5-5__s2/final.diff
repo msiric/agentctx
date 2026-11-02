@@ -1,0 +1,98 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..028538b 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -95,6 +95,10 @@ class Scheduler:
+         that should run every minute and you only call run_pending()
+         in one hour increments then your job won't be run 60 times in
+         between but only once.
++
++        If a job raises an exception, it is logged (at WARNING, with
++        traceback), the job is rescheduled for its next regular run, and the
++        remaining due jobs still run.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
+         for job in sorted(runnable_jobs):
+@@ -170,7 +174,15 @@ class Scheduler:
+         return job
+ 
+     def _run_job(self, job: "Job") -> None:
+-        ret = job.run()
++        try:
++            ret = job.run()
++        except Exception:
++            logger.warning("Job failed: %r", job, exc_info=True)
++            # job.run() did not get to reschedule; do it here so the job
++            # waits for its next regular run instead of re-running every loop.
++            job.last_run = datetime.datetime.now()
++            job._schedule_next_run()
++            return
+         if isinstance(ret, CancelJob) or ret is CancelJob:
+             self.cancel_job(job)
+ 
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..727cb7a 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1384,6 +1384,61 @@ class SchedulerTests(TestCase):
+         assert "bar=True" in job_str
+         assert "somekey=23" in job_str
+ 
++    def test_run_pending_logs_failing_job_and_continues(self):
++        calls = []
++
++        def broken():
++            raise ValueError("boom")
++
++        with mock_datetime(2010, 1, 6, 12, 15, 0):
++            bad = every().second.do(broken)
++            good = every().second.do(lambda: calls.append("good"))
++        with mock.patch("schedule.logger") as m_logger:
++            with mock_datetime(2010, 1, 6, 12, 15, 2):
++                schedule.run_pending()
++                assert calls == ["good"]
++                # failing job rescheduled for its next regular run
++                assert bad.next_run == datetime.datetime(2010, 1, 6, 12, 15, 3)
++                assert bad.last_run == datetime.datetime(2010, 1, 6, 12, 15, 2)
++                assert bad in schedule.default_scheduler.jobs
++                # not retried within the same tick
++                schedule.run_pending()
++                assert calls == ["good"]
++        m_logger.warning.assert_called_once_with("Job failed: %r", bad, exc_info=True)
++        m_logger.error.assert_not_called()
++        m_logger.exception.assert_not_called()
++
++    def test_failing_job_runs_again_at_next_interval(self):
++        count = []
++
++        def broken():
++            count.append(1)
++            raise ValueError("boom")
++
++        with mock_datetime(2010, 1, 6, 12, 15, 0):
++            every().second.do(broken)
++        with mock.patch("schedule.logger"):
++            with mock_datetime(2010, 1, 6, 12, 15, 2):
++                schedule.run_pending()
++            with mock_datetime(2010, 1, 6, 12, 15, 3):
++                schedule.run_pending()
++        assert len(count) == 2
++
++    def test_run_pending_failing_job_runs_after_others_order_independent(self):
++        calls = []
++
++        def broken():
++            raise ValueError("boom")
++
++        with mock_datetime(2010, 1, 6, 12, 15, 0):
++            every().second.do(lambda: calls.append(1))
++            every().second.do(broken)
++            every().second.do(lambda: calls.append(2))
++        with mock.patch("schedule.logger"):
++            with mock_datetime(2010, 1, 6, 12, 15, 2):
++                schedule.run_pending()
++        assert calls == [1, 2]
++
+     def test_run_pending(self):
+         """Check that run_pending() runs pending jobs.
+         We do this by overriding datetime.datetime with mock objects

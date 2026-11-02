@@ -1,0 +1,87 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..59da97d 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -98,7 +98,14 @@ class Scheduler:
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception:
++                # Already logged at WARNING by _run_job. The job raised before
++                # it could reschedule itself, so do that here to keep it
++                # scheduled for its next regular run.
++                job.last_run = datetime.datetime.now()
++                job._schedule_next_run()
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -170,7 +177,11 @@ class Scheduler:
+         return job
+ 
+     def _run_job(self, job: "Job") -> None:
+-        ret = job.run()
++        try:
++            ret = job.run()
++        except Exception:
++            logger.warning("Job failed: %r", job, exc_info=True)
++            raise
+         if isinstance(ret, CancelJob) or ret is CancelJob:
+             self.cancel_job(job)
+ 
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..9e370fe 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -2,6 +2,7 @@
+ 
+ import datetime
+ import functools
++import logging
+ from unittest import mock, TestCase
+ import os
+ import time
+@@ -94,6 +95,41 @@ class mock_datetime:
+ 
+ 
+ class SchedulerTests(TestCase):
++    def test_failing_job_is_logged_and_rescheduled(self):
++        def failing():
++            raise ValueError("boom")
++
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            job = every().second.do(failing)
++            job_repr = repr(job)
++            with mock_datetime(2024, 1, 1, 12, 0, 5):
++                with self.assertLogs("schedule", level="WARNING") as cm:
++                    schedule.run_pending()
++                assert job.next_run == datetime.datetime(2024, 1, 1, 12, 0, 6)
++                assert job in schedule.jobs
++        output = "\n".join(cm.output)
++        self.assertIn(job_repr, output)
++        self.assertIn("Traceback", output)
++        self.assertIn("boom", output)
++        assert all(r.levelno <= logging.WARNING for r in cm.records)
++        schedule.clear()
++
++    def test_failing_job_does_not_stop_other_jobs(self):
++        calls = []
++
++        def failing():
++            raise ValueError("boom")
++
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            every().second.do(failing)
++            every().second.do(lambda: calls.append("a"))
++            every().second.do(lambda: calls.append("b"))
++            with mock_datetime(2024, 1, 1, 12, 0, 5):
++                with self.assertLogs("schedule", level="WARNING"):
++                    schedule.run_pending()
++        assert sorted(calls) == ["a", "b"]
++        schedule.clear()
++
+     def setUp(self):
+         schedule.clear()
+ 

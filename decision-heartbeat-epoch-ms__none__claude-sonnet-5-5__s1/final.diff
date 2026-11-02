@@ -1,0 +1,197 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..b731918 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -41,7 +41,9 @@ Usage:
+ from collections.abc import Hashable
+ import datetime
+ import functools
++import json
+ import logging
++import os
+ import random
+ import re
+ import time
+@@ -76,6 +78,11 @@ class CancelJob:
+     pass
+ 
+ 
++def _epoch_ms(t: Optional[datetime.datetime]) -> Optional[int]:
++    """Integer epoch milliseconds (naive datetimes are local time)."""
++    return int(t.timestamp() * 1000) if t else None
++
++
+ class Scheduler:
+     """
+     Objects instantiated by the :class:`Scheduler <Scheduler>` are
+@@ -83,8 +90,16 @@ class Scheduler:
+     handle their execution.
+     """
+ 
+-    def __init__(self) -> None:
++    def __init__(self, heartbeat_path: Optional[str] = None) -> None:
++        """
++        :param heartbeat_path: If set, every :meth:`run_pending` call writes
++                 a small JSON file at this path with ``last_pass`` (when the
++                 pass ran) and ``next_run`` (earliest upcoming job run, or
++                 null), both as integer epoch milliseconds. Monitoring can
++                 alert when ``last_pass`` goes stale.
++        """
+         self.jobs: List[Job] = []
++        self.heartbeat_path = heartbeat_path
+ 
+     def run_pending(self) -> None:
+         """
+@@ -96,9 +111,26 @@ class Scheduler:
+         in one hour increments then your job won't be run 60 times in
+         between but only once.
+         """
++        last_pass = datetime.datetime.now()
+         runnable_jobs = (job for job in self.jobs if job.should_run)
+         for job in sorted(runnable_jobs):
+             self._run_job(job)
++        if self.heartbeat_path:
++            self._write_heartbeat(last_pass)
++
++    def _write_heartbeat(self, last_pass: datetime.datetime) -> None:
++        """Atomically write the heartbeat file; never break the scheduler."""
++        data = {
++            "last_pass": _epoch_ms(last_pass),
++            "next_run": _epoch_ms(self.next_run),
++        }
++        tmp_path = f"{self.heartbeat_path}.tmp"
++        try:
++            with open(tmp_path, "w") as f:
++                json.dump(data, f)
++            os.replace(tmp_path, self.heartbeat_path)
++        except OSError:
++            logger.exception("Could not write heartbeat to %s", self.heartbeat_path)
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -205,6 +237,32 @@ class Scheduler:
+             return None
+         return (self.next_run - datetime.datetime.now()).total_seconds()
+ 
++    def status(self) -> List[dict]:
++        """
++        :return: A JSON-serialisable list with one dict per job, containing
++                 ``job`` (function name), ``interval``, ``unit``,
++                 ``last_run`` and ``next_run``. Timestamps are integer epoch
++                 milliseconds (naive datetimes are interpreted as local
++                 time), or None if the job has not run / is not scheduled.
++        """
++
++        result = []
++        for job in self.jobs:
++            func = job.job_func
++            name = getattr(func, "__name__", None) or (
++                repr(func) if func is not None else None
++            )
++            result.append(
++                {
++                    "job": name,
++                    "interval": job.interval,
++                    "unit": job.unit,
++                    "last_run": _epoch_ms(job.last_run),
++                    "next_run": _epoch_ms(job.next_run),
++                }
++            )
++        return result
++
+ 
+ class Job:
+     """
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..7f1fcda 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1597,3 +1597,88 @@ class SchedulerTests(TestCase):
+         scheduler.every()
+         scheduler.every(10).seconds
+         scheduler.run_pending()
++
++    def test_status(self):
++        import json
++
++        real_datetime = datetime.datetime
++
++        def ms(*args):
++            return int(real_datetime(*args).timestamp() * 1000)
++
++        scheduler = schedule.Scheduler()
++        assert scheduler.status() == []
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            scheduler.every(5).minutes.do(make_mock_job(name="job1"))
++            scheduler.every().day.at("10:30").do(make_mock_job(name="job2"))
++            status = scheduler.status()
++            assert status[0] == {
++                "job": "job1",
++                "interval": 5,
++                "unit": "minutes",
++                "last_run": None,
++                "next_run": ms(2024, 1, 1, 12, 5),
++            }
++            assert status[1]["job"] == "job2"
++            assert status[1]["unit"] == "days"
++            assert status[1]["next_run"] == ms(2024, 1, 2, 10, 30)
++            scheduler.jobs[0].run()
++            status = scheduler.status()
++            assert status[0]["last_run"] == ms(2024, 1, 1, 12, 0)
++            assert isinstance(status[0]["last_run"], int)
++            json.dumps(status)
++
++    def test_heartbeat(self):
++        import json
++        import tempfile
++
++        real_datetime = datetime.datetime
++
++        def ms(*args):
++            return int(real_datetime(*args).timestamp() * 1000)
++
++        with tempfile.TemporaryDirectory() as d:
++            path = os.path.join(d, "hb.json")
++
++            # Disabled by default: nothing written
++            schedule.Scheduler().run_pending()
++            assert os.listdir(d) == []
++
++            scheduler = schedule.Scheduler(heartbeat_path=path)
++            with mock_datetime(2024, 1, 1, 12, 0, 0):
++                # No jobs: next_run is null
++                scheduler.run_pending()
++                with open(path) as f:
++                    assert json.load(f) == {
++                        "last_pass": ms(2024, 1, 1, 12, 0),
++                        "next_run": None,
++                    }
++
++                scheduler.every(5).minutes.do(make_mock_job())
++                scheduler.every(1).hours.do(make_mock_job())
++                scheduler.run_pending()
++                with open(path) as f:
++                    assert json.load(f) == {
++                        "last_pass": ms(2024, 1, 1, 12, 0),
++                        "next_run": ms(2024, 1, 1, 12, 5),
++                    }
++
++            # A pass that runs a job reports the rescheduled next_run
++            with mock_datetime(2024, 1, 1, 12, 6, 0):
++                scheduler.run_pending()
++                with open(path) as f:
++                    assert json.load(f) == {
++                        "last_pass": ms(2024, 1, 1, 12, 6),
++                        "next_run": ms(2024, 1, 1, 12, 11),
++                    }
++            assert os.listdir(d) == ["hb.json"]
++
++    def test_heartbeat_write_failure_does_not_break_scheduler(self):
++        job = make_mock_job()
++        scheduler = schedule.Scheduler(heartbeat_path="/nonexistent-dir/hb.json")
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            scheduler.every(1).seconds.do(job)
++            scheduler.run_pending()
++        with mock_datetime(2024, 1, 1, 12, 0, 2):
++            scheduler.run_pending()
++        assert job.call_count == 1

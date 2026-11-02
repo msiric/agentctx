@@ -1,0 +1,172 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..e82c668 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -41,6 +41,8 @@ Usage:
+ from collections.abc import Hashable
+ import datetime
+ import functools
++import json
++import os
+ import logging
+ import random
+ import re
+@@ -83,8 +85,15 @@ class Scheduler:
+     handle their execution.
+     """
+ 
+-    def __init__(self) -> None:
++    def __init__(self, heartbeat_path: Optional[str] = None) -> None:
++        """
++        :param heartbeat_path: If set, every :meth:`run_pending` call writes
++                               a JSON file here with ``last_pass`` and
++                               ``next_run`` (epoch milliseconds, integers;
++                               ``next_run`` is null if there are no jobs).
++        """
+         self.jobs: List[Job] = []
++        self.heartbeat_path = heartbeat_path
+ 
+     def run_pending(self) -> None:
+         """
+@@ -99,6 +108,20 @@ class Scheduler:
+         runnable_jobs = (job for job in self.jobs if job.should_run)
+         for job in sorted(runnable_jobs):
+             self._run_job(job)
++        if self.heartbeat_path is not None:
++            self._write_heartbeat()
++
++    def _write_heartbeat(self) -> None:
++        """Atomically write the heartbeat file (see ``heartbeat_path``)."""
++        next_run = self.get_next_run()
++        payload = {
++            "last_pass": _epoch_ms(datetime.datetime.now()),
++            "next_run": _epoch_ms(next_run) if next_run is not None else None,
++        }
++        tmp_path = f"{self.heartbeat_path}.tmp"
++        with open(tmp_path, "w") as f:
++            json.dump(payload, f)
++        os.replace(tmp_path, self.heartbeat_path)
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -205,6 +228,32 @@ class Scheduler:
+             return None
+         return (self.next_run - datetime.datetime.now()).total_seconds()
+ 
++    def status(self) -> List[dict]:
++        """
++        Describe every scheduled job in a JSON-serialisable form.
++
++        :return: A list with one dict per job, with the keys ``job``
++                 (name of the job function), ``interval``, ``unit``,
++                 ``last_run`` and ``next_run``. Datetimes are epoch
++                 milliseconds as integers (naive datetimes are taken
++                 as local time), or None if not set (e.g. never run).
++        """
++
++        result = []
++        for job in self.jobs:
++            func = job.job_func
++            name = getattr(func, "__name__", None) or repr(func)
++            result.append(
++                {
++                    "job": name,
++                    "interval": job.interval,
++                    "unit": job.unit,
++                    "last_run": _epoch_ms(job.last_run),
++                    "next_run": _epoch_ms(job.next_run),
++                }
++            )
++        return result
++
+ 
+ class Job:
+     """
+@@ -847,6 +896,11 @@ def every(interval: int = 1) -> Job:
+     return default_scheduler.every(interval)
+ 
+ 
++def _epoch_ms(moment: Optional[datetime.datetime]) -> Optional[int]:
++    """Naive datetimes are taken as local time."""
++    return round(moment.timestamp() * 1000) if moment is not None else None
++
++
+ def run_pending() -> None:
+     """Calls :meth:`run_pending <Scheduler.run_pending>` on the
+     :data:`default scheduler instance <default_scheduler>`.
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..8009829 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1597,3 +1597,71 @@ class SchedulerTests(TestCase):
+         scheduler.every()
+         scheduler.every(10).seconds
+         scheduler.run_pending()
++
++    def test_status(self):
++        import json
++
++        def my_job():
++            pass
++
++        scheduler = schedule.Scheduler()
++        assert scheduler.status() == []
++        scheduler.every(5).minutes.do(my_job)
++        with mock_datetime(2024, 1, 1, 12, 0, 0):
++            scheduler.every().day.at("10:30").do(my_job)
++            first = scheduler.jobs[0]
++            first.last_run = datetime.datetime(2024, 1, 1, 11, 0, 0)
++        status = scheduler.status()
++        assert len(status) == 2
++        assert status[0]["job"] == "my_job"
++        assert status[0]["interval"] == 5
++        assert status[0]["unit"] == "minutes"
++        assert status[0]["last_run"] == int(
++            datetime.datetime(2024, 1, 1, 11, 0, 0).timestamp() * 1000
++        )
++        assert isinstance(status[0]["last_run"], int)
++        assert status[0]["next_run"] == round(first.next_run.timestamp() * 1000)
++        assert status[1]["unit"] == "days"
++        assert status[1]["last_run"] is None
++        assert status[1]["next_run"] == int(
++            datetime.datetime(2024, 1, 2, 10, 30, 0).timestamp() * 1000
++        )
++        json.dumps(status)
++
++    def test_heartbeat(self):
++        import json
++        import tempfile
++
++        with tempfile.TemporaryDirectory() as tmp:
++            path = os.path.join(tmp, "heartbeat.json")
++            scheduler = schedule.Scheduler(heartbeat_path=path)
++
++            # No jobs: next_run is null
++            with mock_datetime(2024, 1, 1, 12, 0, 0):
++                scheduler.run_pending()
++                now_ms = int(datetime.datetime.now().timestamp() * 1000)
++            with open(path) as f:
++                beat = json.load(f)
++            assert beat == {"last_pass": now_ms, "next_run": None}
++            assert isinstance(beat["last_pass"], int)
++
++            # With jobs: next_run is the earliest, last_pass updates
++            with mock_datetime(2024, 1, 1, 12, 0, 0):
++                scheduler.every(10).minutes.do(lambda: None)
++                scheduler.every(5).minutes.do(lambda: None)
++            with mock_datetime(2024, 1, 1, 12, 1, 0):
++                scheduler.run_pending()
++                now_ms = int(datetime.datetime.now().timestamp() * 1000)
++            with open(path) as f:
++                beat = json.load(f)
++            assert beat["last_pass"] == now_ms
++            assert beat["next_run"] == int(
++                datetime.datetime(2024, 1, 1, 12, 5, 0).timestamp() * 1000
++            )
++            assert isinstance(beat["next_run"], int)
++            assert os.listdir(tmp) == ["heartbeat.json"]
++
++    def test_heartbeat_disabled_by_default(self):
++        scheduler = schedule.Scheduler()
++        assert scheduler.heartbeat_path is None
++        scheduler.run_pending()  # must not write anything or raise

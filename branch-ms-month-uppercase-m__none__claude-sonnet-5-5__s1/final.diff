@@ -1,0 +1,190 @@
+diff --git a/readme.md b/readme.md
+index dd74b7a..297fb3b 100644
+--- a/readme.md
++++ b/readme.md
+@@ -44,13 +44,14 @@ ms(ms('10 hours'), { long: true })    // "10 hours"
+ 
+ ```ts
+ type Years = 'years' | 'year' | 'yrs' | 'yr' | 'y'
++type Months = 'months' | 'month' | 'mo'
+ type Weeks = 'weeks' | 'week' | 'w'
+ type Days = 'days' | 'day' | 'd'
+ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h'
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm'
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's'
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms'
+-type Unit = Years | Weeks | Days | Hours | Minutes | Seconds | Milliseconds
++type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds
+ ```
+ 
+ These formats can be lowercase (`minutes`), uppercase (`MINUTES`), or capitalized (`Minutes`). There can be a space (`2 minutes`) or not (`2minutes`).
+diff --git a/src/index.ts b/src/index.ts
+index 8c5c825..238a53c 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -5,15 +5,75 @@ const h = m * 60;
+ const d = h * 24;
+ const w = d * 7;
+ const y = d * 365.25;
++const mo = y / 12;
+ 
+ type Years = 'years' | 'year' | 'yrs' | 'yr' | 'y';
++type Months = 'months' | 'month' | 'mo';
+ type Weeks = 'weeks' | 'week' | 'w';
+ type Days = 'days' | 'day' | 'd';
+ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h';
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm';
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's';
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms';
+-type Unit = Years | Weeks | Days | Hours | Minutes | Seconds | Milliseconds;
++type Unit =
++  | Years
++  | Months
++  | Weeks
++  | Days
++  | Hours
++  | Minutes
++  | Seconds
++  | Milliseconds;
++
++// Every accepted (lowercase) unit and its value in milliseconds. To support a
++// new unit, add its name to the `Unit` types above and one line here; the
++// parsing regex is derived from this table, and TypeScript enforces that the
++// two stay in sync.
++const UNITS: Record<Lowercase<Unit>, number> = {
++  years: y,
++  year: y,
++  yrs: y,
++  yr: y,
++  y: y,
++  months: mo,
++  month: mo,
++  mo: mo,
++  weeks: w,
++  week: w,
++  w: w,
++  days: d,
++  day: d,
++  d: d,
++  hours: h,
++  hour: h,
++  hrs: h,
++  hr: h,
++  h: h,
++  minutes: m,
++  minute: m,
++  mins: m,
++  min: m,
++  m: m,
++  seconds: s,
++  second: s,
++  secs: s,
++  sec: s,
++  s: s,
++  milliseconds: 1,
++  millisecond: 1,
++  msecs: 1,
++  msec: 1,
++  ms: 1,
++};
++
++// Longest names first so that e.g. `minutes` is preferred over `min` or `m`.
++const UNIT_PATTERN = Object.keys(UNITS)
++  .sort((a, b) => b.length - a.length)
++  .join('|');
++const PARSE_REGEX = new RegExp(
++  `^(?<value>-?\\d*\\.?\\d+) *(?<unit>${UNIT_PATTERN})?$`,
++  'i',
++);
+ 
+ type UnitAnyCase = Capitalize<Unit> | Uppercase<Unit> | Unit;
+ 
+@@ -65,10 +125,7 @@ export function parse(str: string): number {
+       `Value provided to ms.parse() must be a string with length between 1 and 99. value=${JSON.stringify(str)}`,
+     );
+   }
+-  const match =
+-    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)?$/i.exec(
+-      str,
+-    );
++  const match = PARSE_REGEX.exec(str);
+ 
+   if (!match?.groups) {
+     return NaN;
+@@ -83,54 +140,9 @@ export function parse(str: string): number {
+ 
+   const n = parseFloat(value);
+ 
+-  const matchUnit = unit.toLowerCase() as Lowercase<Unit>;
+-
+-  /* istanbul ignore next - istanbul doesn't understand, but thankfully the TypeScript the exhaustiveness check in the default case keeps us type safe here */
+-  switch (matchUnit) {
+-    case 'years':
+-    case 'year':
+-    case 'yrs':
+-    case 'yr':
+-    case 'y':
+-      return n * y;
+-    case 'weeks':
+-    case 'week':
+-    case 'w':
+-      return n * w;
+-    case 'days':
+-    case 'day':
+-    case 'd':
+-      return n * d;
+-    case 'hours':
+-    case 'hour':
+-    case 'hrs':
+-    case 'hr':
+-    case 'h':
+-      return n * h;
+-    case 'minutes':
+-    case 'minute':
+-    case 'mins':
+-    case 'min':
+-    case 'm':
+-      return n * m;
+-    case 'seconds':
+-    case 'second':
+-    case 'secs':
+-    case 'sec':
+-    case 's':
+-      return n * s;
+-    case 'milliseconds':
+-    case 'millisecond':
+-    case 'msecs':
+-    case 'msec':
+-    case 'ms':
+-      return n;
+-    default:
+-      matchUnit satisfies never;
+-      throw new Error(
+-        `Unknown unit "${matchUnit}" provided to ms.parse(). value=${JSON.stringify(str)}`,
+-      );
+-  }
++  const matchUnit = unit.toLowerCase() as Unit;
++
++  return n * UNITS[matchUnit];
+ }
+ 
+ /**
+diff --git a/src/parse.test.ts b/src/parse.test.ts
+index cdd9259..7bb6d46 100644
+--- a/src/parse.test.ts
++++ b/src/parse.test.ts
+@@ -117,6 +117,14 @@ describe('parse(long string)', () => {
+     expect(parse('1 week')).toBe(604800000);
+   });
+ 
++  it('should convert months to ms', () => {
++    expect(parse('1 month')).toBe(2629800000);
++    expect(parse('2 months')).toBe(5259600000);
++    expect(parse('1mo')).toBe(2629800000);
++    expect(parse('1 MONTH')).toBe(2629800000);
++    expect(parse('12 months')).toBe(parse('1 year'));
++  });
++
+   it('should convert years to ms', () => {
+     expect(parse('1 year')).toBe(31557600000);
+   });

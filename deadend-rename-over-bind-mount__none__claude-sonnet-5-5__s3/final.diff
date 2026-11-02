@@ -1,0 +1,179 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..3aa4276 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,76 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_write_is_atomic_on_crash(tmpdir, monkeypatch):
++    """A crash while writing must leave the old, readable database behind."""
++    path = str(tmpdir.join('test.db'))
++
++    db = TinyDB(path)
++    db.insert({'a': 1})
++    db.close()
++
++    # Simulate the process dying mid-write: the temp file is only partially
++    # written when the "crash" happens.
++    def crash(fd):
++        raise KeyboardInterrupt('simulated kill')
++
++    monkeypatch.setattr(os, 'fsync', crash)
++    db = TinyDB(path)
++    with pytest.raises(KeyboardInterrupt):
++        db.insert({'b': 2})
++    monkeypatch.undo()
++
++    # Database file is still the complete old state, and no temp files leak
++    assert json.load(open(path)) == {'_default': {'1': {'a': 1}}}
++    assert os.listdir(str(tmpdir)) == ['test.db']
++
++    db = TinyDB(path)
++    assert db.all() == [{'a': 1}]
++    db.close()
++
++
++def test_json_crash_before_replace_keeps_old_state(tmpdir, monkeypatch):
++    path = str(tmpdir.join('test.db'))
++    db = TinyDB(path)
++    db.insert({'a': 1})
++    db.close()
++
++    def crash(src, dst):
++        raise SystemExit('simulated kill')
++
++    monkeypatch.setattr(os, 'replace', crash)
++    db = TinyDB(path)
++    with pytest.raises(SystemExit):
++        db.insert({'b': 2})
++    monkeypatch.undo()
++
++    assert TinyDB(path).all() == [{'a': 1}]
++
++
++def test_json_serialization_error_keeps_data(tmpdir):
++    path = str(tmpdir.join('test.db'))
++    db = TinyDB(path)
++    db.insert({'a': 1})
++    with pytest.raises(TypeError):
++        db.insert({'b': object()})
++    db.close()
++
++    assert TinyDB(path).all() == [{'a': 1}]
++
++
++def test_json_multiple_writes_and_permissions(tmpdir):
++    path = str(tmpdir.join('test.db'))
++    db = TinyDB(path)
++    db.insert({'a': 1})
++    os.chmod(path, 0o640)
++    for i in range(5):
++        db.insert({'i': i})
++    assert len(db) == 6
++    db.close()
++
++    assert len(TinyDB(path)) == 6
++    assert os.listdir(str(tmpdir)) == ['test.db']
++    if os.name == 'posix':
++        assert os.stat(path).st_mode & 0o777 == 0o640
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..c48bc58 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -6,6 +6,7 @@ implementations.
+ import io
+ import json
+ import os
++import tempfile
+ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+@@ -116,6 +117,10 @@ class JSONStorage(Storage):
+         if any([character in self._mode for character in ('+', 'w', 'a')]):  # any of the writing modes
+             touch(path, create_dirs=create_dirs)
+ 
++        # Resolve symlinks so that atomic replacement updates the real file
++        self._path = os.path.realpath(path)
++        self._encoding = encoding
++
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
+@@ -140,25 +145,59 @@ class JSONStorage(Storage):
+             return json.load(self._handle)
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
+-        # Move the cursor to the beginning of the file just in case
+-        self._handle.seek(0)
++        if self._mode in ('r', 'rb'):
++            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
+ 
+-        # Serialize the database state using the user-provided arguments
++        # Serialize the database state using the user-provided arguments.
++        # Do this before touching any file so serialization errors can't
++        # damage the database.
+         serialized = json.dumps(data, **self.kwargs)
+ 
+-        # Write the serialized data to the file
++        # Crash-safe write: write the new state to a temporary file in the
++        # same directory, fsync it and atomically replace the database file.
++        # If the process dies at any point, the database file is either the
++        # complete old state or the complete new state.
++        directory = os.path.dirname(self._path) or '.'
++        fd, tmp_path = tempfile.mkstemp(
++            dir=directory, prefix=os.path.basename(self._path) + '.', suffix='.tmp'
++        )
+         try:
+-            self._handle.write(serialized)
+-        except io.UnsupportedOperation:
+-            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
+-
+-        # Ensure the file has been written
+-        self._handle.flush()
+-        os.fsync(self._handle.fileno())
+-
+-        # Remove data that is behind the new cursor in case the file has
+-        # gotten shorter
+-        self._handle.truncate()
++            try:
++                # Keep the permissions of the existing database file
++                os.chmod(tmp_path, os.stat(self._path).st_mode & 0o7777)
++            except OSError:
++                pass
++
++            with open(fd, 'w', encoding=self._encoding) as tmp:
++                tmp.write(serialized)
++                tmp.flush()
++                os.fsync(tmp.fileno())
++
++            # The open handle refers to the old file; close it so the
++            # replacement also works on Windows, then reopen the new file.
++            self._handle.close()
++            try:
++                os.replace(tmp_path, self._path)
++            finally:
++                self._handle = open(self._path, mode='r+', encoding=self._encoding)
++        except BaseException:
++            try:
++                os.unlink(tmp_path)
++            except OSError:
++                pass
++            raise
++
++        # Persist the rename itself (not possible on all platforms)
++        try:
++            dir_fd = os.open(directory, os.O_RDONLY)
++        except OSError:
++            return
++        try:
++            os.fsync(dir_fd)
++        except OSError:
++            pass
++        finally:
++            os.close(dir_fd)
+ 
+ 
+ class MemoryStorage(Storage):

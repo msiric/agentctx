@@ -1,0 +1,85 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..af12149 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -90,6 +90,10 @@ class Scheduler:
+         """
+         Run all jobs that are scheduled to run.
+ 
++        A job that raises is logged (WARNING, with traceback) and
++        rescheduled for its next regular run; the remaining due jobs
++        still run and the exception is not propagated.
++
+         Please note that it is *intended behavior that run_pending()
+         does not run missed jobs*. For example, if you've registered a job
+         that should run every minute and you only call run_pending()
+@@ -98,7 +102,7 @@ class Scheduler:
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            self._run_job(job, keep_going=True)
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -169,8 +173,20 @@ class Scheduler:
+         job = Job(interval, self)
+         return job
+ 
+-    def _run_job(self, job: "Job") -> None:
+-        ret = job.run()
++    def _run_job(self, job: "Job", keep_going: bool = False) -> None:
++        try:
++            ret = job.run()
++        except Exception:
++            logger.warning("Job failed: %r", job, exc_info=True)
++            if not keep_going:
++                raise
++            # Job.run() did not get to reschedule; do it so the job
++            # isn't re-run on every call, then carry on with other jobs.
++            job.last_run = datetime.datetime.now()
++            job._schedule_next_run()
++            if job._is_overdue(job.next_run):
++                self.cancel_job(job)
++            return
+         if isinstance(ret, CancelJob) or ret is CancelJob:
+             self.cancel_job(job)
+ 
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..36330db 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1597,3 +1597,33 @@ class SchedulerTests(TestCase):
+         scheduler.every()
+         scheduler.every(10).seconds
+         scheduler.run_pending()
++
++    def test_run_pending_logs_failing_job_and_keeps_going(self):
++        def failing(arg):
++            raise ValueError("boom")
++
++        ran = []
++        scheduler = schedule.Scheduler()
++        job = scheduler.every().second.do(functools.partial(failing, 1))
++        other = scheduler.every().second.do(lambda: ran.append(1))
++        time.sleep(1.1)
++        old_next = job.next_run
++        old_repr = repr(job)
++        with self.assertLogs("schedule", level="WARNING") as cm:
++            scheduler.run_pending()
++        self.assertEqual([r.levelname for r in cm.records], ["WARNING"])
++        output = "\n".join(cm.output)
++        self.assertIn(old_repr, output)
++        self.assertIn("Traceback", output)
++        self.assertIn("boom", output)
++        self.assertEqual(ran, [1])
++        self.assertIn(job, scheduler.jobs)
++        self.assertGreater(job.next_run, old_next)
++        self.assertFalse(job.should_run)
++
++    def test_run_all_still_raises_on_failing_job(self):
++        scheduler = schedule.Scheduler()
++        scheduler.every().second.do(lambda: 1 / 0)
++        with self.assertLogs("schedule", level="WARNING"):
++            with self.assertRaises(ZeroDivisionError):
++                scheduler.run_all()

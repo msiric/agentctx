@@ -1,0 +1,108 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..eb1d1b8 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -95,10 +95,20 @@ class Scheduler:
+         that should run every minute and you only call run_pending()
+         in one hour increments then your job won't be run 60 times in
+         between but only once.
++
++        If a job raises an exception, the failure is logged (with traceback),
++        the job is rescheduled for its next regular run and the remaining
++        jobs are still run.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception:
++                # Already logged with traceback by _run_job. Keep the job
++                # scheduled for its next regular run and carry on.
++                job.last_run = datetime.datetime.now()
++                job._schedule_next_run()
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -170,7 +180,11 @@ class Scheduler:
+         return job
+ 
+     def _run_job(self, job: "Job") -> None:
+-        ret = job.run()
++        try:
++            ret = job.run()
++        except Exception:
++            logger.warning("Job failed: %r", job, exc_info=True)
++            raise
+         if isinstance(ret, CancelJob) or ret is CancelJob:
+             self.cancel_job(job)
+ 
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..7c4b467 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -105,6 +105,43 @@ class SchedulerTests(TestCase):
+             return
+         return make_mock_job(name)
+ 
++    def test_run_pending_continues_after_job_failure(self):
++        calls = []
++
++        def bad():
++            calls.append("bad")
++            raise ValueError("boom")
++
++        def good():
++            calls.append("good")
++
++        with mock_datetime(2020, 1, 1, 10, 0, 0):
++            bad_job = every(1).hours.do(bad)
++            every(1).hours.do(good)
++        with mock_datetime(2020, 1, 1, 11, 0, 0):
++            with self.assertLogs("schedule", level="WARNING") as cm:
++                schedule.run_pending()
++            assert sorted(calls) == ["bad", "good"]
++            assert "ValueError" in "\n".join(cm.output)
++            # failing job is rescheduled for its next regular run
++            assert bad_job.last_run is not None
++            assert bad_job in schedule.jobs
++            assert bad_job.next_run == datetime.datetime(2020, 1, 1, 12, 0, 0)
++            schedule.run_pending()
++            assert sorted(calls) == ["bad", "good"]
++        with mock_datetime(2020, 1, 1, 12, 0, 0):
++            with self.assertLogs("schedule", level="WARNING"):
++                schedule.run_pending()
++            assert calls.count("bad") == 2
++
++    def test_run_all_still_raises_on_job_failure(self):
++        def bad():
++            raise ValueError("boom")
++
++        every().second.do(bad)
++        with self.assertLogs("schedule", level="WARNING"):
++            self.assertRaises(ValueError, schedule.run_all)
++
+     def test_time_units(self):
+         assert every().seconds.unit == "seconds"
+         assert every().minutes.unit == "minutes"
+@@ -1597,3 +1634,20 @@ class SchedulerTests(TestCase):
+         scheduler.every()
+         scheduler.every(10).seconds
+         scheduler.run_pending()
++
++    def test_failing_job_is_logged_with_traceback(self):
++        def fail(arg):
++            raise ValueError("boom")
++
++        scheduler = schedule.Scheduler()
++        with mock_datetime(2020, 1, 1, 10, 0, 0):
++            job = scheduler.every().second.do(functools.partial(fail, "x"))
++        with mock_datetime(2020, 1, 1, 10, 0, 5):
++            with self.assertLogs("schedule", level="WARNING") as cm:
++                scheduler.run_pending()
++        output = "\n".join(cm.output)
++        # repr reflects pre-failure state (logged before rescheduling)
++        assert "Job failed: Every 1 second do" in output
++        assert "Traceback" in output
++        assert "boom" in output
++        assert job in scheduler.jobs
