@@ -25,7 +25,8 @@ directly with your file tools.
 - Add one line under **Progress** per session: `YYYY-MM-DD: what changed, what's next`.
 - Record decisions with their reason under **Decisions and dead ends**, one
   line each. Start a line with `Dead end:` for an approach that failed, and say
-  why, so no later session retries it.
+  why, so no later session retries it. `trailkeep note "<what and why>"` does
+  this in one step, and works before an effort file exists.
 - Keep the file under about 150 lines: fold old Progress lines into one summary line.
 
 Every new Decisions and Progress line is copied to the repo's append-only

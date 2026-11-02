@@ -48,7 +48,9 @@ def agent_env(home, extra):
 
 def arm_hook(arm, hook, ctx, env):
     """Run arms/<arm>.sh <hook> if it defines that hook; returns stdout."""
-    script = os.path.join(HERE, "arms", arm.split("+")[0] + ".sh")
+    # "trailkeep@capture" runs arms/trailkeep.sh; the label after @ keeps a
+    # changed version's cells apart from the earlier version's.
+    script = os.path.join(HERE, "arms", arm.split("+")[0].split("@")[0] + ".sh")
     if not os.path.exists(script):
         raise SystemExit(f"unknown arm {arm}")
     e = dict(env, **{"ARM": arm, "TRAILKEEP_ROOT": ROOT, "BENCH": BENCH, **{k.upper(): str(v) for k, v in ctx.items()}})

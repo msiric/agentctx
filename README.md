@@ -2,7 +2,7 @@
 
 Context for coding agents that works the same in **Claude Code**, **Codex CLI** and **GitHub Copilot CLI**. It keeps three kinds of knowledge apart: what's always true about you, what's always true about a repo, and what matters only for the branch you're on. It also keeps an append-only log of why things were decided.
 
-It's a single POSIX shell script that needs only `git`. It never changes your repos' tracked files. In a repo with no notes, effort or log, it adds at most one hint line to a session, and none at all with `TRAILKEEP_HINT=0`.
+It's a single POSIX shell script that needs only `git`. It never changes your repos' tracked files. In a repo with no notes, effort or log, it adds one short capture rule to a session (about 110 tokens), and nothing at all with `TRAILKEEP_HINT=0`.
 
 ## Install (one command, once per machine)
 
@@ -30,8 +30,9 @@ Later, `trailkeep update` gets the latest version the same way you installed it 
 |---|---|---|---|
 | **Personal**: you, in every repo | `~/.agents/AGENTS.md` | you | every session, by all three agents |
 | **Repo**: true for every task here | the repo's own `AGENTS.md` (committed) | you and your team | natively by all three agents |
-| **Private repo notes**: things you can't commit | `~/.agents/repos/<repo>/NOTES.md` | you | at session start, by a hook |
-| **Effort**: this branch's goal, plan, progress, decisions | `.trailkeep/<branch>.md` in the worktree, ignored by git | the agent | at session start and after compaction, by a hook |
+| **Personal notes**: preferences the agent picked up | `~/.agents/NOTES.md` | the agent (`trailkeep note --all`) | at session start in every repo, by a hook |
+| **Private repo notes**: things you can't commit | `~/.agents/repos/<repo>/NOTES.md` | you, or the agent (`trailkeep note --repo`) | at session start, by a hook |
+| **Effort**: this branch's goal, plan, progress, decisions | `.trailkeep/<branch>.md` in the worktree, ignored by git | the agent (`trailkeep note` adds a decision, creating the file if needed) | at session start and after compaction, by a hook |
 | **Decision log**: why things happened, append-only | `~/.agents/repos/<repo>/log/YYYY-MM.tsv` | the session-end hook | never loaded; agents search it |
 
 `<repo>` comes from the origin URL, so every clone and worktree of a repo shares the same notes and log.
@@ -41,7 +42,7 @@ Later, `trailkeep update` gets the latest version the same way you installed it 
 | When | What happens automatically |
 |---|---|
 | Any session starts in any repo | Notes and the branch's effort file are injected. A one-line pointer mentions the decision log if it has entries. Leftovers from a session that didn't exit cleanly are logged first. |
-| You're on a feature branch with no effort file | One line tells the agent it can run `trailkeep new` for multi-session work. Turn it off with `TRAILKEEP_HINT=0`. |
+| Any session starts in a repo | A short capture rule tells the agent to record decisions, user rules and dead ends the moment they come up, with `trailkeep note`. It doesn't wait for anyone to decide the task "spans sessions". Turn it off with `TRAILKEEP_HINT=0`. |
 | The agent works | It keeps the effort file current: plan ticks, a progress line per session, decisions and dead ends. That's the effort skill's job. |
 | Context gets compacted | The effort file is re-injected fresh. |
 | A session ends | New Decisions and Progress lines from every effort in the worktree go into the decision log, stamped with the commit, the branch's changed files, branch and session id. It takes under 0.1 s, well inside Codex's 3-second limit for this hook. Anything a killed session missed is picked up at the next start, in the background. |
@@ -76,6 +77,7 @@ The format is one event per line, tab-separated, one file per month: `id time ty
 
 ```sh
 trailkeep new        # start an effort for this branch (or ask the agent to)
+trailkeep note "..." # record a decision or dead end for this branch (--repo: whole repo, --all: every repo)
 trailkeep show       # exactly what agents get here at session start
 trailkeep list       # active efforts across all repos, with their last progress line
 trailkeep close      # archive the effort; lists decisions worth promoting
@@ -131,7 +133,7 @@ Live-session behavior can't be tested offline: hooks running, the Claude import 
 
 - `TRAILKEEP_HOME` (default `~/.agents`)
 - `TRAILKEEP_MAX_CHARS` (default 9000, max 9500)
-- `TRAILKEEP_HINT=0` (no hint on branches without an effort file)
+- `TRAILKEEP_HINT=0` (no capture rule at session start)
 - `TRAILKEEP_EFFORT` (use a named effort instead of the branch)
 
 It also honours `CLAUDE_CONFIG_DIR`, `CODEX_HOME` and `COPILOT_HOME`. It works on Linux and macOS; on Windows, use WSL.

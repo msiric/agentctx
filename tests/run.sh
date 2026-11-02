@@ -179,8 +179,9 @@ test_context() {
   t "context"; sandbox
   new_repo "$SB/r" git@github.com:me/app.git
   cd "$SB/r" || return
-  out=$(ax context --for claude </dev/null); eq "$out" "" "nothing to inject"
-  out=$(ax context --for copilot </dev/null); eq "$out" "" "copilot nothing"
+  out=$(ax context --for claude </dev/null); contains "$out" "trailkeep note" "capture rule only"
+  out=$(TRAILKEEP_HINT=0 ax context --for claude </dev/null); eq "$out" "" "nothing to inject"
+  out=$(TRAILKEEP_HINT=0 ax context --for copilot </dev/null); eq "$out" "" "copilot nothing"
 
   ax notes >/dev/null; printf 'Use pnpm, never npm.\n' >> "$(ax notes --path)"
   ax new >/dev/null
@@ -460,6 +461,37 @@ add_line() { # add_line FILE "## Section" LINE  (insert right after the heading'
   awk -v h="$2" -v l="$3" '{ print } $0 == h { getline; print; print "- " l }' "$1" > "$1.tmp" && mv "$1.tmp" "$1"
 }
 
+test_note() {
+  t "note"; sandbox
+  new_repo "$SB/r" git@github.com:me/app.git
+  cd "$SB/r" || return
+  git checkout -q -b feat/cache
+  out=$(ax note 2>&1); status $? 1 "note needs text"
+  ax note "Use the file cache, not Redis: no Redis in prod" >/dev/null; status $? 0 "branch note"
+  ax note "Dead end: mmap fails on NFS" >/dev/null
+  f=$(ax path); is_file "$f"
+  out=$(ax context --for claude </dev/null)
+  contains "$out" "notes for branch feat/cache" "notes-only file injected as notes"
+  contains "$out" "no Redis in prod"; contains "$out" "mmap fails on NFS"
+  case $out in *"## Goal"*) flunk "notes-only file has no empty Goal" ;; *) pass ;; esac
+  git checkout -q main
+  out=$(ax context --for claude </dev/null)
+  case $out in *"no Redis"*) flunk "branch note leaked to main" ;; *) pass ;; esac
+  ax note --repo "CI runs Python 3.9" >/dev/null; status $? 0 "repo note"
+  out=$(ax context --for claude </dev/null); contains "$out" "CI runs Python 3.9" "repo note on every branch"
+  ax note --all "Prefer table-driven tests" >/dev/null; status $? 0 "personal note"
+  out=$(cd / && ax note --all "x" 2>&1); status $? 0 "personal note works outside a repo"
+  new_repo "$SB/r2" git@github.com:me/other.git
+  out=$(cd "$SB/r2" && ax context --for claude </dev/null); contains "$out" "Prefer table-driven tests" "personal note in another repo"
+  case $(cat "$HOME/.agents/AGENTS.md" 2>/dev/null) in *"table-driven"*) flunk "note --all must not edit AGENTS.md" ;; *) pass ;; esac
+  git checkout -q feat/cache
+  ax new >/dev/null
+  f=$(ax path); contains "$(cat "$f")" "## Plan" "new upgrades a notes-only file"
+  contains "$(cat "$f")" "no Redis in prod" "and keeps its notes"
+  hook_json s1 | ax harvest --for claude
+  out=$(ax log --type dead-end); contains "$out" "mmap fails on NFS" "dated dead end typed as dead-end"
+}
+
 hook_json() { printf '{"session_id":"%s","transcript_path":"/tmp/%s.jsonl","cwd":"%s","source":"startup"}' "$1" "$1" "$PWD"; }
 
 test_log() {
@@ -468,10 +500,10 @@ test_log() {
   cd "$SB/r" || return
   echo a > a.ts; git add a.ts; git commit -qm a
   git checkout -q -b feat/auth
-  out=$(hook_json s0 | ax context --for claude); contains "$out" "no effort file for branch feat/auth" "hint on feature branch"
-  out=$(TRAILKEEP_HINT=0 ax context --for claude </dev/null); eq "$out" "" "hint can be turned off"
+  out=$(hook_json s0 | ax context --for claude); contains "$out" "trailkeep note" "capture rule on feature branch"
+  out=$(TRAILKEEP_HINT=0 ax context --for claude </dev/null); eq "$out" "" "capture rule can be turned off"
   git checkout -q main
-  out=$(hook_json s0 | ax context --for claude); eq "$out" "" "no hint on default branch"
+  out=$(hook_json s0 | ax context --for claude); contains "$out" "trailkeep note" "capture rule on default branch"
   git checkout -q feat/auth
 
   ax new >/dev/null; f=$(ax path)
@@ -666,7 +698,7 @@ test_release() {
 
 for fn in test_cli_basics test_repo_key test_effort_lifecycle test_context test_install_fresh \
           test_install_preserves_user_files test_adopt test_dry_run_and_skip test_uninstall \
-          test_doctor test_verify test_log test_update test_npm_package test_release; do
+          test_doctor test_verify test_log test_note test_update test_npm_package test_release; do
   ( $fn ) > "${TMPDIR:-/tmp}/trailkeep-test.$$" 2>&1
   cat "${TMPDIR:-/tmp}/trailkeep-test.$$"
   # each test runs in a subshell; count results from its output

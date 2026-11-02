@@ -28,6 +28,7 @@ ROOT=$(cd "$(dirname "$SELF")/.." && pwd -P)
 
 TRAILKEEP_HOME=${TRAILKEEP_HOME:-$HOME/.agents}
 PERSONAL=$TRAILKEEP_HOME/AGENTS.md
+GLOBAL_NOTES=$TRAILKEEP_HOME/NOTES.md    # `note --all`: agent-written, injected everywhere
 REPOS=$TRAILKEEP_HOME/repos
 SKILLS_DIR=$HOME/.agents/skills          # read by Codex and Copilot
 BIN_DIR=${TRAILKEEP_BIN_DIR:-$HOME/.local/bin}
@@ -226,6 +227,12 @@ default_branch() {
   return 1
 }
 
+# One standing instruction, so capture doesn't depend on the agent deciding a
+# task "spans sessions" (it can't know). Measured cost: about 110 tokens.
+capture_rule() {
+  printf '%s\n' 'trailkeep: when something comes up that a later session must not lose (a decision and its reason, a rule or preference the user states, an approach that failed and why), record it right away: `trailkeep note "<what and why>"`. It is kept for this branch and shown at the start of the next session. Use `trailkeep note --repo` for a fact about the whole repo, or `--all` for a personal preference that applies in every repo.'
+}
+
 build_context() {
   in_repo || return 0
   KEY=$(repo_key) || return 0
@@ -238,18 +245,28 @@ build_context() {
   [ -n "$effort" ] && [ -s "$effort" ] && has_effort=1
 
   budget=$MAX_CHARS
+  if [ -s "$GLOBAL_NOTES" ]; then
+    piece "trailkeep: your notes for every repo" "$GLOBAL_NOTES" "$((budget / 4))"
+    budget=$((budget - $(chars "$GLOBAL_NOTES")))
+    [ "$budget" -lt $((MAX_CHARS / 2)) ] && budget=$((MAX_CHARS / 2))
+    printf '\n'
+  fi
   if [ "$has_notes" -eq 1 ]; then
     piece "trailkeep: private notes for this repository" "$notes" "$((budget / 3))"
     budget=$((budget - $(chars "$notes")))
     [ "$budget" -lt $((MAX_CHARS / 2)) ] && budget=$((MAX_CHARS / 2))
     printf '\n'
   fi
-  if [ "$has_effort" -eq 1 ]; then
-    printf 'trailkeep: this branch has an effort file. It is the source of truth for the current task. Keep it current as you work: tick Plan items, add one dated line under Progress before you stop, and record decisions and dead ends (start a line with "Dead end:" for approaches that failed).\n'
+  if [ "$has_effort" -eq 1 ] && ! grep -q '^## Plan' "$effort"; then
+    piece "trailkeep: notes for branch $b" "$effort" "$budget"
+    printf '\n'
+  elif [ "$has_effort" -eq 1 ]; then
+    printf 'trailkeep: this branch has an effort file. It is the source of truth for the current task. Keep it current as you work: tick Plan items and add one dated line under Progress before you stop.\n'
     piece "trailkeep: effort file for branch $b" "$effort" "$budget"
     printf '\n'
-  elif [ "${TRAILKEEP_HINT:-1}" != 0 ] && [ -n "$effort" ] && db=$(default_branch) && [ "$b" != "$db" ]; then
-    printf 'trailkeep: no effort file for branch %s. If this task spans more than one session, run `trailkeep new` and keep it current.\n' "$b"
+  fi
+  if [ "${TRAILKEEP_HINT:-1}" != 0 ] && [ -n "$effort" ]; then
+    capture_rule
   fi
   n=0
   for f in "$(log_dir "$KEY")"/*.tsv; do [ -f "$f" ] && n=$((n + $(lines "$f"))); done
@@ -391,7 +408,8 @@ harvest_file() { # FILE BRANCH SESSION TRANSCRIPT
       l = $0; sub(/^[[:space:]]*[-*][[:space:]]*/, "", l); gsub(/[\t\r]/, " ", l); sub(/[[:space:]]+$/, "", l)
       if (l == "" || l ~ /^\[[ xX]\]/ || (l in seen)) next
       seen[l] = 1; t = sec
-      if (l ~ /^([Dd]ead[ -]end|[Tt]ried |[Rr]ejected|[Rr]everted)/) t = "dead-end"
+      d = l; sub(/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]:?[[:space:]]*/, "", d)
+      if (d ~ /^([Dd]ead[ -]end|[Tt]ried |[Rr]ejected|[Rr]everted)/) t = "dead-end"
       print t tab l
     }' "$1")
   [ -n "$new" ] || return 0
@@ -558,16 +576,77 @@ EOF
 cmd_new() {
   need_repo; need_branch
   f=$(effort_path "$KEY" "$BRANCH")
-  if [ -e "$f" ]; then
+  if [ -e "$f" ] && grep -q '^## Plan' "$f"; then
     say "Effort already exists: $f"
     return 0
   fi
   kind=branch; [ -n "${TRAILKEEP_EFFORT:-}" ] && kind=named
   ensure_effort_dir
-  effort_template "$BRANCH" "$KEY" "$kind" > "$f" || die "could not write $f"
+  if [ -e "$f" ]; then
+    # a notes-only file from `trailkeep note`: add the task sections, keep the notes
+    kept=$(section "$f" "Decisions and dead ends" | awk 'NF')
+    effort_template "$BRANCH" "$KEY" "$kind" > "$f" || die "could not write $f"
+    [ -n "$kept" ] && printf '%s\n' "$kept" | while IFS= read -r l; do append_to_section "$f" "Decisions and dead ends" "$l"; done
+  else
+    effort_template "$BRANCH" "$KEY" "$kind" > "$f" || die "could not write $f"
+  fi
   remember_repo
   say "Created $f"
   say "Fill in Goal, Done when and Plan (or ask your agent to, with the effort skill)."
+}
+
+# Append LINE at the end of a "## HEADING" section (adds the section if missing).
+append_to_section() { # FILE HEADING LINE
+  tmp=$(mktemp) || return 1
+  awk -v h="## $2" -v add="$3" '
+    function flush(  i) { for (i = 1; i <= n; i++) print buf[i]; print add; print ""; on = 0; done = 1; n = 0 }
+    $0 == h { print; print ""; on = 1; n = 0; blank = 0; next }
+    on && /^## / { flush() }
+    on { if (NF) { if (n) for (i = 0; i < blank; i++) buf[++n] = ""; blank = 0; buf[++n] = $0 } else blank++; next }
+    { print }
+    END { if (on) flush(); else if (!done) { print ""; print h; print ""; print add } }' "$1" > "$tmp" &&
+    cat "$tmp" > "$1"
+  st=$?; rm -f "$tmp"; return $st
+}
+
+cmd_note() {
+  scope=branch
+  case ${1:-} in
+    --repo) scope=repo; shift ;;
+    --all) scope=all; shift ;;
+    -h|--help|help|"") die 'usage: trailkeep note [--repo|--all] "what and why"' ;;
+  esac
+  [ $# -ge 1 ] || die 'usage: trailkeep note [--repo|--all] "what and why"'
+  text=$(printf '%s' "$*" | one_line)
+  [ -n "$text" ] || die "note: empty text"
+  case $scope in
+    branch)
+      need_repo; need_branch
+      f=$(effort_path "$KEY" "$BRANCH")
+      if [ ! -e "$f" ]; then
+        # Notes only: no empty Goal/Plan to inject; `trailkeep new` adds them.
+        kind=branch; [ -n "${TRAILKEEP_EFFORT:-}" ] && kind=named
+        ensure_effort_dir
+        printf '# %s\n\nBranch: %s · Repo: %s · Kind: %s · Created: %s\n\n## Decisions and dead ends\n\n' \
+          "$BRANCH" "$BRANCH" "$KEY" "$kind" "$(today)" > "$f" || die "could not write $f"
+        remember_repo
+      fi
+      append_to_section "$f" "Decisions and dead ends" "- $(today): $text" || die "could not write $f"
+      say "Noted for branch $BRANCH ($f)." ;;
+    repo)
+      need_repo
+      f=$(notes_path "$KEY")
+      { mkdir -p "$(dirname "$f")" && { [ -e "$f" ] || printf '# Private notes: %s\n\n' "$KEY" > "$f"; } &&
+        printf -- '- %s: %s\n' "$(today)" "$text" >> "$f"; } 2>/dev/null ||
+        die "could not write $f (a sandbox may block it; use a branch note instead)"
+      remember_repo
+      say "Noted for this repo ($(tilde "$f"))." ;;
+    all)
+      # Not ~/.agents/AGENTS.md: that file is yours, and agents only propose changes to it.
+      { mkdir -p "$(dirname "$GLOBAL_NOTES")" && printf -- '- %s: %s\n' "$(today)" "$text" >> "$GLOBAL_NOTES"; } 2>/dev/null ||
+        die "could not write $GLOBAL_NOTES (a sandbox may block it; ask the user to add it)"
+      say "Noted for every repo ($(tilde "$GLOBAL_NOTES"))." ;;
+  esac
 }
 
 cmd_path() {
@@ -1412,6 +1491,9 @@ Setup
 
 Per repo / branch (run inside a git repo)
   new               create the effort file for the current branch
+  note [--repo|--all] TEXT
+                    record a decision, rule or dead end: for this branch (default),
+                    the whole repo, or every repo
   show              print what agents get at session start here
   edit              open the effort file in \$EDITOR
   path [--notes|--repo|--dir]
@@ -1439,6 +1521,7 @@ case $cmd in
   doctor) cmd_doctor "$@" ;;
   verify) cmd_verify "$@" ;;
   new) cmd_new "$@" ;;
+  note) cmd_note "$@" ;;
   show) cmd_show "$@" ;;
   edit) cmd_edit "$@" ;;
   path) cmd_path "$@" ;;
