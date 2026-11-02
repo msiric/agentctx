@@ -1,7 +1,7 @@
 | Arm | Model | Traps | Runs | Pass rate (95% CI) | Last-session input tokens (median) | First request tokens (median) | Tool calls before first edit (median) |
 |---|---|---|---|---|---|---|---|
 | basic-memory | claude-sonnet-5-5 | 1 | 1 | 0% (0%-0%) | 80136 | 19118 | - |
-| claude-mem | claude-sonnet-5-5 | 1 | 1 | 0% (0%-0%) | 90470 | 20900 | - |
+| claude-mem | claude-sonnet-5-5 | 1 | 1 | 0% (0%-0%) | 91194 | 20697 | - |
 | handoff | claude-sonnet-5-5 | 3 | 9 | 100% (100%-100%) | 122680 | 16157 | 2 |
 | hindsight | claude-sonnet-5-5 | 1 | 1 | 100% (100%-100%) | 184851 | 18650 | 4 |
 | none | claude-sonnet-5-5 | 24 | 72 | 26% (11%-43%) | 121728 | 15926 | 3 |
