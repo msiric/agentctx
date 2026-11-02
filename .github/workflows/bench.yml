@@ -86,8 +86,20 @@ jobs:
 
       - name: Save results
         if: always()
+        env:
+          T1: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          T2: ${{ secrets.ANTHROPIC_API_KEY }}
+          T3: ${{ secrets.GEMINI_API_KEY }}
         run: |
           cd bench/results/runs
+          # never publish a credential: redact any file that contains one
+          for t in "$T1" "$T2" "$T3"; do
+            [ -n "$t" ] || continue
+            grep -rlF -- "$t" . 2>/dev/null | while IFS= read -r f; do
+              echo "redacting a credential in $f"
+              T="$t" python3 -c 'import os,sys; p=sys.argv[1]; b=open(p,"rb").read(); open(p,"wb").write(b.replace(os.environ["T"].encode(), b"[REDACTED]"))' "$f"
+            done
+          done
           find . -name 'session*.jsonl' -exec gzip -f {} \;
           python3 ../../harness/summarize.py --runs . > SUMMARY.md || true
           git init -q -b bench-results . 2>/dev/null || true

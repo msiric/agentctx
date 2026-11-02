@@ -69,3 +69,13 @@ intends. None of these episodes counts as a result.
   uses its `claude-code` LLM provider with the same subscription token as the
   sessions, the way claude-mem works. After each session the harness waits
   for Hindsight's queue to empty (up to 5 minutes) instead of a fixed 90 s.
+- **claude-mem, second try:** its hooks now ran, but its worker reads the
+  login from Claude Code's credential store (`~/.claude/.credentials.json`),
+  not from `CLAUDE_CODE_OAUTH_TOKEN`, so every summary failed with "not
+  logged in" and nothing was stored. The arm now writes that store from the
+  same token, as a logged-in user has it, and deletes it after the episode.
+  The results workflow now redacts any credential before saving files.
+- **Basic Memory and Hindsight, second try:** both ran as intended (Basic
+  Memory's setup completed with its proactive capture style on; Hindsight
+  stored and recalled memories). Their smoke episodes stand as smoke checks
+  only and are not part of any analysis.

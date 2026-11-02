@@ -10,6 +10,16 @@ stop_worker() {
 }
 case $1 in
   install)
+    # claude-mem's worker reads the login from Claude Code's credential store,
+    # not from the environment, so write the store as a logged-in user has it.
+    python3 - <<'PY'
+import json, os
+d = os.path.join(os.environ["HOME"], ".claude"); os.makedirs(d, exist_ok=True)
+p = os.path.join(d, ".credentials.json")
+json.dump({"claudeAiOauth": {"accessToken": os.environ["CLAUDE_CODE_OAUTH_TOKEN"],
+                             "expiresAt": 4102444800000, "scopes": ["user:inference"]}}, open(p, "w"))
+os.chmod(p, 0o600)
+PY
     claude plugin marketplace add thedotmack/claude-mem >/dev/null
     claude plugin install claude-mem@thedotmack --scope user >/dev/null
     claude plugin list 2>/dev/null | grep -i -A2 claude-mem > "$EPISODE/claude-mem.version" || true ;;
@@ -25,6 +35,7 @@ case $1 in
   snapshot)
     mkdir -p "$SNAPSHOT"
     [ -d "$HOME/.claude-mem" ] && cp -R "$HOME/.claude-mem" "$SNAPSHOT/claude-mem" 2>/dev/null
+    rm -f "$HOME/.claude/.credentials.json"
     cp "$EPISODE/claude-mem.version" "$SNAPSHOT/" 2>/dev/null
     find "$SNAPSHOT" \( -name '*.pid' -o -name '*.sock' -o -name chroma \) -prune -exec rm -rf {} + 2>/dev/null
     stop_worker ;;
