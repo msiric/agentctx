@@ -79,8 +79,8 @@ jobs:
           find . -name 'session*.jsonl' -exec gzip -f {} \;
           python3 ../../harness/summarize.py --runs . > SUMMARY.md || true
           git init -q -b bench-results . 2>/dev/null || true
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "msiric"
+          git config user.email "mario.siric@mail.com"
           git remote add origin "$(git -C "$GITHUB_WORKSPACE" remote get-url origin)" 2>/dev/null || true
           git -c http.extraheader="$(git -C "$GITHUB_WORKSPACE" config --get http.https://github.com/.extraheader)" fetch -q origin bench-results 2>/dev/null &&
             git reset -q --soft FETCH_HEAD || true
