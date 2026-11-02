@@ -612,7 +612,7 @@ test_npm_package() {
   lacks "$list" "tests/" "tests are not shipped"
   npm install -g --silent --prefix "$SB/npm" "$tgz" >/dev/null 2>&1 || { flunk "npm install -g"; return; }
   pkg=$(sed -n 's/^PKG="\(.*\)"$/\1/p' "$ROOT/bin/trailkeep")
-  [ -x "$SB/npm/lib/node_modules/$pkg/bin/trailkeep" ] && pass || flunk "not installed under node_modules/$pkg (update would miss it)"
+  if [ -x "$SB/npm/lib/node_modules/$pkg/bin/trailkeep" ]; then pass; else flunk "not installed under node_modules/$pkg (update would miss it)"; fi
   mkdir -p "$HOME/.codex"
   out=$("$SB/npm/bin/trailkeep" install --no-claude --no-copilot 2>&1); st=$?
   status $st 0 "install from npm"
