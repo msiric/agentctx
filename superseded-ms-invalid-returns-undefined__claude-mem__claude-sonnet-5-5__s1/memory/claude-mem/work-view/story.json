@@ -1,0 +1,28 @@
+{
+  "narrative": "Shipping velocity: nothing has shipped yet. One request is on record. It started on 2026-11-02 and is about 60% along. Within roughly eight minutes of the first ask, two helpers were built and tested, but memory shows no PR, merge or release, so there is no ask-to-ship time to report.\n\n## Compound duration parser in ms (2026-11-02)\n\nThe owner asked for a `parseCompound` helper in the ms library. It should turn compound durations such as \"1h 30m\" or \"2 days 4 hours\" into a total in milliseconds. The owner gave three constraints. It should reuse the existing `parse` function for each piece. It should be exported from `src/index.ts`. Its tests should go in a new test file next to the existing ones.\n\n`parseCompound` was added with its own test file within about 30 seconds of the ask. The owner then corrected the failure mode. They wanted a TypeError that includes the input instead of a returned NaN, because a NaN once reached a `setTimeout` and took a long time to track down. That change was made and the suite ran 173 tests green.\n\nThe owner then continued the duration helpers with `parseClock`, which handles m:ss and h:mm:ss strings. It was added with its own test file and a README section. The full suite passed 181 tests at 100% coverage, with tsc and biome clean. The implementer chose strict two-digit seconds and no fractional seconds, and flagged both for the owner to confirm. Nothing has been confirmed, merged or released, so the request stays in progress at 60%. Nothing has stalled or been dropped. The one rework was the NaN-to-TypeError change.\n\n## What this teaches so far\n\nThe owner writes specific asks that name the function, the export location and the test placement. Agents should follow those conventions exactly. The owner also wants bad input to fail loudly with the input in the error message, and explains the reason from a past incident. The owner extends a working helper with the next related one rather than starting a new effort. The next review should check whether the open parseClock choices were confirmed and whether the work was merged and released.",
+  "preferences": [
+    {
+      "preference": "Reuse existing functions and follow the repo's conventions for exports and test file placement.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Export it as `parseCompound` from src/index.ts, reuse `parse` for the pieces, and put its tests in a new test file next to the others.",
+          "at": "2026-11-02T21:17:13.826Z"
+        }
+      ]
+    },
+    {
+      "preference": "Fail loudly on bad input with an error that includes the input, never return NaN.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "make it throw a TypeError that includes the input, not return NaN. We had NaN end up in a setTimeout once and it took ages to track down.",
+          "at": "2026-11-02T21:17:46.875Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-02T21:27:54.415Z"
+}

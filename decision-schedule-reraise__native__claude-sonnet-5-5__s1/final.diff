@@ -1,0 +1,98 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..fd21bae 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -97,8 +97,11 @@ class Scheduler:
+         between but only once.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        errors: List[BaseException] = []
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            self._run_job_collecting(job, errors)
++        if errors:
++            raise errors[0]
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +118,14 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
+-            self._run_job(job)
+-            time.sleep(delay_seconds)
++        jobs = self.jobs[:]
++        errors: List[BaseException] = []
++        for i, job in enumerate(jobs):
++            self._run_job_collecting(job, errors)
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
++        if errors:
++            raise errors[0]
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """
+@@ -169,6 +177,15 @@ class Scheduler:
+         job = Job(interval, self)
+         return job
+ 
++    def _run_job_collecting(self, job: "Job", errors: List[BaseException]) -> None:
++        # Let one failing job not prevent the others from running; the caller
++        # re-raises the first collected exception once all jobs have run.
++        try:
++            self._run_job(job)
++        except Exception as e:
++            logger.exception("Job %s raised", job)
++            errors.append(e)
++
+     def _run_job(self, job: "Job") -> None:
+         ret = job.run()
+         if isinstance(ret, CancelJob) or ret is CancelJob:
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..a69308f 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1597,3 +1597,42 @@ class SchedulerTests(TestCase):
+         scheduler.every()
+         scheduler.every(10).seconds
+         scheduler.run_pending()
++
++
++class FailingJobsTest(TestCase):
++    def setUp(self):
++        schedule.clear()
++
++    def tearDown(self):
++        schedule.clear()
++
++    def _jobs(self):
++        calls = []
++
++        def bad():
++            calls.append("bad")
++            raise ValueError("boom")
++
++        def good():
++            calls.append("good")
++
++        schedule.every().second.do(bad)
++        schedule.every().second.do(good)
++        return calls
++
++    def test_run_pending_runs_other_jobs_then_raises_first(self):
++        calls = self._jobs()
++        with mock_datetime(2010, 1, 6, 12, 16, 0):
++            pass
++        with mock_datetime(2010, 1, 6, 12, 16, 5):
++            for job in schedule.jobs:
++                job.next_run = datetime.datetime(2010, 1, 6, 12, 16, 0)
++            with self.assertRaises(ValueError):
++                schedule.run_pending()
++        self.assertEqual(sorted(calls), ["bad", "good"])
++
++    def test_run_all_runs_other_jobs_then_raises_first(self):
++        calls = self._jobs()
++        with self.assertRaises(ValueError):
++            schedule.run_all()
++        self.assertEqual(calls, ["bad", "good"])

@@ -1,0 +1,131 @@
+diff --git a/docs/usage.rst b/docs/usage.rst
+index 9d61f5c..ca61f57 100644
+--- a/docs/usage.rst
++++ b/docs/usage.rst
+@@ -636,7 +636,10 @@ To use the in-memory storage, use:
+     method. For example, you can set it to create prettified JSON files like
+     this:
+ 
+-    >>> db = TinyDB('db.json', sort_keys=True, indent=4, separators=(',', ': '))
++    >>> db = TinyDB('db.json', indent=4, separators=(',', ': '))
++
++    Keys are sorted by default so the file contents are deterministic. Pass
++    ``sort_keys=False`` to keep insertion order.
+ 
+ .. note::
+     ``JSONStorage`` forwards ``**kwargs`` to ``json.dumps``. **Never** pass
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..71fb329 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -28,6 +28,43 @@ def test_json(tmpdir):
+     storage.close()
+ 
+ 
++def test_json_sort_keys_default_and_opt_out(tmpdir):
++    sorted_file = tmpdir.join('sorted.json')
++    with TinyDB(str(sorted_file)) as db:
++        db.insert({'b': 1, 'a': {'z': 1, 'y': 2}})
++    assert sorted_file.read() == \
++        '{"_default": {"1": {"a": {"y": 2, "z": 1}, "b": 1}}}'
++
++    unsorted_file = tmpdir.join('unsorted.json')
++    with TinyDB(str(unsorted_file), sort_keys=False) as db:
++        db.insert({'b': 1, 'a': 2})
++    assert unsorted_file.read() == '{"_default": {"1": {"b": 1, "a": 2}}}'
++
++
++def test_json_sort_keys_is_order_independent(tmpdir):
++    f1, f2 = tmpdir.join('1.json'), tmpdir.join('2.json')
++    with TinyDB(str(f1)) as db:
++        db.insert({'a': 1, 'b': 2})
++    with TinyDB(str(f2)) as db:
++        db.insert({'b': 2, 'a': 1})
++    assert f1.read() == f2.read()
++
++
++def test_json_sort_keys_mixed_key_types(tmpdir):
++    path = tmpdir.join('mixed.json')
++    doc = {'endpoint': '/api/orders', 'hits': {200: 1520, 404: 12, 'other': 3}}
++    with TinyDB(str(path)) as db:
++        db.insert(doc)
++        db.insert({'hits': [{'other': 1, 404: 2}]})
++    assert path.read() == (
++        '{"_default": {"1": {"endpoint": "/api/orders", '
++        '"hits": {"200": 1520, "404": 12, "other": 3}}, '
++        '"2": {"hits": [{"404": 2, "other": 1}]}}}'
++    )
++    with TinyDB(str(path)) as db:
++        assert db.get(doc_id=1)['hits'] == {'200': 1520, '404': 12, 'other': 3}
++
++
+ def test_json_kwargs(tmpdir):
+     db_file = tmpdir.join('test.db')
+     db = TinyDB(str(db_file), sort_keys=True, indent=4, separators=(',', ': '))
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..26f4fce 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -76,6 +76,32 @@ class Storage(ABC):
+         pass
+ 
+ 
++def _json_key(key: Any) -> Any:
++    # Mirror how ``json.dumps`` turns non-string keys into strings
++    if key is True:
++        return 'true'
++    if key is False:
++        return 'false'
++    if key is None:
++        return 'null'
++    return str(key) if isinstance(key, (int, float)) else key
++
++
++def _sort_keys(obj: Any) -> Any:
++    """
++    Recursively order dict keys by their JSON string form.
++
++    ``json.dumps(sort_keys=True)`` raises ``TypeError`` for dicts that mix key
++    types (e.g. ``{200: 1, "other": 2}``), so we sort ourselves.
++    """
++    if isinstance(obj, dict):
++        items = sorted(obj.items(), key=lambda kv: str(_json_key(kv[0])))
++        return {k: _sort_keys(v) for k, v in items}
++    if isinstance(obj, (list, tuple)):
++        return [_sort_keys(v) for v in obj]
++    return obj
++
++
+ class JSONStorage(Storage):
+     """
+     Store the data in a JSON file.
+@@ -96,6 +122,10 @@ class JSONStorage(Storage):
+         operation.
+ 
+         :param path: Where to store the JSON data.
++        :param kwargs: Passed to ``json.dumps``, except ``sort_keys`` which
++                       defaults to ``True`` (keys are ordered by their JSON
++                       string form, so mixed key types are fine). Pass
++                       ``sort_keys=False`` to keep insertion order.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
+         """
+@@ -103,6 +133,9 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
++        # Sort keys by default so the file contents are deterministic; pass
++        # ``sort_keys=False`` to keep insertion order.
++        self._sort_keys = kwargs.pop('sort_keys', True)
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+@@ -144,6 +177,8 @@ class JSONStorage(Storage):
+         self._handle.seek(0)
+ 
+         # Serialize the database state using the user-provided arguments
++        if self._sort_keys:
++            data = _sort_keys(data)
+         serialized = json.dumps(data, **self.kwargs)
+ 
+         # Write the serialized data to the file

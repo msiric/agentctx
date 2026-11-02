@@ -1,0 +1,5 @@
+{
+  "narrative": "Shipping velocity: nothing has shipped yet. One request is open and about 15% along, started and last active on 2026-11-02, so there is no ask-to-ship time to report.\n\n## Crash-safe JSONStorage writes (2026-11-02)\n\nThe owner reported that a service was OOM-killed mid-write and left a truncated db.json that TinyDB could no longer open. They asked for JSONStorage writes to be crash-safe, so that a crash partway through a write cannot leave a truncated file.\n\nThe only recorded work so far is a diagnosis (observation #1). JSONStorage.write overwrites db.json in place, so a crash partway through leaves a half-written file. Memory has no fix, PR, release or owner confirmation yet, so the request is in progress at about 15%.\n\nThe work is still at the diagnosis stage, so there is little to learn about rework or stalls. The next step is a fix that avoids in-place overwrites.",
+  "preferences": [],
+  "writtenAt": "2026-11-02T20:16:39.182Z"
+}

@@ -1,0 +1,51 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..646d1b2 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -49,6 +49,24 @@ def test_json_kwargs(tmpdir):
+     db.close()
+ 
+ 
++def test_json_sort_keys_default(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file))
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    assert db_file.read() == '{"_default": {"1": {"a": 2, "b": 1}}}'
++
++
++def test_json_sort_keys_disabled(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file), sort_keys=False)
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    assert db_file.read() == '{"_default": {"1": {"b": 1, "a": 2}}}'
++
++
+ def test_json_readwrite(tmpdir):
+     """
+     Regression test for issue #1
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..7fe2ba7 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -95,6 +95,9 @@ class JSONStorage(Storage):
+         members like ``cls`` or ``default`` will be called on every write
+         operation.
+ 
++        **Note:** Keys are written sorted by default for stable output. Pass
++        ``sort_keys=False`` to keep insertion order.
++
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
+@@ -104,6 +107,7 @@ class JSONStorage(Storage):
+ 
+         self._mode = access_mode
+         self.kwargs = kwargs
++        self.kwargs.setdefault('sort_keys', True)
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+             warnings.warn(

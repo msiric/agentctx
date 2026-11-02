@@ -1,0 +1,109 @@
+diff --git a/docs/exception-handling.rst b/docs/exception-handling.rst
+index 7afcb7c..c0e6aa2 100644
+--- a/docs/exception-handling.rst
++++ b/docs/exception-handling.rst
+@@ -1,7 +1,7 @@
+ Exception Handling
+ ##################
+ 
+-Schedule doesn't catch exceptions that happen during job execution. Therefore any exceptions thrown during job execution will bubble up and interrupt schedule's run_xyz function.
++Schedule doesn't swallow exceptions that happen during job execution. If a job raises, ``run_pending()`` and ``run_all()`` still run the remaining jobs, log the failure, and then re-raise the first exception once every job has been attempted. ``KeyboardInterrupt`` and ``SystemExit`` stop execution immediately.
+ 
+ If you want to guard against exceptions you can wrap your job function
+ in a decorator like this:
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..d7749b1 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -97,8 +97,11 @@ class Scheduler:
+         between but only once.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        first_error: Optional[Exception] = None
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            first_error = self._run_job_safely(job, first_error)
++        if first_error is not None:
++            raise first_error
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +118,13 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
+-            self._run_job(job)
+-            time.sleep(delay_seconds)
++        first_error: Optional[Exception] = None
++        for index, job in enumerate(self.jobs[:]):
++            if index > 0:
++                time.sleep(delay_seconds)
++            first_error = self._run_job_safely(job, first_error)
++        if first_error is not None:
++            raise first_error
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """
+@@ -174,6 +181,19 @@ class Scheduler:
+         if isinstance(ret, CancelJob) or ret is CancelJob:
+             self.cancel_job(job)
+ 
++    def _run_job_safely(
++        self, job: "Job", first_error: Optional[Exception]
++    ) -> Optional[Exception]:
++        # Keep running the remaining jobs if this one raises; the caller
++        # re-raises the first captured exception once the loop is done.
++        # KeyboardInterrupt/SystemExit are not Exceptions and still propagate.
++        try:
++            self._run_job(job)
++        except Exception as e:
++            logger.exception("Job %s raised an exception", job)
++            return first_error if first_error is not None else e
++        return first_error
++
+     def get_next_run(
+         self, tag: Optional[Hashable] = None
+     ) -> Optional[datetime.datetime]:
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..b44a481 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1278,6 +1278,37 @@ class SchedulerTests(TestCase):
+         schedule.run_all()
+         assert mock_job.call_count == 3
+ 
++    def test_run_all_sleeps_only_between_jobs(self):
++        every().minute.do(make_mock_job())
++        every().hour.do(make_mock_job())
++        every().day.do(make_mock_job())
++        with mock.patch("schedule.time.sleep") as sleep:
++            schedule.run_all(delay_seconds=5)
++        assert sleep.call_count == 2
++
++    def test_run_all_continues_after_failure(self):
++        good = make_mock_job()
++        bad = mock.Mock(side_effect=ValueError("first"))
++        bad.__name__ = "bad"
++        every().minute.do(bad)
++        every().hour.do(good)
++        with self.assertRaises(ValueError):
++            schedule.run_all()
++        assert good.call_count == 1
++
++    def test_run_pending_continues_after_failure(self):
++        good = make_mock_job()
++        bad = mock.Mock(side_effect=ValueError("boom"))
++        bad.__name__ = "bad"
++        with mock_datetime(2024, 1, 1, 10, 0, 0):
++            every().minute.do(bad)
++            every().minute.do(good)
++        with mock_datetime(2024, 1, 1, 10, 5, 0):
++            with self.assertRaises(ValueError):
++                schedule.run_pending()
++        assert bad.call_count == 1
++        assert good.call_count == 1
++
+     def test_run_all_with_decorator(self):
+         mock_job = make_mock_job()
+ 

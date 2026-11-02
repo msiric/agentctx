@@ -1,0 +1,118 @@
+{
+  "groupId": "g_2c82aaf53abd",
+  "state": "in-progress",
+  "percent": 60,
+  "startedAt": "2026-11-02T19:26:35.789Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-02T19:36:08.248Z",
+  "summary": "Add a named export parseBytes(string) to pretty-bytes, the reverse of prettyBytes. Binary units are committed. SI units and a readme section were added, but the storage and billing branches disagree on what kB and MB mean.",
+  "narrative": "The owner asked for parseBytes on the storage app's pinned branch: plain numbers and binary units KiB to YiB, with tests and types. It was committed as 23c0151 and the suite passed after two lint and test-harness fixes. The same work was then requested for the billing branch. There the owner said billing wants strict SI, where 1 MB is 1,000,000 bytes. Earlier, the storage team's answer was that kB and MB on their branch are powers of 1024. The agent added SI decimal units in cf7d7ea, beyond the binary-only scope, and changed a round-trip test value to make it pass. A third conversation cherry-picked that commit onto storage-app as 117435c, added a KB alias and documented parseBytes in the readme (58 tests pass). That follows billing's SI reading, not the 1024 reading storage asked for. No PR or release is recorded.",
+  "milestones": [
+    {
+      "at": "2026-11-02T19:26:35.789Z",
+      "text": "Owner asked for parseBytes (binary units, fractions, case-sensitive) with tests and types; SI units deferred.",
+      "evidence": [
+        "prompt #1"
+      ]
+    },
+    {
+      "at": "2026-11-02T19:27:39.745Z",
+      "text": "Binary-unit parseBytes committed as 23c0151 after lint and docs-evaluator fixes; 56 tests pass.",
+      "evidence": [
+        "observation #4",
+        "observation #9",
+        "observation #10"
+      ]
+    },
+    {
+      "at": "2026-11-02T19:27:36.378Z",
+      "text": "Owner relayed the storage team's answer: non-i units are powers of 1024 on the storage branch.",
+      "evidence": [
+        "prompt #2"
+      ]
+    },
+    {
+      "at": "2026-11-02T19:30:51.396Z",
+      "text": "Same feature requested for the billing-service branch; the commit is shared with billing-svc.",
+      "evidence": [
+        "prompt #4",
+        "observation #11"
+      ]
+    },
+    {
+      "at": "2026-11-02T19:32:06.707Z",
+      "text": "Strict SI decimal units (kB to YB) added in cf7d7ea after billing asked for 1 MB = 1,000,000. This exceeded the binary-only scope, and one round-trip test value was changed.",
+      "evidence": [
+        "prompt #5",
+        "observation #16",
+        "observation #17",
+        "observation #18"
+      ]
+    },
+    {
+      "at": "2026-11-02T19:35:34.028Z",
+      "text": "cf7d7ea cherry-picked onto storage-app as 117435c, giving that branch SI (1000) units, not the 1024 the storage team wanted. A KB alias was added.",
+      "evidence": [
+        "observation #21",
+        "observation #22"
+      ]
+    },
+    {
+      "at": "2026-11-02T19:36:00.473Z",
+      "text": "readme.md gained a parseBytes API section; npm test passes with 58 tests and 3 skipped.",
+      "evidence": [
+        "observation #23"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Keep scope narrow and defer undecided behaviour until the owner has confirmed it with stakeholders.",
+      "quote": "Leave out kB/MB/GB and friends for now; I still have to check with the storage team how they want those read.",
+      "at": "2026-11-02T19:26:35.789Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Deliver tests and types together with new features.",
+      "quote": "Tests and types please.",
+      "at": "2026-11-02T19:26:35.789Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Commit the work once it is done.",
+      "quote": "Commit what you have.",
+      "at": "2026-11-02T19:27:36.378Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "prompt #1",
+    "prompt #2",
+    "prompt #4",
+    "prompt #5",
+    "prompt #7",
+    "observation #10",
+    "observation #18",
+    "observation #21",
+    "observation #23"
+  ],
+  "reviewedThrough": "2026-11-02T19:36:45.310Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"26fb24ee-0d17-4c13-83c5-03c3e4b36538\"]",
+    "[\"conversation\",\"claude\",\"f86ebf74-8c20-4602-aef2-7706e591461d\"]",
+    "[\"conversation\",\"claude\",\"fc373de1-d008-464d-8e3c-cae23ea17bdb\"]"
+  ],
+  "checkedAt": "2026-11-02T19:37:03.544Z",
+  "changedAt": "2026-11-02T19:37:03.544Z",
+  "readings": [
+    {
+      "at": "2026-11-02T19:26:55.212Z",
+      "percent": 15
+    },
+    {
+      "at": "2026-11-02T19:37:03.544Z",
+      "percent": 60
+    }
+  ]
+}

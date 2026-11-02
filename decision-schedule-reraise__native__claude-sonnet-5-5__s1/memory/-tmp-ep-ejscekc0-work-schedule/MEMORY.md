@@ -1,0 +1,1 @@
+- [Job error handling decision](job-error-handling-decision.md) — run other due jobs, then re-raise first exception; implemented, uncommitted; reschedule-on-failure question open

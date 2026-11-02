@@ -1,0 +1,5 @@
+{
+  "narrative": "Shipping velocity: nothing has shipped yet. One request is on record, and it is at an early investigation stage (about 15%), so there is no ask-to-ship time to measure.\n\n## Make run_all sleep only between jobs (2 Nov 2026)\n\nThe owner asked for a small fix. `run_all(delay_seconds=...)` was sleeping after the final job as well as between jobs, which wasted time at the end of a batch. They wanted the sleep to happen only between jobs.\n\nMemory holds one observation (#1) from the same day. It confirms the behaviour: `run_all` sleeps after every job, including the last. No code change, PR or owner confirmation has been recorded yet. The request was last active on 2 Nov 2026 and stays in progress.\n\nWhat this shows so far: the request is small and well scoped, and the cause is already identified. The next step is to skip the delay after the last job and confirm the change. There is too little history to say anything about stalls, rework or how the owner likes to work with agents.",
+  "preferences": [],
+  "writtenAt": "2026-11-02T18:09:48.189Z"
+}

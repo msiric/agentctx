@@ -1,0 +1,72 @@
+{
+  "narrative": "Nothing has shipped yet, so there is no shipping velocity to report. Across two requests reviewed, both on Nov 2, 2026, each is about 70 percent done and committed, with no PR merge or release recorded. Ask-to-commit time is under ten minutes for the first pieces, but ask-to-ship is still unknown.\n\n## ISO 8601 duration formatting in ms (Nov 2, 2026)\n\nAt 18:16 the owner asked for ISO 8601 duration support in the ms library, starting with formatting. They gave two examples: formatISO(5400000) should return \"PT1H30M\", and 90061000 should return \"P1DT1H1M1S\". They set days as the largest unit, because months and years are ambiguous. They also asked for the function to be exported from src/index.ts and covered by tests.\n\nformatISO was added with its own test file and committed as e2ceaf8 (obs 2, 3). The owner then said a security reviewer wants no regular expressions in any new parsing code on this branch, so the parse side had to be hand-written. About seven minutes later a new conversation continued with parseISO as the inverse of formatISO. It handles weeks, days and time parts, an optional sign, and comma or dot decimals. It returns NaN for years and months. A trailing-T case such as \"P1DT\" was fixed to be rejected (obs 16, 17). Round-trip tests were added and the full suite passed at 188 tests (obs 18). Memory shows no commit of parseISO, PR, release or owner confirmation yet. One open question is that later observations mention a /t$/i test, which sits uneasily with the no-regex constraint.\n\n## parseCompound for strings like \"1h 30m\" (Nov 2, 2026)\n\nAt 18:20 the owner asked for a separate PR adding parseCompound, with an export from src/index.ts and tests. feat/compound already held the formatISO commit, so the agent cut feat/parse-compound from main (obs 4, 6). parseCompound was committed as 7ed8d44 (obs 9, 10).\n\nThe owner then asked for a single anchored regex for the whole string, in the style of parse(), with a capped input length, because the reviewer prefers that. The work was reworked to an upfront anchored validation regex plus a matchAll loop and a 100-character limit, and committed as 6cc46a1 (obs 11, 12). That is one rework within about a minute. No PR opening, merge or release is recorded.\n\n## What this suggests so far\n\nThe owner writes specific asks. They give concrete examples, name the file to export from, ask for tests in the same request, and state design limits up front. They pass on reviewer constraints as they learn them, and these can differ by branch: no regex on the formatISO and parseISO branch, an anchored regex on the parseCompound branch. They also keep separate features in separate PRs. Later chapters should record how long it takes from these asks to a merged and released change.",
+  "preferences": [
+    {
+      "preference": "Avoid ambiguous units: use days as the largest duration unit, with no months or years.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Days are the largest unit, no months or years since those are ambiguous.",
+          "at": "2026-11-02T18:16:30.736Z"
+        }
+      ]
+    },
+    {
+      "preference": "Add tests and export new features from src/index.ts.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Export it from src/index.ts and add tests.",
+          "at": "2026-11-02T18:16:30.736Z"
+        }
+      ]
+    },
+    {
+      "preference": "Follow reviewer constraints on the branch, such as no regular expressions in new parsing code when security asks.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "he wants no regular expressions in any new parsing code on this branch. So when we do the parse side next, it has to be hand-written.",
+          "at": "2026-11-02T18:17:02.403Z"
+        }
+      ]
+    },
+    {
+      "preference": "Keep separate features in separate PRs.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Separate PR: add `parseCompound`",
+          "at": "2026-11-02T18:20:15.611Z"
+        }
+      ]
+    },
+    {
+      "preference": "Match the existing parse() style: a single anchored regex with a capped input length, as the reviewer prefers.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "use a single anchored regex for the whole string, in the same style as `parse()`",
+          "at": "2026-11-02T18:20:54.740Z"
+        }
+      ]
+    },
+    {
+      "preference": "Commit when the work is done.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Commit when you're done.",
+          "at": "2026-11-02T18:20:54.740Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-02T18:27:35.891Z"
+}

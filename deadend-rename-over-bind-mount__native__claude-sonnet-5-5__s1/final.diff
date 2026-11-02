@@ -1,0 +1,181 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..3caea10 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,85 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_write_crash_leaves_old_state(tmpdir, monkeypatch):
++    path = str(tmpdir.join('crash.json'))
++    db = TinyDB(path)
++    db.insert({'a': 1})
++
++    # Simulate the process dying mid-write: the temp file is partially
++    # written and the swap never happens
++    def boom(*args, **kwargs):
++        raise KeyboardInterrupt
++
++    monkeypatch.setattr(os, 'replace', boom)
++    with pytest.raises(KeyboardInterrupt):
++        db.insert({'b': 2})
++    monkeypatch.undo()
++    db.close()
++
++    db = TinyDB(path)
++    assert db.all() == [{'a': 1}]
++    db.close()
++    # no temp files left behind
++    assert os.listdir(str(tmpdir)) == ['crash.json']
++
++
++def test_json_hard_crash_leftover_tmp_file(tmpdir):
++    path = str(tmpdir.join('crash.json'))
++    db = TinyDB(path)
++    db.insert({'a': 1})
++    db.close()
++
++    # A killed process leaves a truncated temp file next to the database
++    with open(path + '.partial.tmp', 'w') as f:
++        f.write('{"_default": {"2": {"b"')
++
++    db = TinyDB(path)
++    assert db.all() == [{'a': 1}]
++    db.close()
++
++
++def test_json_write_failure_during_fsync(tmpdir, monkeypatch):
++    path = str(tmpdir.join('crash.json'))
++    db = TinyDB(path)
++    db.insert({'a': 1})
++
++    def fail(fd):
++        raise OSError('disk full')
++
++    monkeypatch.setattr(os, 'fsync', fail)
++    with pytest.raises(OSError):
++        db.insert({'b': 2})
++    monkeypatch.undo()
++    db.close()
++
++    assert TinyDB(path).all() == [{'a': 1}]
++
++
++def test_json_serialization_error_keeps_file(tmpdir):
++    path = str(tmpdir.join('crash.json'))
++    db = TinyDB(path)
++    db.insert({'a': 1})
++    with pytest.raises(TypeError):
++        db.insert({'b': object()})
++    db.close()
++    assert TinyDB(path).all() == [{'a': 1}]
++
++
++def test_json_write_preserves_permissions_and_symlink(tmpdir):
++    real = tmpdir.join('real.json')
++    link = tmpdir.join('link.json')
++    real.write('')
++    os.chmod(str(real), 0o640)
++    os.symlink(str(real), str(link))
++
++    db = TinyDB(str(link))
++    db.insert({'a': 1})
++    db.insert({'b': 2})
++    db.close()
++
++    assert os.path.islink(str(link))
++    assert os.stat(str(real)).st_mode & 0o777 == 0o640
++    assert len(json.loads(real.read())['_default']) == 2
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..b7e23da 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -6,6 +6,8 @@ implementations.
+ import io
+ import json
+ import os
++import shutil
++import tempfile
+ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+@@ -103,6 +105,8 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
++        self._path = path
++        self._encoding = encoding
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+@@ -140,25 +144,53 @@ class JSONStorage(Storage):
+             return json.load(self._handle)
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
+-        # Move the cursor to the beginning of the file just in case
+-        self._handle.seek(0)
+-
+-        # Serialize the database state using the user-provided arguments
++        # Serialize first so a serialization error never touches the file
+         serialized = json.dumps(data, **self.kwargs)
+ 
+-        # Write the serialized data to the file
+-        try:
+-            self._handle.write(serialized)
+-        except io.UnsupportedOperation:
++        if not any(c in self._mode for c in ('+', 'w', 'a')):
+             raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
+ 
+-        # Ensure the file has been written
+-        self._handle.flush()
+-        os.fsync(self._handle.fileno())
+-
+-        # Remove data that is behind the new cursor in case the file has
+-        # gotten shorter
+-        self._handle.truncate()
++        # Crash-safe write: write the new state to a temporary file in the same
++        # directory, fsync it and atomically swap it in with ``os.replace``.
++        # At any point the path holds either the complete old or the complete
++        # new state, never a partial write.
++        target = os.path.realpath(self._path)
++        directory = os.path.dirname(target)
++        fd, tmp_path = tempfile.mkstemp(
++            dir=directory, prefix=os.path.basename(target) + '.', suffix='.tmp'
++        )
++        try:
++            with open(fd, 'w', encoding=self._encoding) as tmp:
++                tmp.write(serialized)
++                tmp.flush()
++                os.fsync(tmp.fileno())
++
++            # Keep the permissions of the existing file (mkstemp uses 0600)
++            shutil.copymode(target, tmp_path)
++            os.replace(tmp_path, target)
++        except BaseException:
++            try:
++                os.unlink(tmp_path)
++            except OSError:
++                pass
++            raise
++
++        # Persist the rename itself (not supported on all platforms)
++        try:
++            dir_fd = os.open(directory, os.O_RDONLY)
++        except OSError:
++            pass
++        else:
++            try:
++                os.fsync(dir_fd)
++            except OSError:
++                pass
++            finally:
++                os.close(dir_fd)
++
++        # The old handle still points at the replaced inode: reopen
++        self._handle.close()
++        self._handle = open(target, mode=self._mode, encoding=self._encoding)
+ 
+ 
+ class MemoryStorage(Storage):

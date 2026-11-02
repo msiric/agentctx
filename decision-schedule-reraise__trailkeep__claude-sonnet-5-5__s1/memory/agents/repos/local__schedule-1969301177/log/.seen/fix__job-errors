@@ -1,0 +1,5 @@
+2026-11-02: Fixed `run_all` so it only sleeps between jobs (done, tests pass, uncommitted). Discussed options for job errors and picked the design below. Nothing implemented for it yet. Next: start the Plan.
+Decision: keep running the other due jobs, then re-raise the first exception, because the supervisor restarts the worker and pages on crash, so logging and swallowing is not acceptable.
+Decision: no opt-in flag or catch-and-log mode, because the user chose "run all, then re-raise" as the single behavior.
+Note: today `Job.run` sets `last_run` and calls `_schedule_next_run()` only after `job_func()` returns, so a raising job keeps its old `next_run` and is retried on the next tick.
+2026-11-02: Implemented: Job.run reschedules in finally; Scheduler._run_jobs runs all, re-raises first (others logged); used by run_pending and run_all. 4 tests added (85 passing). Docs updated in docs/exception-handling.rst. Uncommitted.

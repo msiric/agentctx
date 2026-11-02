@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-02T18:26:41.637Z",
+  "conversations": {
+    "[\"conversation\",\"claude\",\"c7f71935-d4fe-4988-b5a1-e6d04c1e3293\"]": "g_6949524d51a0",
+    "[\"conversation\",\"claude\",\"821a85d0-c37d-4510-a5f5-2d9761cf0ebe\"]": "g_115d30c53aa6",
+    "[\"conversation\",\"claude\",\"283efe5f-d26e-4dd8-93f6-2fd2c9c53c08\"]": "g_6949524d51a0"
+  },
+  "groups": {
+    "g_6949524d51a0": {
+      "title": "ISO 8601 duration formatting in ms",
+      "anchor": "[\"conversation\",\"claude\",\"c7f71935-d4fe-4988-b5a1-e6d04c1e3293\"]",
+      "projectRoot": "ms",
+      "links": [
+        {
+          "kind": "agent-judgment",
+          "conversations": [
+            "[\"conversation\",\"claude\",\"c7f71935-d4fe-4988-b5a1-e6d04c1e3293\"]",
+            "[\"conversation\",\"claude\",\"283efe5f-d26e-4dd8-93f6-2fd2c9c53c08\"]"
+          ],
+          "evidence": "Later ask: \"Let's continue with the ISO durations. Parsing is next: parseISO(\\\"PT1H30M\\\") should return 5400000, i.e. the inverse of formatISO.\" continues the open request whose anchor asked for formatISO(5400000) to give \"PT1H30M\"."
+        }
+      ],
+      "decidedAt": "2026-11-02T18:26:41.637Z",
+      "anchorAsk": {
+        "text": "I want ISO 8601 duration support in ms, starting with formatting: `formatISO(5400000)` should give \"PT1H30M\" and `formatISO(90061000)` \"P1DT1H1M1S\". Days are the largest unit, no months or years since those are ambiguous. Export it from src/index.ts and add tests.",
+        "source": "user-prompt",
+        "sourceId": 1,
+        "url": "/api/work-view/evidence/prompt/1",
+        "promptNumber": 1,
+        "atEpoch": 1793643390736
+      }
+    },
+    "g_115d30c53aa6": {
+      "title": "parseCompound for strings like \"1h 30m\"",
+      "anchor": "[\"conversation\",\"claude\",\"821a85d0-c37d-4510-a5f5-2d9761cf0ebe\"]",
+      "projectRoot": "ms",
+      "links": [],
+      "decidedAt": "2026-11-02T18:26:41.637Z",
+      "anchorAsk": {
+        "text": "Separate PR: add `parseCompound` for strings like \"1h 30m\" or \"2 days 4 hours\", returning the total in ms, NaN if it can't be parsed. Export it from src/index.ts with tests.",
+        "source": "user-prompt",
+        "sourceId": 4,
+        "url": "/api/work-view/evidence/prompt/4",
+        "promptNumber": 1,
+        "atEpoch": 1793643615611
+      }
+    }
+  },
+  "ignored": {}
+}

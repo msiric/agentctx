@@ -1,0 +1,258 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..f3f6aef 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,104 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_write_keeps_inode(tmpdir):
++    # The db file must be rewritten in place (it may be a bind-mounted file)
++    path = str(tmpdir.join('db.json'))
++    storage = JSONStorage(path)
++    storage.write({'a': 1})
++    inode = os.stat(path).st_ino
++    storage.write({'a': 2})
++    storage.close()
++
++    assert os.stat(path).st_ino == inode
++    assert sorted(os.listdir(str(tmpdir))) == ['db.json', 'db.json.bak']
++
++
++def test_recover_from_truncated_file(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    old, new = {'_default': {'1': {'v': 'old'}}}, {'_default': {'1': {'v': 'new' * 10}}}
++
++    storage = JSONStorage(path)
++    storage.write(old)
++    storage.close()
++
++    new_serialized = json.dumps(new)
++
++    # Simulate dying after every possible number of bytes of the in-place
++    # write (the file is truncated first, then the new data is written)
++    for cut in range(len(new_serialized)):
++        with open(path, 'w') as f:
++            f.write(new_serialized[:cut])
++
++        db = TinyDB(path)
++        try:
++            with pytest.warns(UserWarning, match='recovered'):
++                recovered = db.storage.read()
++        finally:
++            db.close()
++
++        assert recovered in (old, new)
++
++
++def test_crash_during_write(tmpdir, monkeypatch):
++    path = str(tmpdir.join('db.json'))
++    old, new = {'_default': {'1': {'v': 1}}}, {'_default': {'1': {'v': 2}}}
++
++    storage = JSONStorage(path)
++    storage.write(old)
++
++    # Die after the data was written to the file but before it is flushed,
++    # and in the middle of writing it
++    class Crash(Exception):
++        pass
++
++    real_handle = storage._handle
++
++    class Proxy:
++        def __getattr__(self, name):
++            return getattr(real_handle, name)
++
++        def write(self, data):
++            real_handle.write(data[:len(data) // 2])
++            real_handle.flush()
++            raise Crash()
++
++    storage._handle = Proxy()
++    with pytest.raises(Crash):
++        storage.write(new)
++    real_handle.close()
++
++    db = TinyDB(path)
++    with pytest.warns(UserWarning, match='recovered'):
++        assert db.storage.read() in (old, new)
++    db.close()
++
++
++def test_corrupt_file_without_backup_still_raises(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    with open(path, 'w') as f:
++        f.write('{"_default": {')
++
++    with pytest.raises(ValueError):
++        TinyDB(path).tables()
++
++
++def test_empty_file_without_backup_is_fresh_db(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    storage = JSONStorage(path)
++    assert storage.read() is None
++    storage.close()
++    assert os.listdir(str(tmpdir)) == ['db.json']
++
++
++def test_read_only_mode_creates_no_backup(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    with open(path, 'w') as f:
++        f.write('{}')
++    storage = JSONStorage(path, access_mode='r')
++    with pytest.raises(IOError):
++        storage.write({})
++    storage.close()
++    assert os.listdir(str(tmpdir)) == ['db.json']
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..305e46f 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -3,9 +3,9 @@ Contains the :class:`base class <tinydb.storages.Storage>` for storages and
+ implementations.
+ """
+ 
+-import io
+ import json
+ import os
++import tempfile
+ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+@@ -103,6 +103,8 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
++        self._path = path
++        self._encoding = encoding
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+@@ -122,44 +124,107 @@ class JSONStorage(Storage):
+     def close(self) -> None:
+         self._handle.close()
+ 
++    @property
++    def _backup_path(self) -> str:
++        return os.fspath(self._path) + '.bak'
++
++    def _read_backup(self) -> Optional[dict[str, dict[str, Any]]]:
++        """
++        Load the backup copy, return ``None`` if there is no usable one.
++        """
++        try:
++            with open(self._backup_path, encoding=self._encoding) as backup:
++                data = json.load(backup)
++        except (OSError, ValueError):
++            return None
++
++        return data if isinstance(data, dict) else None
++
++    def _write_backup(self, serialized: str) -> None:
++        """
++        Atomically (re)place the backup file with the given contents.
++
++        The backup is a *new* file next to the database, so this works even if
++        the database file itself can't be replaced (e.g. single-file bind
++        mount).
++        """
++        backup_path = self._backup_path
++        fd, tmp_path = tempfile.mkstemp(
++            dir=os.path.dirname(os.path.abspath(backup_path)),
++            prefix=os.path.basename(backup_path) + '.',
++            suffix='.tmp',
++        )
++        try:
++            with open(fd, 'w', encoding=self._encoding) as tmp:
++                tmp.write(serialized)
++                tmp.flush()
++                os.fsync(tmp.fileno())
++            os.replace(tmp_path, backup_path)
++        except BaseException:
++            try:
++                os.unlink(tmp_path)
++            except OSError:
++                pass
++            raise
++
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
+         # Get the file size by moving the cursor to the file end and reading
+         # its location
+         self._handle.seek(0, os.SEEK_END)
+         size = self._handle.tell()
+ 
+-        if not size:
+-            # File is empty, so we return ``None`` so TinyDB can properly
+-            # initialize the database
+-            return None
+-        else:
++        if size:
+             # Return the cursor to the beginning of the file
+             self._handle.seek(0)
+ 
+             # Load the JSON contents of the file
+-            return json.load(self._handle)
++            try:
++                return json.load(self._handle)
++            except ValueError:
++                # Unparsable file: most likely a write was interrupted. Fall
++                # back to the backup written before the interrupted write.
++                recovered = self._read_backup()
++                if recovered is None:
++                    raise
++        else:
++            # An empty file is a fresh database, unless a write was
++            # interrupted right after the file got truncated.
++            recovered = self._read_backup()
++            if recovered is None:
++                # File is empty, so we return ``None`` so TinyDB can properly
++                # initialize the database
++                return None
++
++        warnings.warn(
++            'Database file {0!r} is corrupt or incomplete, recovered the '
++            'last state from {1!r}'.format(self._path, self._backup_path)
++        )
++        return recovered
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
+-        # Move the cursor to the beginning of the file just in case
+-        self._handle.seek(0)
++        if not any(c in self._mode for c in ('+', 'w', 'a')):
++            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
+ 
+         # Serialize the database state using the user-provided arguments
+         serialized = json.dumps(data, **self.kwargs)
+ 
+-        # Write the serialized data to the file
+-        try:
+-            self._handle.write(serialized)
+-        except io.UnsupportedOperation:
+-            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
++        # The database file is rewritten in place (it may be a bind-mounted
++        # file that can't be replaced), so a crash can leave it incomplete.
++        # To survive that, first store the new state in a backup file using an
++        # atomic rename. Whatever happens afterwards, read() can recover.
++        self._write_backup(serialized)
++
++        # Truncate before writing so an interrupted write leaves a strict
++        # prefix of the new JSON document (never valid JSON) instead of a mix
++        # of new and old contents that might still parse.
++        self._handle.seek(0)
++        self._handle.truncate()
++        self._handle.write(serialized)
+ 
+         # Ensure the file has been written
+         self._handle.flush()
+         os.fsync(self._handle.fileno())
+ 
+-        # Remove data that is behind the new cursor in case the file has
+-        # gotten shorter
+-        self._handle.truncate()
+-
+ 
+ class MemoryStorage(Storage):
+     """

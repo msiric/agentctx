@@ -1,0 +1,39 @@
+{
+  "narrative": "Over the review window the owner made one request. Nothing has shipped yet, so there is no ask-to-ship time to report. The request moved from 15% to 60% within about ten minutes on 2026-11-02, and it is still in progress with no PR or release recorded.\n\n## Add parseBytes to convert byte strings to numbers (2026-11-02, in progress, 60%)\n\nThe owner asked for a named export `parseBytes(string)` on the branch their storage web app pins. It is the reverse of `prettyBytes`. It should accept plain numbers and binary units from KiB to YiB, allow fractions ('1.5 KiB' gives 1536) and be case-sensitive. They asked for tests and types with it. They deliberately left out kB, MB and GB, because they still had to check with the storage team how those should be read.\n\nThe binary-unit version was committed as 23c0151 (2026-11-02, observations #4, #9, #10) after two lint and test-harness fixes. 56 tests passed. The owner then relayed the storage team's answer: on the storage branch, non-i units such as kB and MB are powers of 1024.\n\nThe same feature was then requested for the billing-service branch, sharing the commit with billing-svc. There the owner said billing wants strict SI, where 1 MB is 1,000,000 bytes. The agent added SI decimal units (kB to YB) in cf7d7ea (observations #16 to #18). This went beyond the original binary-only scope, and one round-trip test value was changed to make the suite pass.\n\nA third conversation cherry-picked cf7d7ea onto storage-app as 117435c, added a KB alias, and documented parseBytes in the readme. npm test passed with 58 tests and 3 skipped (observations #21 to #23). That branch now follows billing's SI reading of kB and MB, not the 1024 reading the storage team asked for.\n\n## What this suggests\n\nPace was fast, with three commits in about ten minutes of activity. The main risk is a conflict, not speed. Storage and billing define kB and MB differently, and one shared implementation now serves both. Until that is resolved, the request cannot be called done. Two things need attention: the changed round-trip test value, and the SI-versus-1024 mismatch on storage-app. The deferral the owner asked for at the start is the decision that came back and caused the divergence. A follow-up request to split the behaviour per branch is likely.",
+  "preferences": [
+    {
+      "preference": "Keep scope narrow and defer undecided behaviour until the owner has confirmed it with stakeholders.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Leave out kB/MB/GB and friends for now; I still have to check with the storage team how they want those read.",
+          "at": "2026-11-02T19:26:35.789Z"
+        }
+      ]
+    },
+    {
+      "preference": "Deliver tests and types together with new features.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Tests and types please.",
+          "at": "2026-11-02T19:26:35.789Z"
+        }
+      ]
+    },
+    {
+      "preference": "Commit the work once it is done.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Commit what you have.",
+          "at": "2026-11-02T19:27:36.378Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-02T19:37:27.651Z"
+}

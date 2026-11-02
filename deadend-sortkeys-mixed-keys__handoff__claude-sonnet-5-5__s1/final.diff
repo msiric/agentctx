@@ -1,0 +1,89 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..e2b200b
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,20 @@
++# HANDOFF
++
++## State
++JSONStorage now writes sorted keys by default; `sort_keys=False` turns it off.
++Implemented in tinydb/storages.py, with 3 tests appended to tests/test_storages.py
++(default sorted, opt-out, mixed-type keys). Full suite passes (231). Not committed.
++Not done: note in docs/usage.rst (an earlier attempt had one).
++Run tests with `python -m pytest tests -c /dev/null --rootdir=.` (pytest.ini needs pytest-cov).
++
++## Decisions
++- Plain `sort_keys=True` raises TypeError on mixed-type keys, e.g. the ingest docs
++  `{"hits": {200: 1520, 404: 12, "other": 3}}`; every insert would fail. So when sorting,
++  write() first round-trips (dumps with sort_keys=False, then loads) so keys become strings,
++  then dumps with sort_keys=True. Output matches today's JSON, just sorted.
++  Cost: double serialize per write.
++- Rejected: leaving plain sort_keys=True and having ingest pass sort_keys=False (defeats the default).
++
++## History
++An earlier version (plain setdefault, no round-trip) was backed out because a release was
++being cut and storage changes were unwanted then. The user has since asked for this again.
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..10e2425 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,34 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_sorted_keys_default(tmpdir):
++    path = str(tmpdir.join('db.json'))
++
++    with TinyDB(path) as db:
++        db.insert({'b': 1, 'a': 2})
++
++    with open(path) as f:
++        assert f.read() == '{"_default": {"1": {"a": 2, "b": 1}}}'
++
++
++def test_json_sorted_keys_disabled(tmpdir):
++    path = str(tmpdir.join('db.json'))
++
++    with TinyDB(path, sort_keys=False) as db:
++        db.insert({'b': 1, 'a': 2})
++
++    with open(path) as f:
++        assert f.read() == '{"_default": {"1": {"b": 1, "a": 2}}}'
++
++
++def test_json_sorted_keys_mixed_types(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    doc = {'endpoint': '/x', 'hits': {200: 1520, 404: 12, 'other': 3}}
++
++    with TinyDB(path) as db:
++        db.insert(doc)
++
++    with TinyDB(path) as db:
++        assert db.all()[0]['hits'] == {'200': 1520, '404': 12, 'other': 3}
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..b4fc6fc 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -104,6 +104,7 @@ class JSONStorage(Storage):
+ 
+         self._mode = access_mode
+         self.kwargs = kwargs
++        self.kwargs.setdefault('sort_keys', True)
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+             warnings.warn(
+@@ -144,6 +145,11 @@ class JSONStorage(Storage):
+         self._handle.seek(0)
+ 
+         # Serialize the database state using the user-provided arguments
++        if self.kwargs.get('sort_keys'):
++            # ``sort_keys`` fails on mixed-type keys (e.g. ``{200: 1, 'x': 2}``),
++            # so round-trip first to turn all keys into strings
++            plain = dict(self.kwargs, sort_keys=False)
++            data = json.loads(json.dumps(data, **plain))
+         serialized = json.dumps(data, **self.kwargs)
+ 
+         # Write the serialized data to the file

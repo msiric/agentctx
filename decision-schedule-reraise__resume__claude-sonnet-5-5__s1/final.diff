@@ -1,0 +1,80 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..de9f26a 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -95,10 +95,24 @@ class Scheduler:
+         that should run every minute and you only call run_pending()
+         in one hour increments then your job won't be run 60 times in
+         between but only once.
++
++        If a job raises, the remaining due jobs still run. The first
++        exception is re-raised once all of them have run.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        first_error: Optional[Exception] = None
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception as e:
++                logger.exception("Job %s raised an exception", job)
++                # Reschedule so the failed job is not due again on every tick
++                job.last_run = datetime.datetime.now()
++                job._schedule_next_run()
++                if first_error is None:
++                    first_error = e
++        if first_error is not None:
++            raise first_error
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +129,11 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
++        jobs = self.jobs[:]
++        for i, job in enumerate(jobs):
+             self._run_job(job)
+-            time.sleep(delay_seconds)
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..ae292c8 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1270,6 +1270,31 @@ class SchedulerTests(TestCase):
+         assert tuesday.hour == 10
+         assert tuesday.minute == 27
+ 
++    def test_run_pending_continues_after_exception_and_reraises_first(self):
++        calls = []
++
++        def bad1():
++            calls.append("bad1")
++            raise ValueError("first")
++
++        def bad2():
++            calls.append("bad2")
++            raise KeyError("second")
++
++        def good():
++            calls.append("good")
++
++        with mock_datetime(2024, 1, 1, 10, 0, 0):
++            every().minute.do(bad1)
++            every().minute.do(good)
++            every().minute.do(bad2)
++        with mock_datetime(2024, 1, 1, 10, 1, 0):
++            with self.assertRaises(ValueError):
++                schedule.run_pending()
++            assert sorted(calls) == ["bad1", "bad2", "good"]
++            # failed jobs were rescheduled, so they are no longer due
++            assert all(not j.should_run for j in schedule.get_jobs())
++
+     def test_run_all(self):
+         mock_job = make_mock_job()
+         every().minute.do(mock_job)

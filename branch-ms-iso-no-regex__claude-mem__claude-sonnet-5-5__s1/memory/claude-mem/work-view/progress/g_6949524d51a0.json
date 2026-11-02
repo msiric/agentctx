@@ -1,0 +1,109 @@
+{
+  "groupId": "g_6949524d51a0",
+  "state": "in-progress",
+  "percent": 70,
+  "startedAt": "2026-11-02T18:16:30.736Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-02T18:25:18.087Z",
+  "summary": "ISO 8601 duration support for ms: formatISO is committed and parseISO, its inverse, is added with round-trip tests. Both are exported from src/index.ts. No PR merge or release is recorded yet.",
+  "narrative": "On Nov 2 the owner asked for ISO 8601 duration formatting in ms, with days as the largest unit and tests. formatISO was added with its own test file and committed as e2ceaf8 (obs 2, 3). The owner noted that a security reviewer wants no regular expressions in new parsing code on this branch, so the parse side had to be hand-written. About seven minutes later a new conversation continued with parseISO as the inverse of formatISO. parseISO was added in src/index.ts, handling weeks, days and time parts, optional sign, and comma or dot decimals. It returns NaN for years and months. A trailing-T case such as \"P1DT\" was fixed to be rejected (obs 16, 17). A parseISO test suite with formatISO round-trips was added and the full suite passed at 188 tests (obs 18). Memory shows no commit of parseISO, PR merge, release or owner confirmation yet, so the work is in review-ready state, not shipped. One open question is that the later observations mention a /t$/i test, which sits uneasily with the no-regex constraint.",
+  "milestones": [
+    {
+      "at": "2026-11-02T18:16:30.736Z",
+      "text": "Owner asked for formatISO with days as the largest unit, an export from src/index.ts and tests.",
+      "evidence": [
+        "prompt 1"
+      ]
+    },
+    {
+      "at": "2026-11-02T18:16:58.342Z",
+      "text": "formatISO implemented and exported with its own test file.",
+      "evidence": [
+        "obs 2"
+      ]
+    },
+    {
+      "at": "2026-11-02T18:17:08.526Z",
+      "text": "formatISO committed as e2ceaf8.",
+      "evidence": [
+        "obs 3"
+      ]
+    },
+    {
+      "at": "2026-11-02T18:17:02.403Z",
+      "text": "Owner required hand-written parsing with no regular expressions on this branch, per the security review.",
+      "evidence": [
+        "prompt 2"
+      ]
+    },
+    {
+      "at": "2026-11-02T18:24:28.386Z",
+      "text": "Owner asked to continue with parseISO as the inverse of formatISO.",
+      "evidence": [
+        "prompt 7"
+      ]
+    },
+    {
+      "at": "2026-11-02T18:24:54.659Z",
+      "text": "parseISO added, returning NaN for years and months.",
+      "evidence": [
+        "obs 16"
+      ]
+    },
+    {
+      "at": "2026-11-02T18:25:09.604Z",
+      "text": "parseISO tests with round-trips added; the full suite passes at 188 tests.",
+      "evidence": [
+        "obs 18"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Avoid ambiguous units: use days as the largest duration unit, no months or years.",
+      "quote": "Days are the largest unit, no months or years since those are ambiguous.",
+      "at": "2026-11-02T18:16:30.736Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Export new features from src/index.ts and add tests.",
+      "quote": "Export it from src/index.ts and add tests.",
+      "at": "2026-11-02T18:16:30.736Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Follow reviewer constraints: no regular expressions in new parsing code on a branch when security asks.",
+      "quote": "he wants no regular expressions in any new parsing code on this branch. So when we do the parse side next, it has to be hand-written.",
+      "at": "2026-11-02T18:17:02.403Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "prompt 1",
+    "prompt 2",
+    "prompt 7",
+    "obs 2",
+    "obs 3",
+    "obs 16",
+    "obs 17",
+    "obs 18"
+  ],
+  "reviewedThrough": "2026-11-02T18:26:41.643Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"283efe5f-d26e-4dd8-93f6-2fd2c9c53c08\"]",
+    "[\"conversation\",\"claude\",\"c7f71935-d4fe-4988-b5a1-e6d04c1e3293\"]"
+  ],
+  "checkedAt": "2026-11-02T18:27:01.446Z",
+  "changedAt": "2026-11-02T18:27:01.446Z",
+  "readings": [
+    {
+      "at": "2026-11-02T18:16:47.300Z",
+      "percent": 10
+    },
+    {
+      "at": "2026-11-02T18:27:01.446Z",
+      "percent": 70
+    }
+  ]
+}

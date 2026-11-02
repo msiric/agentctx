@@ -1,0 +1,103 @@
+diff --git a/docs/changelog.rst b/docs/changelog.rst
+index 92c07e1..2f27ab1 100644
+--- a/docs/changelog.rst
++++ b/docs/changelog.rst
+@@ -19,6 +19,14 @@ see `semver.org <http://semver.org/>`_
+           syntax (``Query()['some']['nested']['field']``) that will
+           not break even when new methods are added to the ``Query`` API.
+ 
++Unreleased
++^^^^^^^^^^
++
++- **Behavior change:** ``JSONStorage`` now writes keys sorted by default to
++  keep database files diff-friendly. Pass ``sort_keys=False`` to keep
++  insertion order. Data that can't be sorted (e.g. mixed ``int``/``str``
++  keys) is written unsorted.
++
+ v4.9.0 (2026-08-06)
+ ^^^^^^^^^^^^^^^^^^^
+ 
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..c160028 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -49,6 +49,40 @@ def test_json_kwargs(tmpdir):
+     db.close()
+ 
+ 
++def test_json_sort_keys_default(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file))
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    assert db_file.read() == '{"_default": {"1": {"a": 2, "b": 1}}}'
++
++
++def test_json_sort_keys_disabled(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file), sort_keys=False)
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    assert db_file.read() == '{"_default": {"1": {"b": 1, "a": 2}}}'
++
++
++def test_json_sort_keys_mixed_key_types(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file))
++    db.insert({'other': 1, 200: 'a', 404: 'b'})
++    db.close()
++
++    with TinyDB(str(db_file)) as db:
++        assert db.all() == [{'other': 1, '200': 'a', '404': 'b'}]
++
++    # Explicit sort_keys=True keeps json's strict behavior
++    db = TinyDB(str(tmpdir.join('strict.db')), sort_keys=True)
++    with pytest.raises(TypeError):
++        db.insert({'other': 1, 200: 'a'})
++    db.close()
++
++
+ def test_json_readwrite(tmpdir):
+     """
+     Regression test for issue #1
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..9fd8b9c 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -98,11 +98,17 @@ class JSONStorage(Storage):
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
++
++        Keys are written sorted by default to keep diffs stable. Pass
++        ``sort_keys=False`` to keep insertion order. If sorting is not
++        possible (e.g. a dict mixing ``int`` and ``str`` keys) and
++        ``sort_keys`` was not given explicitly, the data is written unsorted.
+         """
+ 
+         super().__init__()
+ 
+         self._mode = access_mode
++        self._sort_keys_default = 'sort_keys' not in kwargs
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+@@ -144,7 +150,15 @@ class JSONStorage(Storage):
+         self._handle.seek(0)
+ 
+         # Serialize the database state using the user-provided arguments
+-        serialized = json.dumps(data, **self.kwargs)
++        if self._sort_keys_default:
++            try:
++                serialized = json.dumps(data, sort_keys=True, **self.kwargs)
++            except TypeError:
++                # Keys of mixed types can't be sorted; fall back to
++                # insertion order (re-raises if the error is unrelated)
++                serialized = json.dumps(data, **self.kwargs)
++        else:
++            serialized = json.dumps(data, **self.kwargs)
+ 
+         # Write the serialized data to the file
+         try:

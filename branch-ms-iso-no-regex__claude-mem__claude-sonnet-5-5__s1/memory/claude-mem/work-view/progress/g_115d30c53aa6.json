@@ -1,0 +1,86 @@
+{
+  "groupId": "g_115d30c53aa6",
+  "state": "in-progress",
+  "percent": 70,
+  "startedAt": "2026-11-02T18:20:15.611Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-02T18:21:24.686Z",
+  "summary": "parseCompound for ms parses strings like \"1h 30m\" into total milliseconds, returning NaN on bad input. It is built, committed twice and uses an anchored regex with a length cap. No PR or release is recorded.",
+  "narrative": "On Nov 2 the owner asked for a separate PR adding parseCompound, with an export from src/index.ts and tests. The agent found that feat/compound already held the formatISO commit, so it cut feat/parse-compound from main (obs 4, 6). parseCompound was added and committed as 7ed8d44 (obs 9, 10). The owner then said to use a single anchored regex for the whole string in the style of parse(), with a capped input length, because the reviewer prefers that. The implementation was reworked to an upfront anchored validation regex plus a matchAll loop and a 100-character limit, committed as 6cc46a1 (obs 11, 12). Memory shows no PR opening, merge, release or owner sign-off, so it is in review-ready state.",
+  "milestones": [
+    {
+      "at": "2026-11-02T18:20:15.611Z",
+      "text": "Owner asked for parseCompound in a separate PR, with an export and tests.",
+      "evidence": [
+        "prompt 4"
+      ]
+    },
+    {
+      "at": "2026-11-02T18:20:31.699Z",
+      "text": "Work moved to a new branch, feat/parse-compound, cut from main to keep it separate from formatISO.",
+      "evidence": [
+        "obs 6"
+      ]
+    },
+    {
+      "at": "2026-11-02T18:20:50.028Z",
+      "text": "parseCompound committed as 7ed8d44.",
+      "evidence": [
+        "obs 9",
+        "obs 10"
+      ]
+    },
+    {
+      "at": "2026-11-02T18:21:17.349Z",
+      "text": "Reworked to a single anchored regex with a length cap, per the owner, and committed as 6cc46a1.",
+      "evidence": [
+        "prompt 5",
+        "obs 11",
+        "obs 12"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Keep separate features in separate PRs.",
+      "quote": "Separate PR: add `parseCompound`",
+      "at": "2026-11-02T18:20:15.611Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Use an anchored regex with a capped input length in the style of the existing parse(), as the reviewer prefers.",
+      "quote": "use a single anchored regex for the whole string, in the same style as `parse()`",
+      "at": "2026-11-02T18:20:54.740Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Commit when the work is done.",
+      "quote": "Commit when you're done.",
+      "at": "2026-11-02T18:20:54.740Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "prompt 4",
+    "prompt 5",
+    "obs 4",
+    "obs 6",
+    "obs 9",
+    "obs 10",
+    "obs 11",
+    "obs 12"
+  ],
+  "reviewedThrough": "2026-11-02T18:26:41.644Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"821a85d0-c37d-4510-a5f5-2d9761cf0ebe\"]"
+  ],
+  "checkedAt": "2026-11-02T18:27:01.447Z",
+  "changedAt": "2026-11-02T18:27:01.447Z",
+  "readings": [
+    {
+      "at": "2026-11-02T18:27:01.447Z",
+      "percent": 70
+    }
+  ]
+}

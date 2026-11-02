@@ -1,0 +1,43 @@
+{
+  "groupId": "g_eee1470ccc33",
+  "state": "in-progress",
+  "percent": 15,
+  "startedAt": "2026-11-02T20:16:09.153Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-02T20:16:12.447Z",
+  "summary": "Make TinyDB's JSONStorage writes crash-safe so a process killed mid-write can't leave a truncated db.json. So far the cause is found: writes overwrite the file in place.",
+  "narrative": "The owner reported that a service was OOM-killed mid-write and left a truncated db.json that TinyDB could no longer open. The only recorded work so far is a diagnosis (observation #1): JSONStorage.write overwrites db.json in place, so a crash partway through leaves a half-written file. No fix, PR or confirmation appears in memory yet.",
+  "milestones": [
+    {
+      "at": "2026-11-02T20:16:09.153Z",
+      "text": "Owner reported a truncated db.json after an OOM kill and asked for crash-safe JSONStorage writes",
+      "evidence": [
+        "prompt 1"
+      ]
+    },
+    {
+      "at": "2026-11-02T20:16:12.447Z",
+      "text": "Diagnosed that JSONStorage.write overwrites db.json in place, so it is not crash-safe",
+      "evidence": [
+        "observation #1"
+      ]
+    }
+  ],
+  "preferences": [],
+  "outcome": null,
+  "evidence": [
+    "Prompt 1 and observation #1 in project tinydb; memory has no later activity."
+  ],
+  "reviewedThrough": "2026-11-02T20:16:14.268Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"c8204452-87b9-4a73-8549-84564f00530e\"]"
+  ],
+  "checkedAt": "2026-11-02T20:16:25.308Z",
+  "changedAt": "2026-11-02T20:16:25.308Z",
+  "readings": [
+    {
+      "at": "2026-11-02T20:16:25.308Z",
+      "percent": 15
+    }
+  ]
+}

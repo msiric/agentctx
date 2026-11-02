@@ -1,0 +1,1 @@
+- [Table-style tests](feedback-table-tests.md) — one test.each table per function, in every project

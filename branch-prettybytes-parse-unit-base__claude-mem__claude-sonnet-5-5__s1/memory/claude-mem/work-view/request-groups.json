@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-02T19:36:45.305Z",
+  "conversations": {
+    "[\"conversation\",\"claude\",\"fc373de1-d008-464d-8e3c-cae23ea17bdb\"]": "g_2c82aaf53abd",
+    "[\"conversation\",\"claude\",\"f86ebf74-8c20-4602-aef2-7706e591461d\"]": "g_2c82aaf53abd",
+    "[\"conversation\",\"claude\",\"26fb24ee-0d17-4c13-83c5-03c3e4b36538\"]": "g_2c82aaf53abd"
+  },
+  "groups": {
+    "g_2c82aaf53abd": {
+      "title": "Add parseBytes to convert byte strings to numbers",
+      "anchor": "[\"conversation\",\"claude\",\"fc373de1-d008-464d-8e3c-cae23ea17bdb\"]",
+      "projectRoot": "pretty-bytes",
+      "links": [
+        {
+          "kind": "agent-judgment",
+          "conversations": [
+            "[\"conversation\",\"claude\",\"fc373de1-d008-464d-8e3c-cae23ea17bdb\"]",
+            "[\"conversation\",\"claude\",\"f86ebf74-8c20-4602-aef2-7706e591461d\"]",
+            "[\"conversation\",\"claude\",\"26fb24ee-0d17-4c13-83c5-03c3e4b36538\"]"
+          ],
+          "evidence": "Open request anchor asks for parseBytes with binary units only and leaves out kB/MB/GB for now. f86ebf74 repeats it: \"This branch is what the billing service pins… a named export parseBytes(string)… plain numbers and the binary units only, no kB/MB/GB yet.\" 26fb24ee continues it: \"Let's finish parseBytes: add kB/KB, MB, GB, TB…\" after the owner's follow-up on the same function."
+        }
+      ],
+      "decidedAt": "2026-11-02T19:36:45.305Z",
+      "anchorAsk": {
+        "text": "This branch is what our storage web app pins. They need the reverse of prettyBytes: a named export `parseBytes(string)` that returns a number of bytes. Start with plain numbers (`'512'`, `'512 B'`) and the binary units (`KiB` … `YiB`), fractional values allowed (`'1.5 KiB'` → 1536), units case-sensitive like our output. Leave out kB/MB/GB and friends for now; I still have to check with the storage team how they want those read. Tests and types please.",
+        "source": "user-prompt",
+        "sourceId": 1,
+        "url": "/api/work-view/evidence/prompt/1",
+        "promptNumber": 1,
+        "atEpoch": 1793647595789
+      }
+    }
+  },
+  "ignored": {}
+}

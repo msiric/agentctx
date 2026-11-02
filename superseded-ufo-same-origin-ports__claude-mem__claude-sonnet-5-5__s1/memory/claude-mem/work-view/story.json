@@ -1,0 +1,50 @@
+{
+  "narrative": "Shipping velocity: nothing has shipped in this window. Two requests are tracked, both opened on 2026-11-02 and both in progress. The joinURL fix is built and tested (75%), and the isSameOrigin helper is still at the spec stage (25%). There is no ask-to-ship time to report yet, because neither request has a merged PR or release.\n\n## Adding an isSameOrigin helper to ufo (2026-11-02)\n\nThe owner opened one conversation on 2026-11-02. They asked for an `isSameOrigin(a, b)` helper in ufo. They set the order of work: before any implementation, write the test cases in a new `test/same-origin.test.ts` so the semantics can be agreed, and don't implement the helper yet.\n\nThe agent studied the existing isSamePath conventions and wrote the spec. It left open questions as pending todos (obs 2, 3). The owner then asked for strict port handling: `https://example.com` and `https://example.com:443` must not match, with no magic port normalization. The agent removed the default-port equivalence cases and moved those pairs into the different-origin set (obs 4, 5).\n\nAt 22:44 the owner reversed that rule in a separate conversation. Default ports should match, because their CDN rewrites links with an explicit :443. They said the same-origin tests would be sorted out when the helper is implemented. The spec therefore has to change back before implementation, and the helper remains unbuilt. The request is about 25% along.\n\n## Fixing joinURL query and hash handling (2026-11-02)\n\nOn 2026-11-02 the owner reported that joinURL appended path segments after the query string or hash, and asked for a fix with tests. The agent found that joinURL works on the raw string and does not use the query/fragment-aware handling that withTrailingSlash has (obs 6, 7). It patched joinURL and added query and hash cases. The first vitest run showed 5 failures (obs 8).\n\nThe agent moved the six new cases into their own describe block and ran the full suite. The join tests pass. The only remaining failures are in the unimplemented isSameOrigin spec (obs 9). The owner said they were pushing a branch for this fix and asked that the same-origin tests be left alone. Memory shows no merged PR or release, so the work is built and tested but not confirmed shipped (about 75%).\n\n## What this teaches so far\n\nThe owner wants agreement on behavior before code exists, and the test file is the contract. They also want explicit behavior, not clever normalization, unless they ask for it. Their view can change between conversations, as the port rule did, so a spec should be re-checked before implementation starts. Bug fixes come with tests. Unrelated in-flight work should stay untouched while a focused fix branch is pushed. The next steps are to get the joinURL branch merged and released, and to settle the port rule before building isSameOrigin.",
+  "preferences": [
+    {
+      "preference": "Agree on semantics through test cases before any implementation; do not implement until the tests are agreed.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Before any implementation, write the test cases in a new test/same-origin.test.ts so we can agree on the semantics. Don't implement it yet.",
+          "at": "2026-11-02T22:40:17.099Z"
+        }
+      ]
+    },
+    {
+      "preference": "Keep behavior explicit; avoid magic normalization unless asked.",
+      "kind": "correction",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "keep it strict. `https://example.com` and `https://example.com:443` should NOT count as the same origin, I don't want magic port normalization in there.",
+          "at": "2026-11-02T22:40:40.823Z"
+        }
+      ]
+    },
+    {
+      "preference": "Include tests with bug fixes.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Can you fix that, with tests?",
+          "at": "2026-11-02T22:43:50.586Z"
+        }
+      ]
+    },
+    {
+      "preference": "Keep unrelated work (the isSameOrigin tests) untouched while pushing a focused fix branch.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Don't touch the same-origin tests right now, I'm pushing this branch for the joinURL fix; we'll sort them out when we implement it.",
+          "at": "2026-11-02T22:44:18.959Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-02T22:51:01.467Z"
+}

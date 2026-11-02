@@ -1,0 +1,43 @@
+{
+  "narrative": "Shipping velocity: one request shipped in this window. The forced `unit` option went from ask (21:58 UTC) to commit b618feb in about one minute on 2 Nov 2026, and a follow-up policy change and bits example landed within about five minutes after that. A second request, `significantDigits`, is implemented and passing tests but has no commit yet.\n\n## Add a forced unit option to prettyBytes (2 Nov 2026)\n\nThe owner asked for a `unit` option on prettyBytes that forces the output unit, for example MB or B. The option must belong to the unit system chosen by `bits` and `binary`, and a unit outside it throws a TypeError. The owner also asked for readme, types and tests.\n\nThe agent added an assertUnit validator and picked the exponent straight from the unit table. It skipped boundary correction and rounding carry for forced units. It then added the type union and readme docs. Lint and assertion errors were fixed and the suite passed with 50 tests. After the owner said \"Good, commit it\", the change was committed as b618feb at 21:59.\n\nThe owner later said the option had already been released. A stale saved `unit: 'KB'` preference had crashed the file table of their storage dashboard, because the TypeError was thrown. They set a new policy: new options must never throw on a bad value, and `unit` keeps throwing until the next major release. A bits-mode readme example and test were added and committed as b0ef524. The regression has no fix recorded, because `unit` is deliberately unchanged. Memory holds no release version or PR.\n\n## Add significantDigits option to prettyBytes (2 Nov 2026)\n\nAt 22:06 UTC the owner asked for a `significantDigits` option that changes the default 3-digit rounding. For example, 1337 with 2 digits gives `1.3 kB` and with 4 gives `1.337 kB`. It applies only when the fraction-digit options are unset. They again asked for readme, types and tests.\n\nThe agent mapped the rounding path, the option docs and the test conventions. It added the option with a silent fallback for invalid values, which follows the no-throw policy set earlier. The first `npm test` failed on seven xo lint errors, including complexity and trailing spaces. After fixes the ava suite passed with 54 tests. The request stands at about 85%. Memory shows no commit, PR or release.\n\n## What this teaches so far\n\nThe owner's asks are specific and name the validation behavior and supporting files up front. Shipping the throw in `unit` caused a production crash in the owner's dashboard, and the owner's answer was a durable rule. Since then the agent has applied that rule on its own in `significantDigits`. Every new option is expected to arrive with readme, types and tests. Lint failures were the main rework so far. Later reviews should record whether `significantDigits` is committed and released.",
+  "preferences": [
+    {
+      "preference": "New options must never throw on a bad value; ignore it and format as if it was not passed.",
+      "kind": "correction",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "new options must never throw on a bad value: ignore it and format as if the option wasn't passed.",
+          "at": "2026-11-02T22:02:23.425Z"
+        }
+      ]
+    },
+    {
+      "preference": "Expects readme, types and tests with every new option.",
+      "kind": "directive",
+      "supportCount": 2,
+      "quotes": [
+        {
+          "quote": "Readme, types and tests too.",
+          "at": "2026-11-02T21:58:29.771Z"
+        },
+        {
+          "quote": "Readme, types and tests as usual.",
+          "at": "2026-11-02T22:06:05.809Z"
+        }
+      ]
+    },
+    {
+      "preference": "Does not want shipped behavior changed before a major release.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "`unit` has already shipped with the throw, so leave it alone until the next major.",
+          "at": "2026-11-02T22:02:23.425Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-02T22:09:28.761Z"
+}
