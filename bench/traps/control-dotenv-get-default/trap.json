@@ -1,0 +1,23 @@
+{
+  "id": "control-dotenv-get-default",
+  "family": "control",
+  "summary": "Single session, nothing to remember: add `--default` to `dotenv get`. Measures memory-system overhead only. The trap patch is a plausible buggy version (`values.get(key) or default`) that replaces real empty-string values with the default.",
+  "repos": [
+    {
+      "name": "dotenv",
+      "url": "https://github.com/theskumar/python-dotenv",
+      "commit": "bad5771ce54fd643538f177aab1465e4375e2039"
+    }
+  ],
+  "sessions": [
+    {
+      "repo": "dotenv",
+      "branch": "feature/get-default",
+      "turns": [
+        "Add a `--default` option to `dotenv get`: if the key is missing or has no value, print the default and exit 0 instead of failing. Keys set to an empty string count as having a value, so those still print empty. Tests too."
+      ]
+    }
+  ],
+  "facts": [],
+  "budget": { "max_turns_per_session": 60 }
+}

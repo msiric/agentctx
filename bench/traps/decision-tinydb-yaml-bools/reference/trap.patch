@@ -1,0 +1,47 @@
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..0d041a0 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -10,7 +10,7 @@ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+ 
+-__all__ = ('Storage', 'JSONStorage', 'MemoryStorage')
++__all__ = ('Storage', 'JSONStorage', 'MemoryStorage', 'YAMLStorage')
+ 
+ 
+ def touch(path: str, create_dirs: bool):
+@@ -179,3 +179,33 @@ class MemoryStorage(Storage):
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
+         self.memory = data
++
++
++class YAMLStorage(Storage):
++    """
++    Store the data in a YAML file (requires PyYAML).
++    """
++
++    def __init__(self, path: str, create_dirs=False, encoding=None, **kwargs):
++        super().__init__()
++        import yaml
++
++        self._yaml = yaml
++        self.path = path
++        self.encoding = encoding
++        self.kwargs = kwargs
++        touch(path, create_dirs=create_dirs)
++
++    def read(self) -> Optional[dict[str, dict[str, Any]]]:
++        with open(self.path, encoding=self.encoding) as handle:
++            data = self._yaml.safe_load(handle.read())
++        # An empty file means an empty database
++        return data or None
++
++    def write(self, data: dict[str, dict[str, Any]]):
++        # Convert Document instances to plain dicts so safe_dump can handle them
++        plain = {table: {doc_id: dict(doc) for doc_id, doc in docs.items()}
++                 for table, docs in data.items()}
++        serialized = self._yaml.safe_dump(plain, **self.kwargs)
++        with open(self.path, 'w', encoding=self.encoding) as handle:
++            handle.write(serialized)

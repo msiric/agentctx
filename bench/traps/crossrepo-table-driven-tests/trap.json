@@ -1,0 +1,30 @@
+{
+  "id": "crossrepo-table-driven-tests",
+  "family": "cross-repo-preference",
+  "summary": "While adding dotCase to scule, the user says they want tests written as one table of cases per function (test.each or similar) in every project, not a pile of separate it blocks. Later, in ms, they ask for microsecond units with tests. Every ms test file is a long list of separate it(...) blocks, so mirroring the local style breaks the preference.",
+  "repos": [
+    { "name": "scule", "url": "https://github.com/unjs/scule", "commit": "5bc68048caad7c0e7de35842c83a510e8e1a7c4f" },
+    { "name": "ms", "url": "https://github.com/vercel/ms", "commit": "4ff48cec099f0514c3e9bbca18706c9c21122bfb" }
+  ],
+  "sessions": [
+    {
+      "repo": "scule",
+      "branch": "feat/dot-case",
+      "turns": [
+        "Add a `dotCase` to scule: \"fooBar\" becomes \"foo.bar\" and \"Foo-Bar_baz\" becomes \"foo.bar.baz\". Export it like the other case functions and add tests.",
+        "For the tests: one `test.each` table of cases per function, like the rest of this file. That's how I want tests in every project I work on. A table is much easier to scan and to add cases to than a pile of separate `it` blocks."
+      ]
+    },
+    {
+      "repo": "ms",
+      "branch": "feat/microseconds",
+      "turns": [
+        "Add microsecond support to ms: `us`, `µs`, `microsecond` and `microseconds` as units, so `ms(\"500us\")` gives 0.5. Update the unit types and the README list, and add tests."
+      ]
+    }
+  ],
+  "facts": [
+    { "id": "f1", "text": "User preference (all projects): tests are table-driven, i.e. one table of cases per function (test.each / it.each or a loop over a cases array), not many separate it blocks.", "source": "user", "session": 1, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

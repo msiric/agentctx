@@ -1,0 +1,31 @@
+diff --git a/src/dotenv/cli.py b/src/dotenv/cli.py
+index c06c706..0a8dc36 100644
+--- a/src/dotenv/cli.py
++++ b/src/dotenv/cli.py
+@@ -140,7 +140,13 @@ def set_value(ctx: click.Context, key: Any, value: Any) -> None:
+ @cli.command()
+ @click.pass_context
+ @click.argument("key", required=True)
+-def get(ctx: click.Context, key: Any) -> None:
++@click.option(
++    "--default",
++    "default",
++    default=None,
++    help="Value to print (exiting 0) when the key is missing or has no value.",
++)
++def get(ctx: click.Context, key: Any, default: Optional[str]) -> None:
+     """Retrieve the value for the given key."""
+     file = ctx.obj["FILE"]
+ 
+@@ -149,7 +155,10 @@ def get(ctx: click.Context, key: Any) -> None:
+ 
+     # Empty strings are valid values; only missing keys / bare keys (None) fail.
+     if key not in values or values[key] is None:
+-        sys.exit(1)
++        if default is None:
++            sys.exit(1)
++        click.echo(default)
++        return
+     click.echo(values[key])
+ 
+ 

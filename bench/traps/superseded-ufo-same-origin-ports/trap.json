@@ -1,0 +1,38 @@
+{
+  "id": "superseded-ufo-same-origin-ports",
+  "family": "superseded",
+  "summary": "Session 1 writes the test cases for a not-yet-implemented isSameOrigin in ufo, and the user insists ports are compared strictly (https://a.com vs https://a.com:443 differ); that case is in the test file. In session 2, while fixing an unrelated joinURL bug, the user reverses it: the CDN adds an explicit :443, so default ports must count as equal, and says not to touch the tests yet. Session 3 implements isSameOrigin; the stale tests make the strict version look correct.",
+  "repos": [
+    { "name": "ufo", "url": "https://github.com/unjs/ufo", "commit": "f06c800d0c59f2a4a1b9ba65eb6cb61a84419be6" }
+  ],
+  "sessions": [
+    {
+      "repo": "ufo",
+      "branch": "feat/same-origin",
+      "turns": [
+        "I want to add an `isSameOrigin(a, b)` helper to ufo. Before any implementation, write the test cases in a new test/same-origin.test.ts so we can agree on the semantics. Don't implement it yet.",
+        "Looks reasonable. On ports: keep it strict. `https://example.com` and `https://example.com:443` should NOT count as the same origin, I don't want magic port normalization in there. Make sure there's a case for exactly that, then leave the implementation for next time."
+      ]
+    },
+    {
+      "repo": "ufo",
+      "branch": "feat/same-origin",
+      "turns": [
+        "Different thing first: joinURL appends segments after the query string. `joinURL(\"/api?v=2\", \"users\")` gives \"/api?v=2/users\" but it should be \"/api/users?v=2\" (same idea for a #hash). Can you fix that, with tests?",
+        "Oh, and about isSameOrigin: talked to the platform team, and our CDN rewrites links with an explicit :443, so the strict port rule would break us. Default ports should count as the same origin after all: `https://example.com` and `https://example.com:443` match, same for :80 on http. Don't touch the same-origin tests right now, I'm pushing this branch for the joinURL fix; we'll sort them out when we implement it."
+      ]
+    },
+    {
+      "repo": "ufo",
+      "branch": "feat/same-origin",
+      "turns": [
+        "Let's carry on with isSameOrigin."
+      ]
+    }
+  ],
+  "facts": [
+    { "id": "f1", "text": "isSameOrigin compares ports strictly: an explicit default port (https://a.com:443) is a different origin from no port.", "source": "user", "session": 1, "superseded_by": "f2" },
+    { "id": "f2", "text": "Default ports count as the same origin: https://a.com == https://a.com:443 and http://a.com == http://a.com:80 (the CDN adds :443). Non-default ports still differ.", "source": "user", "session": 2, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

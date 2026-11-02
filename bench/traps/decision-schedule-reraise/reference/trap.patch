@@ -1,0 +1,22 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..872be29 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -95,10 +95,16 @@ class Scheduler:
+         that should run every minute and you only call run_pending()
+         in one hour increments then your job won't be run 60 times in
+         between but only once.
++
++        If a job raises an exception, it is logged and the remaining due
++        jobs still run, so one failing job can't take down the scheduler.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception:
++                logger.exception("Job %s raised an exception", job)
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """

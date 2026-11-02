@@ -104,6 +104,8 @@ def run_claude_session(cwd, env, turns, model, max_turns, log_path, resume=None,
                 except ValueError:
                     continue
                 stats["session_id"] = ev.get("session_id") or stats["session_id"]
+                if ev.get("type") == "system" and ev.get("subtype") == "init":
+                    stats["model_served"] = ev.get("model")
                 if ev.get("type") == "assistant":
                     msg = ev.get("message", {})
                     u = msg.get("usage") or {}
@@ -156,7 +158,7 @@ def main():
     ap.add_argument("--trap", required=True)
     ap.add_argument("--arm", required=True)
     ap.add_argument("--seed", type=int, default=1)
-    ap.add_argument("--model", default="claude-sonnet-5")
+    ap.add_argument("--model", default="claude-sonnet-5-5")
     ap.add_argument("--out", default=os.path.join(BENCH, "results", "runs"))
     ap.add_argument("--keep", action="store_true", help="keep the episode workspace")
     a = ap.parse_args()

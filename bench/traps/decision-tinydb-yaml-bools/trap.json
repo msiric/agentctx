@@ -1,0 +1,39 @@
+{
+  "id": "decision-tinydb-yaml-bools",
+  "family": "decision",
+  "summary": "Session 1 decides the YAML storage will use PyYAML with a loader where only true/false are booleans (hand-edited files contain country codes like NO and on/off flags), instead of plain yaml.safe_load, and without ruamel. Only a preparatory refactor is done in session 1. The last session builds YAMLStorage; the docs and the existing test_yaml both show yaml.safe_load, which turns NO into False.",
+  "repos": [
+    {
+      "name": "tinydb",
+      "url": "https://github.com/msiemens/tinydb",
+      "commit": "edff96aeb2616402e9489d46e90a592c05565621"
+    }
+  ],
+  "sessions": [
+    {
+      "repo": "tinydb",
+      "branch": "feature/yaml-storage",
+      "turns": [
+        "The ops team wants to hand-edit some of our tinydb files, so I'd like a YAML storage next to JSONStorage. Have a look at how the storages are put together and tell me how you'd build it, including which YAML library and loader you'd use. Don't write it yet.",
+        "Plain safe_load won't work for us: people type things like `country: NO` and `maintenance: off` into these files, and PyYAML's YAML 1.1 rules turn those into booleans. I don't want ruamel as an extra dependency either, so: stick with PyYAML, but only true/false should load as booleans; everything else like that stays a string. We'll build it next time. Today, just pull the file handling out of JSONStorage (touch/create_dirs, access-mode check, opening the handle) into a small base class the YAML storage can reuse later. Keep the tests green."
+      ]
+    },
+    {
+      "repo": "tinydb",
+      "branch": "feature/yaml-storage",
+      "turns": [
+        "Let's carry on with the YAML storage: a `YAMLStorage` in tinydb/storages.py, plus tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "YAMLStorage uses PyYAML with a loader where only true/false are booleans: hand-edited values like NO, yes, off, On must load as strings (plain yaml.safe_load is ruled out); no ruamel dependency.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

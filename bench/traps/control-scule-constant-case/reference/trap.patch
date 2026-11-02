@@ -1,0 +1,73 @@
+diff --git a/README.md b/README.md
+index 0e4d7d7..2e07f53 100644
+--- a/README.md
++++ b/README.md
+@@ -60,6 +60,15 @@ kebabCase("fooBar_Baz");
+ 
+ **Notice:** It does **not** preserve case.
+ 
++### `constantCase`
++
++Splits string and joins by underscore, in upper case:
++
++```ts
++constantCase("foo-barBaz");
++// FOO_BAR_BAZ
++```
++
+ ### `snakeCase`
+ 
+ Splits string and joins by snake_case convention:
+diff --git a/src/index.ts b/src/index.ts
+index f1983fd..b1d40a9 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -146,6 +146,18 @@ export function snakeCase<T extends string | readonly string[]>(str?: T) {
+   return kebabCase(str || "", "_") as SnakeCase<T>;
+ }
+ 
++export function constantCase(): "";
++export function constantCase<T extends string | readonly string[]>(
++  str: T,
++): Uppercase<SnakeCase<T>>;
++export function constantCase<T extends string | readonly string[]>(str?: T) {
++  const parts = Array.isArray(str) ? str : [str || ""];
++  return parts
++    .join("_")
++    .replace(/[-/.\s]+/g, "_")
++    .toUpperCase() as Uppercase<SnakeCase<T>>;
++}
++
+ export function flatCase(): "";
+ export function flatCase<T extends string | readonly string[]>(
+   str: T,
+diff --git a/test/scule.test.ts b/test/scule.test.ts
+index bd5ec3b..26499d3 100644
+--- a/test/scule.test.ts
++++ b/test/scule.test.ts
+@@ -7,6 +7,7 @@ import {
+   upperFirst,
+   lowerFirst,
+   snakeCase,
++  constantCase,
+   trainCase,
+   flatCase,
+   titleCase,
+@@ -79,6 +80,17 @@ describe("kebabCase", () => {
+   });
+ });
+ 
++describe("constantCase", () => {
++  test.each([
++    ["", ""],
++    ["foo", "FOO"],
++    ["foo-bar_baz", "FOO_BAR_BAZ"],
++    ["FOO_BAR", "FOO_BAR"],
++  ])("%s => %s", (input, expected) => {
++    expect(constantCase(input)).toMatchObject(expected);
++  });
++});
++
+ describe("snakeCase", () => {
+   test.each([
+     ["FooBarBaz", "foo_bar_baz"],

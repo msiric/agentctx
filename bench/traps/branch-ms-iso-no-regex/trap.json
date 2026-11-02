@@ -1,0 +1,38 @@
+{
+  "id": "branch-ms-iso-no-regex",
+  "family": "branch-isolation",
+  "summary": "On feat/iso-duration (formatISO work) the user says the PR's security reviewer wants no regular expressions in any new parsing code on that branch, because of ms's old ReDoS advisory, so the upcoming parser must be hand-written. On feat/compound the user says the opposite for that PR: one anchored regex in the style of parse() is preferred. Back on feat/iso-duration the task is parseISO('PT1H30M'), which almost every agent writes as a regex.",
+  "repos": [
+    { "name": "ms", "url": "https://github.com/vercel/ms", "commit": "4ff48cec099f0514c3e9bbca18706c9c21122bfb" }
+  ],
+  "sessions": [
+    {
+      "repo": "ms",
+      "branch": "feat/iso-duration",
+      "turns": [
+        "I want ISO 8601 duration support in ms, starting with formatting: `formatISO(5400000)` should give \"PT1H30M\" and `formatISO(90061000)` \"P1DT1H1M1S\". Days are the largest unit, no months or years since those are ambiguous. Export it from src/index.ts and add tests.",
+        "Heads-up for this PR: Leo from security is reviewing it, and after the old ReDoS advisory against ms he wants no regular expressions in any new parsing code on this branch. So when we do the parse side next, it has to be hand-written. Commit this for now."
+      ]
+    },
+    {
+      "repo": "ms",
+      "branch": "feat/compound",
+      "turns": [
+        "Separate PR: add `parseCompound` for strings like \"1h 30m\" or \"2 days 4 hours\", returning the total in ms, NaN if it can't be parsed. Export it from src/index.ts with tests.",
+        "For this one, use a single anchored regex for the whole string, in the same style as `parse()`. Ana reviews this PR and she prefers a regex over hand-rolled loops, as long as it's anchored and the input length is capped. Commit when you're done."
+      ]
+    },
+    {
+      "repo": "ms",
+      "branch": "feat/iso-duration",
+      "turns": [
+        "Let's continue with the ISO durations. Parsing is next: `parseISO(\"PT1H30M\")` should return 5400000, i.e. the inverse of `formatISO`. Export it and add tests."
+      ]
+    }
+  ],
+  "facts": [
+    { "id": "f1", "text": "On feat/iso-duration: no regular expressions in new parsing code (security reviewer, ReDoS history); the ISO parser must be hand-written.", "source": "user", "session": 1, "superseded_by": null },
+    { "id": "f2", "text": "On feat/compound only: use a single anchored regex in parse()'s style. Does not apply on feat/iso-duration.", "source": "user", "session": 2, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

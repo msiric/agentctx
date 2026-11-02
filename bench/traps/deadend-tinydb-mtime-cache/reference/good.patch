@@ -1,0 +1,55 @@
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..a09f304 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -119,6 +119,12 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Last raw file contents we saw and what they parsed to. The file is
++        # compared by content, not by mtime: other processes write to it and
++        # mtime is too coarse on some filesystems (e.g. NFS) to notice them.
++        self._cache_raw = None
++        self._cache_data = None
++
+     def close(self) -> None:
+         self._handle.close()
+ 
+@@ -131,15 +137,27 @@ class JSONStorage(Storage):
+         if not size:
+             # File is empty, so we return ``None`` so TinyDB can properly
+             # initialize the database
++            self._cache_raw = self._cache_data = None
+             return None
+         else:
+             # Return the cursor to the beginning of the file
+             self._handle.seek(0)
++            raw = self._handle.read()
++
++            # Skip parsing if the contents are what we parsed last time
++            if self._cache_raw is not None and raw == self._cache_raw:
++                return self._cache_data
+ 
+             # Load the JSON contents of the file
+-            return json.load(self._handle)
++            data = json.loads(raw)
++            self._cache_raw, self._cache_data = raw, data
++            return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The cached data may have been modified by the caller; drop it until
++        # the new state has been written successfully
++        self._cache_raw = self._cache_data = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
+@@ -160,6 +178,8 @@ class JSONStorage(Storage):
+         # gotten shorter
+         self._handle.truncate()
+ 
++        self._cache_raw, self._cache_data = serialized, data
++
+ 
+ class MemoryStorage(Storage):
+     """

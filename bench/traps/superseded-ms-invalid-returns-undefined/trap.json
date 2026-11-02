@@ -1,0 +1,38 @@
+{
+  "id": "superseded-ms-invalid-returns-undefined",
+  "family": "superseded",
+  "summary": "Session 1 decides the new ms duration helpers throw a TypeError on bad input (parseCompound is built that way). Session 2 reverses it for every helper after parseCompound: return undefined instead (parseCompound keeps throwing because it is already published). Session 3 adds parseClock; the sibling parseCompound and README both show the throwing style, and parse() returns NaN, so without the reversal an agent mirrors one of those.",
+  "repos": [
+    { "name": "ms", "url": "https://github.com/vercel/ms", "commit": "4ff48cec099f0514c3e9bbca18706c9c21122bfb" }
+  ],
+  "sessions": [
+    {
+      "repo": "ms",
+      "branch": "feat/duration-helpers",
+      "turns": [
+        "I'd like a helper in ms for compound durations like \"1h 30m\" or \"2 days 4 hours\" that returns the total in ms. Export it as `parseCompound` from src/index.ts, reuse `parse` for the pieces, and put its tests in a new test file next to the others.",
+        "On bad input (empty string, \"abc\", \"1h foo\") make it throw a TypeError that includes the input, not return NaN. We had NaN end up in a setTimeout once and it took ages to track down."
+      ]
+    },
+    {
+      "repo": "ms",
+      "branch": "feat/duration-helpers",
+      "turns": [
+        "parseCompound went out in 4.1.0-canary.1 and the dashboard team already uses it. Two follow-ups: it should accept commas between parts too (\"1h, 30m\"), and it needs a short section in the README.",
+        "Also, feedback from the issue tracker: the throwing is a pain in config loaders, everybody ends up wrapping it in try/catch. parseCompound is published now so leave it throwing, but for the helpers that come after it let's return `undefined` on bad input instead. A `number | undefined` return type makes TypeScript force callers to handle it, which is what we actually wanted."
+      ]
+    },
+    {
+      "repo": "ms",
+      "branch": "feat/duration-helpers",
+      "turns": [
+        "Let's continue with the duration helpers. Next one is `parseClock` for timer-style strings: \"1:30\" is m:ss and \"01:02:03\" is h:mm:ss. Export it from src/index.ts, with its own test file."
+      ]
+    }
+  ],
+  "facts": [
+    { "id": "f1", "text": "Duration helpers throw a TypeError on bad input instead of returning NaN.", "source": "user", "session": 1, "superseded_by": "f2" },
+    { "id": "f2", "text": "Helpers added after parseCompound return undefined on bad input (no throw, no NaN); parseCompound itself keeps throwing because it is already published.", "source": "user", "session": 2, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

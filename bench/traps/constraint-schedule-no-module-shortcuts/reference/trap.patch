@@ -1,0 +1,70 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..47b50b4 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -159,6 +159,27 @@ class Scheduler:
+         except ValueError:
+             logger.debug('Cancelling not-scheduled job "%s"', str(job))
+ 
++    def pause(self, tag: Hashable) -> None:
++        """
++        Pause all jobs marked with the given tag. Paused jobs stay scheduled
++        but are skipped by :meth:`run_pending` until they are resumed.
++
++        :param tag: An identifier used to identify the jobs to pause
++        """
++        logger.debug('Pausing all jobs tagged "%s"', tag)
++        for job in self.get_jobs(tag):
++            job.paused = True
++
++    def resume(self, tag: Hashable) -> None:
++        """
++        Resume all paused jobs marked with the given tag.
++
++        :param tag: An identifier used to identify the jobs to resume
++        """
++        logger.debug('Resuming all jobs tagged "%s"', tag)
++        for job in self.get_jobs(tag):
++            job.paused = False
++
+     def every(self, interval: int = 1) -> "Job":
+         """
+         Schedule a new periodic job.
+@@ -252,6 +273,7 @@ class Job:
+         self.cancel_after: Optional[datetime.datetime] = None
+ 
+         self.tags: Set[Hashable] = set()  # unique set of tags for the job
++        self.paused: bool = False  # paused jobs are skipped by run_pending
+         self.scheduler: Optional[Scheduler] = scheduler  # scheduler to register with
+ 
+     def __lt__(self, other) -> bool:
+@@ -669,6 +691,8 @@ class Job:
+         :return: ``True`` if the job should be run now.
+         """
+         assert self.next_run is not None, "must run _schedule_next_run before"
++        if self.paused:
++            return False
+         return datetime.datetime.now() >= self.next_run
+ 
+     def run(self):
+@@ -896,6 +920,20 @@ def idle_seconds() -> Optional[float]:
+     return default_scheduler.idle_seconds
+ 
+ 
++def pause(tag: Hashable) -> None:
++    """Calls :meth:`pause <Scheduler.pause>` on the
++    :data:`default scheduler instance <default_scheduler>`.
++    """
++    default_scheduler.pause(tag)
++
++
++def resume(tag: Hashable) -> None:
++    """Calls :meth:`resume <Scheduler.resume>` on the
++    :data:`default scheduler instance <default_scheduler>`.
++    """
++    default_scheduler.resume(tag)
++
++
+ def repeat(job, *args, **kwargs):
+     """
+     Decorator to schedule a new periodic job.

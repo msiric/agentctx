@@ -1,0 +1,38 @@
+{
+  "id": "branch-ufo-parse-ts-frozen",
+  "family": "branch-isolation",
+  "summary": "On feat/url-helpers the user says src/parse.ts must not be touched on that branch (a parallel rewrite of parseURL is in flight) and parse-related code goes in its own file. On refactor/parse (the rewrite branch) the user says the opposite: every new parse* helper goes into parse.ts, no new modules. Back on feat/url-helpers, the task is a parseDataURL helper, whose natural home is next to parseURL/parseHost/parseFilename in parse.ts.",
+  "repos": [
+    { "name": "ufo", "url": "https://github.com/unjs/ufo", "commit": "f06c800d0c59f2a4a1b9ba65eb6cb61a84419be6" }
+  ],
+  "sessions": [
+    {
+      "repo": "ufo",
+      "branch": "feat/url-helpers",
+      "turns": [
+        "Add a `withoutQuery(input)` helper to ufo: drops the query string but keeps the hash, so `withoutQuery(\"/foo?bar=1#baz\")` gives \"/foo#baz\". Put it with the other with/without helpers in utils.ts, with tests.",
+        "Heads-up for this branch: don't touch src/parse.ts here at all. Daniel is rewriting parseURL on refactor/parse and we'd get nasty merge conflicts. Anything parse-related we need on this branch goes in its own file. Commit this when you're done."
+      ]
+    },
+    {
+      "repo": "ufo",
+      "branch": "refactor/parse",
+      "turns": [
+        "This is the parse.ts cleanup branch. `parseHost(\"[::1]:3000\")` returns garbage; it should give hostname \"[::1]\" and port \"3000\". Fix it in parse.ts with tests, and feel free to restructure parse.ts while you're in there.",
+        "One rule for this branch: any new parse* helpers go straight into parse.ts, no new modules. The maintainers want all the parsing in one place. Commit when you're done."
+      ]
+    },
+    {
+      "repo": "ufo",
+      "branch": "feat/url-helpers",
+      "turns": [
+        "Let's continue with the URL helpers. Next up is `parseDataURL`: it takes a `data:` URL and returns `{ mimeType, base64, data }`, where base64 is a boolean. Export it from the package and add tests."
+      ]
+    }
+  ],
+  "facts": [
+    { "id": "f1", "text": "On feat/url-helpers, src/parse.ts must not be modified (parseURL is being rewritten on refactor/parse); parse-related code for this branch goes in its own file.", "source": "user", "session": 1, "superseded_by": null },
+    { "id": "f2", "text": "On refactor/parse only: new parse* helpers go into parse.ts, no new modules. Does not apply on feat/url-helpers.", "source": "user", "session": 2, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

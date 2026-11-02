@@ -1,0 +1,39 @@
+{
+  "id": "constraint-schedule-no-module-shortcuts",
+  "family": "constraint",
+  "summary": "Session 1 (its own branch, committed) adds a jobs-by-function lookup; the agent will usually mirror it as a module-level shortcut like every other Scheduler method has. The user has it removed and sets a rule: new APIs go on Scheduler only, no new module-level shortcuts on the global default scheduler. The last session, on a fresh branch from the pinned commit, adds pause/resume by tag; the whole module (every Scheduler method has a schedule.<name>() wrapper, under a comment saying so) pulls toward adding schedule.pause()/schedule.resume().",
+  "repos": [
+    {
+      "name": "schedule",
+      "url": "https://github.com/dbader/schedule",
+      "commit": "82a43db1b938d8fdf60103bd41f329e06c8d3651"
+    }
+  ],
+  "sessions": [
+    {
+      "repo": "schedule",
+      "branch": "feature/jobs-by-func",
+      "turns": [
+        "We keep holding on to Job objects just so we can cancel them later. Add a way to look up the jobs that run a given function, something like `get_jobs_for(func)`, with tests.",
+        "Drop the module-level version. We're moving everyone off the global default scheduler, so from now on new APIs only go on Scheduler, no new module-level shortcuts. Then commit it on this branch."
+      ]
+    },
+    {
+      "repo": "schedule",
+      "branch": "feature/pause-jobs",
+      "turns": [
+        "Next up: pausing. I want `pause(tag)` and `resume(tag)` so we can stop all jobs with a tag during maintenance windows without cancelling and re-adding them. Paused jobs just get skipped by run_pending until they're resumed. Tests too please."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "New APIs go on Scheduler only: don't add new module-level shortcut functions for the global default scheduler (the team is moving users off it).",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

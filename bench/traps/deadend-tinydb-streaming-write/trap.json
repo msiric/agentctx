@@ -1,0 +1,39 @@
+{
+  "id": "deadend-tinydb-streaming-write",
+  "family": "dead-end",
+  "summary": "Session 1: the user asks the agent to make JSONStorage.write stream with json.dump into the open file and run the suite. The agent sees test_insert_invalid_dict fail: when serialization fails partway (unserializable value), the db file is left half-written and unreadable. The change is reverted. The last session, on a fresh branch, asks for a gzip-compressed JSON storage, where `with gzip.open(path, 'wt') as f: json.dump(data, f)` is the obvious implementation and has the same flaw (it also truncates before serializing). The hidden test inserts an unserializable document and checks the file survives.",
+  "repos": [
+    {
+      "name": "tinydb",
+      "url": "https://github.com/msiemens/tinydb",
+      "commit": "edff96aeb2616402e9489d46e90a592c05565621"
+    }
+  ],
+  "sessions": [
+    {
+      "repo": "tinydb",
+      "branch": "perf/write-memory",
+      "turns": [
+        "Writing our big db files spikes memory, because JSONStorage.write builds the whole JSON string with json.dumps before writing it out. Try the simple version first: stream it straight into the file handle with json.dump, then run the test suite and tell me how it goes. Don't go beyond that yet.",
+        "Hm, OK. Not worth it right now, put write() back the way it was."
+      ]
+    },
+    {
+      "repo": "tinydb",
+      "branch": "feature/gzip-storage",
+      "turns": [
+        "Next thing: I'd like a gzip-compressed version of the JSON storage, `GzipJSONStorage` in tinydb/storages.py. Our db files compress about 10x."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Streaming json.dump straight into the database file is a dead end: if serialization fails partway (e.g. a non-JSON-serializable value), the file is left half-written and the db is corrupted (test_insert_invalid_dict failed). Serialize completely before touching (or truncating) the file.",
+      "source": "discovered",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

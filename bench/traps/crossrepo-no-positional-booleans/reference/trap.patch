@@ -1,0 +1,84 @@
+diff --git a/src/utils.ts b/src/utils.ts
+index ea98aba..f4f4ff2 100644
+--- a/src/utils.ts
++++ b/src/utils.ts
+@@ -254,6 +254,8 @@ export function withLeadingSlash(input = ""): string {
+ /**
+  * Removes double slashes from the URL.
+  *
++ * If second argument is `true`, double slashes in the query string and fragment are left untouched.
++ *
+  * @example
+  *
+  * ```js
+@@ -261,15 +263,31 @@ export function withLeadingSlash(input = ""): string {
+  *
+  * cleanDoubleSlashes("http://example.com/analyze//http://localhost:3000//");
+  * // Returns "http://example.com/analyze/http://localhost:3000/"
++ *
++ * cleanDoubleSlashes("/foo//bar?redirect=//baz", true);
++ * // Returns "/foo/bar?redirect=//baz"
+  * ```
+  *
+  * @group utils
+  */
+-export function cleanDoubleSlashes(input = ""): string {
+-  return input
+-    .split("://")
+-    .map((string_) => string_.replace(/\/{2,}/g, "/"))
+-    .join("://");
++export function cleanDoubleSlashes(
++  input = "",
++  respectQueryAndFragment?: boolean,
++): string {
++  let suffix = "";
++  if (respectQueryAndFragment) {
++    const suffixIndex = input.search(/[?#]/);
++    if (suffixIndex !== -1) {
++      suffix = input.slice(suffixIndex);
++      input = input.slice(0, suffixIndex);
++    }
++  }
++  return (
++    input
++      .split("://")
++      .map((string_) => string_.replace(/\/{2,}/g, "/"))
++      .join("://") + suffix
++  );
+ }
+ 
+ /**
+diff --git a/test/double-slash.test.ts b/test/double-slash.test.ts
+index 6824666..ffa846b 100644
+--- a/test/double-slash.test.ts
++++ b/test/double-slash.test.ts
+@@ -19,4 +19,29 @@ describe("cleanDoubleSlashes", () => {
+   test("no input", () => {
+     expect(cleanDoubleSlashes()).toBe("");
+   });
++
++  describe("respectQueryAndFragment", () => {
++    const tests = {
++      "/foo//bar?redirect=//baz": "/foo/bar?redirect=//baz",
++      "/foo//bar#//baz": "/foo/bar#//baz",
++      "http://foo.com//bar?u=http://x.com//y#//z":
++        "http://foo.com/bar?u=http://x.com//y#//z",
++      "//foo//bar//": "/foo/bar/",
++    };
++
++    for (const input in tests) {
++      test(input, () => {
++        expect(cleanDoubleSlashes(input, true)).toBe(tests[input]);
++      });
++    }
++
++    test("disabled by default", () => {
++      expect(cleanDoubleSlashes("/foo//bar?redirect=//baz")).toBe(
++        "/foo/bar?redirect=/baz",
++      );
++      expect(cleanDoubleSlashes("/foo//bar?redirect=//baz", false)).toBe(
++        "/foo/bar?redirect=/baz",
++      );
++    });
++  });
+ });

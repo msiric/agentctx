@@ -51,7 +51,7 @@ Anything else is labelled exploratory when reported.
 
 **Dev and held-out split.** After authoring, `tools/split-traps` assigns
 about a third of the traps to held-out. The assignment is deterministic and
-seeded by the commit hash that adds the traps. Nobody picks.
+seeded by the commit hash that adds the traps. The same tool also picks the 3 pilot traps from the dev set. Nobody picks. The result is in `plans/SPLIT.json`.
 - trailkeep changes may be informed by dev results only.
 - Held-out traps run once, against frozen versions of every tool, with
   versions recorded. Held-out results are the ones quoted as findings.

@@ -1,0 +1,82 @@
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..4aad979 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -6,11 +6,12 @@ implementations.
+ import io
+ import json
+ import os
++import re
+ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+ 
+-__all__ = ('Storage', 'JSONStorage', 'MemoryStorage')
++__all__ = ('Storage', 'JSONStorage', 'MemoryStorage', 'YAMLStorage')
+ 
+ 
+ def touch(path: str, create_dirs: bool):
+@@ -179,3 +180,63 @@ class MemoryStorage(Storage):
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
+         self.memory = data
++
++
++def _yaml_loader():
++    """
++    A SafeLoader that only treats ``true``/``false`` as booleans.
++
++    PyYAML follows YAML 1.1, where ``yes``/``no``/``on``/``off`` (in any
++    case) are booleans as well. Our files are edited by hand and contain
++    values like the country code ``NO`` that must stay strings.
++    """
++    import yaml
++
++    class Loader(yaml.SafeLoader):
++        pass
++
++    bool_tag = 'tag:yaml.org,2002:bool'
++    Loader.yaml_implicit_resolvers = {
++        first: [(tag, regexp) for tag, regexp in resolvers if tag != bool_tag]
++        for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
++    }
++    Loader.add_implicit_resolver(
++        bool_tag,
++        re.compile(r'^(?:true|True|TRUE|false|False|FALSE)$'),
++        list('tTfF'),
++    )
++    return Loader
++
++
++class YAMLStorage(Storage):
++    """
++    Store the data in a YAML file (requires PyYAML).
++
++    Only ``true``/``false`` are read as booleans, so hand-written values such
++    as ``NO`` or ``on`` stay strings.
++    """
++
++    def __init__(self, path: str, create_dirs=False, encoding=None, **kwargs):
++        super().__init__()
++        import yaml
++
++        self._yaml = yaml
++        self._loader = _yaml_loader()
++        self.path = path
++        self.encoding = encoding
++        self.kwargs = kwargs
++        touch(path, create_dirs=create_dirs)
++
++    def read(self) -> Optional[dict[str, dict[str, Any]]]:
++        with open(self.path, encoding=self.encoding) as handle:
++            text = handle.read()
++        if not text.strip():
++            return None
++        return self._yaml.load(text, Loader=self._loader)
++
++    def write(self, data: dict[str, dict[str, Any]]):
++        plain = {table: {doc_id: dict(doc) for doc_id, doc in docs.items()}
++                 for table, docs in data.items()}
++        serialized = self._yaml.safe_dump(plain, **self.kwargs)
++        with open(self.path, 'w', encoding=self.encoding) as handle:
++            handle.write(serialized)

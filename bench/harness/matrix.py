@@ -21,7 +21,7 @@ def cells(plan):
             arms = list(plan["arms"])
             random.Random(f"{trap}:{seed}").shuffle(arms)
             for arm in arms:
-                for model in plan.get("models", ["claude-sonnet-5"]):
+                for model in plan.get("models", ["claude-sonnet-5-5"]):
                     out.append((trap, arm, model, seed))
     return out
 

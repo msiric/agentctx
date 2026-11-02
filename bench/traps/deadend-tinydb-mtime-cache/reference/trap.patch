@@ -1,0 +1,57 @@
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..1c36e58 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -119,9 +119,18 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Cache of the parsed file contents, keyed by the file's stat
++        # signature so changes made by other processes are picked up
++        self._cache_key = None
++        self._cache_data = None
++
+     def close(self) -> None:
+         self._handle.close()
+ 
++    def _stat_key(self):
++        st = os.fstat(self._handle.fileno())
++        return st.st_ino, st.st_size, st.st_mtime_ns
++
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
+         # Get the file size by moving the cursor to the file end and reading
+         # its location
+@@ -133,13 +142,23 @@ class JSONStorage(Storage):
+             # initialize the database
+             return None
+         else:
++            # Skip parsing if the file hasn't changed since we last read it
++            key = self._stat_key()
++            if self._cache_key is not None and key == self._cache_key:
++                return self._cache_data
++
+             # Return the cursor to the beginning of the file
+             self._handle.seek(0)
+ 
+             # Load the JSON contents of the file
+-            return json.load(self._handle)
++            data = json.load(self._handle)
++            self._cache_key, self._cache_data = key, data
++            return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # Invalidate the cache; the caller may have modified the cached data
++        self._cache_key = self._cache_data = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
+@@ -160,6 +179,8 @@ class JSONStorage(Storage):
+         # gotten shorter
+         self._handle.truncate()
+ 
++        self._cache_key, self._cache_data = self._stat_key(), data
++
+ 
+ class MemoryStorage(Storage):
+     """

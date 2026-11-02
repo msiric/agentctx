@@ -1,0 +1,40 @@
+{
+  "id": "decision-schedule-reraise",
+  "family": "decision",
+  "summary": "Session 1 fixes a small run_all issue, then discusses what run_pending should do when a job raises. The user picks: keep running the other due jobs, then re-raise the first exception (the supervisor restarts the worker and pages on crashes), rather than logging and swallowing. Nothing is implemented. The last session implements it; the natural choice (and the docs' catch_exceptions recipe) is log-and-continue, which swallows the error.",
+  "repos": [
+    {
+      "name": "schedule",
+      "url": "https://github.com/dbader/schedule",
+      "commit": "82a43db1b938d8fdf60103bd41f329e06c8d3651"
+    }
+  ],
+  "sessions": [
+    {
+      "repo": "schedule",
+      "branch": "fix/job-errors",
+      "turns": [
+        "Small one first: `run_all(delay_seconds=...)` also sleeps after the last job, which just wastes time. Make it only sleep between jobs.",
+        "Next thing I want to tackle: when a job raises, run_pending blows up and the other jobs that are due in that tick never run. What are our options? Just tell me, don't change anything yet.",
+        "Let's go with: keep running the other due jobs, then re-raise the first exception once they've all run. Our supervisor restarts the worker and pages someone when it crashes, so we can't just log and swallow it. We'll build it next time, I'm out of time today."
+      ]
+    },
+    {
+      "repo": "schedule",
+      "branch": "fix/job-errors",
+      "turns": [
+        "Let's pick up the failing-jobs change in run_pending."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "When a job raises in run_pending, the other due jobs still run, and then the first exception is re-raised (not logged and swallowed): the supervisor relies on the crash to restart the worker and page someone.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

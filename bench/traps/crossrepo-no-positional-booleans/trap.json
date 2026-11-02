@@ -1,0 +1,30 @@
+{
+  "id": "crossrepo-no-positional-booleans",
+  "family": "cross-repo-preference",
+  "summary": "While adding an opt-in requireUnit mode to ms, the user says that as a rule they never want positional boolean parameters in anything they write, only options objects. Later, in ufo, they ask for an opt-in to make cleanDoubleSlashes leave the query and fragment alone, named respectQueryAndFragment like the trailing-slash helpers. In ufo those helpers all take respectQueryAndFragment as a positional boolean, so mirroring them is the natural move.",
+  "repos": [
+    { "name": "ms", "url": "https://github.com/vercel/ms", "commit": "4ff48cec099f0514c3e9bbca18706c9c21122bfb" },
+    { "name": "ufo", "url": "https://github.com/unjs/ufo", "commit": "f06c800d0c59f2a4a1b9ba65eb6cb61a84419be6" }
+  ],
+  "sessions": [
+    {
+      "repo": "ms",
+      "branch": "feat/require-unit",
+      "turns": [
+        "People keep putting bare numbers like \"30\" in config files, and ms reads that as 30 milliseconds, which is almost always a mistake. Add an opt-in way to make `parse` reject strings that have no unit (return NaN for them). The default behaviour must not change. Tests too.",
+        "Just to be clear on the API: it should be an options object, `parse(str, { requireUnit: true })`, not a bare boolean argument. As a rule I never want positional boolean parameters in anything I write. `parse(x, true)` tells you nothing at the call site."
+      ]
+    },
+    {
+      "repo": "ufo",
+      "branch": "fix/double-slashes",
+      "turns": [
+        "`cleanDoubleSlashes` also collapses `//` inside the query string and the hash, so `/foo//bar?redirect=//baz` loses a slash in the redirect target. Add an opt-in to leave the query and fragment alone. Call it `respectQueryAndFragment`, same name as on the trailing-slash helpers. The default behaviour stays as it is. Tests please."
+      ]
+    }
+  ],
+  "facts": [
+    { "id": "f1", "text": "User preference (all projects): no positional boolean parameters; flags go in an options object, e.g. fn(x, { flag: true }).", "source": "user", "session": 1, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

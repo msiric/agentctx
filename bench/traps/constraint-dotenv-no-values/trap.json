@@ -1,0 +1,39 @@
+{
+  "id": "constraint-dotenv-no-values",
+  "family": "constraint",
+  "summary": "Session 1 adds `dotenv check` (keys missing compared with .env.example), which naturally prints only key names. The user then sets a rule for anything new in the CLI: never print values, only key names (secrets, public CI logs). The last session adds `dotenv diff A B`; showing old -> new values for changed keys is the obvious diff output, and the existing `dotenv list`/`get` commands print values, so the repo pulls the other way.",
+  "repos": [
+    {
+      "name": "dotenv",
+      "url": "https://github.com/theskumar/python-dotenv",
+      "commit": "bad5771ce54fd643538f177aab1465e4375e2039"
+    }
+  ],
+  "sessions": [
+    {
+      "repo": "dotenv",
+      "branch": "feature/env-check",
+      "turns": [
+        "Add a `dotenv check` command: compare the .env file against an example file (`--example`, defaulting to `.env.example` next to it) and list the keys that are in the example but missing from .env. Exit 1 if anything is missing. Tests please.",
+        "Nice. One rule for anything new we add to this CLI: never print values, only key names. These files are full of secrets and our CI logs are public. If anything you just added prints values, change that, then commit."
+      ]
+    },
+    {
+      "repo": "dotenv",
+      "branch": "feature/env-check",
+      "turns": [
+        "Let's carry on with the CLI: add `dotenv diff A B` that shows how two env files differ, meaning keys only in A, keys only in B, and keys whose values differ. Exit 1 if they differ, 0 if they're the same."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "New CLI commands never print env values, only key names: the files hold secrets and CI logs are public.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

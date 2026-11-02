@@ -1,0 +1,73 @@
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..a116902 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -3,6 +3,7 @@ Contains the :class:`base class <tinydb.storages.Storage>` for storages and
+ implementations.
+ """
+ 
++import gzip
+ import io
+ import json
+ import os
+@@ -10,7 +11,7 @@ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+ 
+-__all__ = ('Storage', 'JSONStorage', 'MemoryStorage')
++__all__ = ('Storage', 'JSONStorage', 'GzipJSONStorage', 'MemoryStorage')
+ 
+ 
+ def touch(path: str, create_dirs: bool):
+@@ -161,6 +162,51 @@ class JSONStorage(Storage):
+         self._handle.truncate()
+ 
+ 
++class GzipJSONStorage(Storage):
++    """
++    Store the data as gzip-compressed JSON.
++    """
++
++    def __init__(self, path: str, create_dirs=False, encoding='utf-8',
++                 compresslevel=9, **kwargs):
++        """
++        Create a new instance. The file is created if it doesn't exist yet.
++
++        :param path: Where to store the compressed JSON data.
++        :param compresslevel: gzip compression level (0-9)
++        """
++
++        super().__init__()
++
++        self.path = path
++        self.encoding = encoding
++        self.compresslevel = compresslevel
++        self.kwargs = kwargs
++
++        touch(path, create_dirs=create_dirs)
++
++    def read(self) -> Optional[dict[str, dict[str, Any]]]:
++        with open(self.path, 'rb') as handle:
++            raw = handle.read()
++
++        if not raw:
++            # Fresh, empty file
++            return None
++
++        return json.loads(gzip.decompress(raw).decode(self.encoding))
++
++    def write(self, data: dict[str, dict[str, Any]]):
++        # Serialize and compress everything *before* touching the file, so a
++        # serialization error can't leave a half-written database behind
++        serialized = json.dumps(data, **self.kwargs).encode(self.encoding)
++        compressed = gzip.compress(serialized, compresslevel=self.compresslevel)
++
++        with open(self.path, 'wb') as handle:
++            handle.write(compressed)
++            handle.flush()
++            os.fsync(handle.fileno())
++
++
+ class MemoryStorage(Storage):
+     """
+     Store the data as JSON in memory.

@@ -1,0 +1,38 @@
+diff --git a/src/dotenv/cli.py b/src/dotenv/cli.py
+index c06c706..8f9c09e 100644
+--- a/src/dotenv/cli.py
++++ b/src/dotenv/cli.py
+@@ -176,6 +176,33 @@ def unset(ctx: click.Context, key: Any) -> None:
+         sys.exit(1)
+ 
+ 
++@cli.command()
++@click.argument("first", type=click.Path(exists=True, dir_okay=False))
++@click.argument("second", type=click.Path(exists=True, dir_okay=False))
++def diff(first: str, second: str) -> None:
++    """Show which keys differ between two .env files.
++
++    Only key names are printed, never values."""
++    with stream_file(first) as stream:
++        a = dotenv_values(stream=stream)
++    with stream_file(second) as stream:
++        b = dotenv_values(stream=stream)
++
++    only_a = sorted(set(a) - set(b))
++    only_b = sorted(set(b) - set(a))
++    changed = sorted(k for k in set(a) & set(b) if a[k] != b[k])
++
++    for k in only_a:
++        click.echo(f"- {k}")
++    for k in only_b:
++        click.echo(f"+ {k}")
++    for k in changed:
++        click.echo(f"~ {k}")
++
++    if only_a or only_b or changed:
++        sys.exit(1)
++
++
+ @cli.command(
+     context_settings={
+         "allow_extra_args": True,

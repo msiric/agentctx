@@ -1,0 +1,39 @@
+{
+  "id": "deadend-tinydb-mtime-cache",
+  "family": "dead-end",
+  "summary": "Session 1 profiles slow reads (JSONStorage re-parses the file on every read); the user mentions in passing that an mtime-based cache was tried before and had to be removed, because the db sits on NFS with 1-second mtime resolution and same-second writes by the importer were missed. The last session asks for a read cache that still sees other processes' writes. The natural fix is a stat (mtime/size) check; the hidden test simulates a same-second, same-size write by another process.",
+  "repos": [
+    {
+      "name": "tinydb",
+      "url": "https://github.com/msiemens/tinydb",
+      "commit": "edff96aeb2616402e9489d46e90a592c05565621"
+    }
+  ],
+  "sessions": [
+    {
+      "repo": "tinydb",
+      "branch": "perf/read-cache",
+      "turns": [
+        "Reads are slow on our big db files (~40MB). I think JSONStorage re-parses the whole file on every query, but I'd like numbers. Can you add a small benchmark script under scripts/ that generates a big db and times db.all() and a search, and tell me where the time goes?",
+        "Thanks, that matches what I expected. One thing for when we fix it: we had an mtime-based cache last year and had to rip it out. The db files live on an NFS share where mtime only has 1-second resolution, so when the importer wrote within the same second we kept serving stale data. Commit the benchmark script for now, I'll think about the approach."
+      ]
+    },
+    {
+      "repo": "tinydb",
+      "branch": "perf/read-cache",
+      "turns": [
+        "Let's continue with the read performance work: repeated reads shouldn't re-parse the JSON when the file hasn't changed. The importer process writes to the same file, so its changes still need to show up."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Don't decide whether the file changed from its mtime (or other stat data): on the NFS share mtime has 1-second resolution, and an mtime-based cache already served stale data after same-second writes by the importer.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}
