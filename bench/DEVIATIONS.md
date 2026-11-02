@@ -40,3 +40,10 @@ run's outcome.
   Held-out traps are assigned by the hash of the commit that adds that
   batch, using the same rule as before. Batch-1 assignments stay as they
   are.
+
+## 2026-11-02: the headroom gate doesn't apply to control traps
+
+The gate rule as written would drop every control trap, since `none` is
+supposed to pass those. Controls exist to measure overhead (H4), so they
+aren't gated. This was decided when the batch-1 gate results came in, and it
+was obvious from the controls' purpose. No other trap's outcome is affected.
