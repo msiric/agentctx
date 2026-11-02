@@ -79,3 +79,11 @@ intends. None of these episodes counts as a result.
   Memory's setup completed with its proactive capture style on; Hindsight
   stored and recalled memories). Their smoke episodes stand as smoke checks
   only and are not part of any analysis.
+
+## 2026-11-02: cells removed before the dev matrix
+
+Before the dev matrix, the `bench-results` branch dropped the pilot's
+`trailkeep` cells (run before the `PATH` change above) and the three
+competitor smoke cells (smoke checks only). The dev matrix re-runs them under
+the current harness. The pilot's `none`, `handoff` and `oracle-note` cells,
+and the gate cells, are kept, since nothing these arms use changed.
