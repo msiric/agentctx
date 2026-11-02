@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Check a trap against TRAP-SPEC.md validity rules 1-3 (rule 4 needs a reviewer).
+
+    bench/tools/validate-trap bench/traps/<id> [--keep]
+
+Clones each repo at its pinned commit into a temp dir, runs setup.sh, checks
+out the last session's branch, then runs oracle/check.sh on: the start state
+(must fail), reference/good.patch (must pass), reference/trap.patch (must fail).
+"""
+import json, os, shutil, subprocess, sys, tempfile
+
+def run(cmd, cwd, env=None, check=True):
+    r = subprocess.run(cmd, cwd=cwd, env=env, text=True, capture_output=True)
+    if check and r.returncode != 0:
+        sys.exit(f"command failed in {cwd}: {' '.join(cmd)}\n{r.stdout}{r.stderr}")
+    return r
+
+def prepare(trap_dir, work):
+    t = json.load(open(os.path.join(trap_dir, "trap.json")))
+    for key in ("id", "family", "repos", "sessions", "facts"):
+        if key not in t:
+            sys.exit(f"trap.json: missing {key}")
+    names = {r["name"] for r in t["repos"]}
+    for i, s in enumerate(t["sessions"]):
+        if s["repo"] not in names:
+            sys.exit(f"session {i + 1}: unknown repo {s['repo']}")
+        if not 1 <= len(s["turns"]) <= 4:
+            sys.exit(f"session {i + 1}: needs 1-4 turns")
+    if t["family"] != "control" and len(t["sessions"]) < 2:
+        sys.exit("non-control traps need at least 2 sessions")
+    for r in t["repos"]:
+        d = os.path.join(work, r["name"])
+        run(["git", "clone", "-q", r["url"], d], work)
+        run(["git", "checkout", "-q", r["commit"]], d)
+        run(["git", "checkout", "-q", "-B", "main"], d)
+        setup = os.path.join(trap_dir, "setup.sh")
+        if os.path.exists(setup):
+            run(["sh", setup], d, env=dict(os.environ, TRAP_REPO=r["name"]))
+    last = t["sessions"][-1]
+    primary = os.path.join(work, last["repo"])
+    if run(["git", "rev-parse", "-q", "--verify", "refs/heads/" + last["branch"]], primary, check=False).returncode:
+        run(["git", "checkout", "-q", "-b", last["branch"]], primary)
+    else:
+        run(["git", "checkout", "-q", last["branch"]], primary)
+    return t, primary
+
+def score(trap_dir, primary):
+    r = run(["sh", os.path.join(trap_dir, "oracle", "check.sh")], primary, check=False)
+    facts = []
+    for line in r.stdout.splitlines():
+        try:
+            facts.append(json.loads(line))
+        except ValueError:
+            pass
+    return r.returncode == 0, facts, r
+
+def main():
+    if len(sys.argv) < 2:
+        sys.exit(__doc__)
+    trap_dir = os.path.abspath(sys.argv[1])
+    keep = "--keep" in sys.argv
+    work = tempfile.mkdtemp(prefix="trap-")
+    ok = True
+    try:
+        t, primary = prepare(trap_dir, work)
+        for label, patch, want in (("start", None, False), ("good", "good.patch", True), ("trap", "trap.patch", False)):
+            run(["git", "checkout", "-q", "--", "."], primary); run(["git", "clean", "-qfd"], primary)
+            if patch:
+                run(["git", "apply", "--whitespace=nowarn", os.path.join(trap_dir, "reference", patch)], primary)
+            passed, facts, r = score(trap_dir, primary)
+            good = passed == want
+            ok &= good
+            print(f"{'ok  ' if good else 'FAIL'}  {label:5}  check {'passed' if passed else 'failed'} (want {'pass' if want else 'fail'})  {json.dumps(facts)}")
+            if not good:
+                print(r.stdout[-2000:], r.stderr[-2000:], sep="\n")
+        print(f"{t['id']}: {'valid' if ok else 'INVALID'}")
+    finally:
+        if keep:
+            print("kept", work)
+        else:
+            shutil.rmtree(work, ignore_errors=True)
+    sys.exit(0 if ok else 1)
+
+if __name__ == "__main__":
+    main()

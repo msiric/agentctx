@@ -103,7 +103,7 @@ Files it edits are backed up to `~/.agents/backups/` first.
 - `~/.claude/CLAUDE.md` gets a 3-line block importing `~/.agents/AGENTS.md`; your own lines stay. HTML comments are stripped by Claude, so the markers cost nothing.
 - `~/.codex/AGENTS.md` and `~/.copilot/copilot-instructions.md` become symlinks to `~/.agents/AGENTS.md`. Existing files with content are left alone, with a warning.
 - Hooks go in through a Claude Code plugin (installed from the clone), `~/.codex/hooks.json` and `~/.copilot/hooks/trailkeep.json`. Hook files it didn't create are never edited; it prints what to add instead.
-- The `effort` skill is linked into `~/.agents/skills/`, which Codex and Copilot read. Claude Code gets it from the plugin, at about 60 always-on tokens.
+- The `effort` skill is linked into `~/.agents/skills/`, which Codex and Copilot read. Claude Code gets it from the plugin; its description costs about 75 tokens per session (measured, see `bench/results/stage0-injection.md`).
 - A copy of the tool goes to `~/.agents/trailkeep/`, and `trailkeep` is linked into `~/.local/bin`.
 
 `trailkeep uninstall` removes all of that. It leaves each agent a plain copy of your personal instructions, and keeps `~/.agents` and any `.trailkeep/` folders.

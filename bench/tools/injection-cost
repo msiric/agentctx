@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+"""Stage 0: what each arm adds to the model's request at session start, measured
+at the API boundary with the mock (no model calls), as stored notes grow.
+
+    bench/tools/injection-cost [--sessions 0,1,5,10,20,40] > results/injection-cost.json
+
+For each arm and each simulated history length k (k earlier sessions, each
+adding one progress line and two decisions of realistic length), it runs one
+turn of Claude Code against mock-anthropic.py and records the size of the
+first request. Reports characters added relative to `none` at the same k.
+"""
+import argparse, json, os, re, shutil, subprocess, sys, tempfile, time
+
+BENCH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(BENCH)
+PORT = 8790
+
+DECISIONS = [
+    "Keep the exporter streaming row by row instead of building the whole file in memory: exports reach 2 GB on the largest tenants.",
+    "Dead end: tried the vendored csv writer with quoting=ALL; the importer on the other side rejects quoted numeric fields.",
+    "Timestamps go out as UTC ISO-8601 with a Z suffix; the analytics team parses them with a strict regex.",
+    "Retry uploads three times with jittered backoff, not five: the gateway rate-limits after the fourth attempt in a minute.",
+]
+
+def text_size(body):
+    n = 0
+    for b in body.get("system") or []:
+        n += len(b.get("text", "")) if isinstance(b, dict) else len(str(b))
+    for m in body.get("messages", []):
+        c = m.get("content")
+        if isinstance(c, str):
+            n += len(c)
+        else:
+            for b in c or []:
+                n += len(b.get("text", "") or json.dumps(b.get("content", ""))) if isinstance(b, dict) else 0
+    n += len(json.dumps(body.get("tools", [])))
+    return n
+
+def run(cmd, **kw):
+    return subprocess.run(cmd, text=True, capture_output=True, **kw)
+
+def history(k):
+    prog = [f"- 2026-10-{(i % 28) + 1:02d}: session {i + 1}: wired the next exporter stage and its tests; next is the stage after it." for i in range(k)]
+    dec = [f"- {DECISIONS[(2 * i + j) % len(DECISIONS)]} (s{i + 1})" for i in range(k) for j in range(2)]
+    return prog, dec
+
+def setup(arm, k, home, repo, env):
+    if arm.startswith("trailkeep"):
+        run(["sh", os.path.join(ROOT, "bin", "trailkeep"), "install", "--no-codex", "--no-copilot"], env=env, check=True)
+        if k > 0:
+            run([os.path.join(home, ".agents/trailkeep/bin/trailkeep"), "new"], cwd=repo, env=env, check=True)
+            f = os.path.join(repo, ".trailkeep", "feature__export.md")
+            s = open(f).read()
+            prog, dec = history(k)
+            s = s.replace("## Goal\n\n", "## Goal\n\nStream tenant data exports to the object store as CSV.\n")
+            s = s.replace("## Plan\n\n- [ ] \n", "## Plan\n\n" + "".join(f"- [{'x' if i < k else ' '}] Stage {i + 1}\n" for i in range(max(k, 1) + 2)))
+            s = s.replace("## Progress\n\n", "## Progress\n\n" + "\n".join(prog) + "\n")
+            s = s.replace("## Decisions and dead ends\n\n", "## Decisions and dead ends\n\n" + "\n".join(dec) + "\n")
+            open(f, "w").write(s)
+    if arm == "native" and k > 0:
+        # auto memory as Claude would keep it: an index file with one line per learning
+        proj = os.path.join(home, ".claude", "projects", re.sub(r"[^A-Za-z0-9]", "-", os.path.realpath(repo)), "memory")
+        os.makedirs(proj, exist_ok=True)
+        prog, dec = history(k)
+        open(os.path.join(proj, "MEMORY.md"), "w").write("# Memory\n\n" + "\n".join(dec + prog) + "\n")
+    if arm == "handoff":
+        os.makedirs(os.path.join(home, ".claude"), exist_ok=True)
+        open(os.path.join(home, ".claude", "CLAUDE.md"), "w").write(open(os.path.join(BENCH, "harness", "arms", "handoff.sh")).read().split("<<'MD'\n")[1].split("MD\n")[0])
+        if k > 0:
+            prog, dec = history(k)
+            open(os.path.join(repo, "HANDOFF.md"), "w").write("# Handoff\n\n## State\n" + "\n".join(prog) + "\n\n## Decisions\n" + "\n".join(dec) + "\n")
+
+def measure(arm, k, log):
+    ep = tempfile.mkdtemp(prefix="inj-")
+    home, repo = os.path.join(ep, "home"), os.path.join(ep, "repo")
+    os.makedirs(home); os.makedirs(repo)
+    env = {"HOME": home, "PATH": os.environ["PATH"], "TERM": "dumb", "IS_SANDBOX": "1", "LANG": "C.UTF-8",
+           "ANTHROPIC_BASE_URL": f"http://127.0.0.1:{PORT}", "ANTHROPIC_API_KEY": "sk-mock",
+           "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "TRAILKEEP_SYNC": "1"}
+    if arm != "native":
+        env["CLAUDE_CODE_DISABLE_AUTO_MEMORY"] = "1"
+    if arm.endswith("-nohint"):
+        env["TRAILKEEP_HINT"] = "0"  # what a session on the default branch sees
+    g = lambda *a: run(["git", *a], cwd=repo, env=env, check=True)
+    g("init", "-q", "-b", "main"); open(os.path.join(repo, "app.py"), "w").write("print('hi')\n")
+    g("-c", "user.name=x", "-c", "user.email=x@x", "add", "-A"); g("-c", "user.name=x", "-c", "user.email=x@x", "commit", "-qm", "init")
+    g("checkout", "-qb", "feature/export")
+    setup(arm, k, home, repo, env)
+    before = sum(1 for _ in open(log)) if os.path.exists(log) else 0
+    msg = json.dumps({"type": "user", "message": {"role": "user", "content": "Let's carry on with the export feature."}}) + "\n"
+    run(["claude", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
+         "--dangerously-skip-permissions", "--model", "claude-sonnet-5", "--max-turns", "1"], cwd=repo, env=env, input=msg, timeout=120)
+    reqs = [json.loads(l) for l in list(open(log))[before:]]
+    shutil.rmtree(ep, ignore_errors=True)
+    first = next((r["body"] for r in reqs if r["body"].get("messages")), None)
+    return text_size(first) if first else None
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--sessions", default="0,1,5,10,20,40")
+    ap.add_argument("--arms", default="none,native,handoff,trailkeep")
+    a = ap.parse_args()
+    ks = [int(x) for x in a.sessions.split(",")]
+    tmp = tempfile.mkdtemp(prefix="mock-")
+    log = os.path.join(tmp, "req.jsonl")
+    mock = subprocess.Popen([sys.executable, os.path.join(BENCH, "tools", "mock-anthropic.py"), str(PORT)],
+                            env=dict(os.environ, MOCK_LOG=log), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    time.sleep(1)
+    rows = []
+    try:
+        for k in ks:
+            base = None
+            for arm in a.arms.split(","):
+                n = measure(arm, k, log)
+                if arm == "none":
+                    base = n
+                rows.append({"arm": arm, "sessions": k, "request_chars": n, "added_chars": None if (n is None or base is None) else n - base})
+                print(f"k={k:3} {arm:10} request={n} added={rows[-1]['added_chars']}", file=sys.stderr)
+    finally:
+        mock.terminate()
+    json.dump({"claude_version": run(["claude", "--version"]).stdout.strip(),
+               "trailkeep_commit": run(["git", "rev-parse", "HEAD"], cwd=ROOT).stdout.strip(),
+               "note": "added_chars = first request text minus the `none` arm's at the same history length; ~4 chars per token",
+               "rows": rows}, sys.stdout, indent=1)
+
+if __name__ == "__main__":
+    main()

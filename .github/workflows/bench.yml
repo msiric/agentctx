@@ -1,0 +1,89 @@
+name: bench
+
+# Runs a benchmark plan (bench/plans/*.json) one episode at a time, within a
+# time budget, and pauses cleanly at a usage limit. Re-running continues where
+# the last run stopped. Results go to the `bench-results` branch.
+#   gh workflow run bench.yml -f plan=pilot
+on:
+  workflow_dispatch:
+    inputs:
+      plan:
+        description: "plan name in bench/plans/ (without .json)"
+        required: true
+        default: pilot
+      minutes:
+        description: "time budget for this run, in minutes"
+        required: true
+        default: "300"
+      claude_code_version:
+        description: "Claude Code npm version (recorded with every result)"
+        required: true
+        default: latest
+
+permissions:
+  contents: write
+
+concurrency:
+  group: bench
+  cancel-in-progress: false
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Credentials present
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          [ -n "$CLAUDE_CODE_OAUTH_TOKEN$ANTHROPIC_API_KEY" ] ||
+            { echo "Add CLAUDE_CODE_OAUTH_TOKEN (from 'claude setup-token') as a repository secret."; exit 1; }
+
+      - name: Install agent CLIs
+        run: |
+          npm install -g "@anthropic-ai/claude-code@${{ inputs.claude_code_version }}"
+          claude --version
+
+      - name: Load earlier results
+        run: |
+          mkdir -p bench/results/runs
+          if git fetch -q origin bench-results 2>/dev/null; then
+            git --work-tree=bench/results/runs checkout origin/bench-results -- . 2>/dev/null || true
+            git reset -q
+          fi
+          ls bench/results/runs | wc -l
+
+      - name: Run plan
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python3 bench/harness/matrix.py --plan "bench/plans/${{ inputs.plan }}.json" --minutes "${{ inputs.minutes }}"
+
+      - name: Save results
+        if: always()
+        run: |
+          cd bench/results/runs
+          find . -name 'session*.jsonl' -exec gzip -f {} \;
+          python3 ../../harness/summarize.py --runs . > SUMMARY.md || true
+          git init -q -b bench-results . 2>/dev/null || true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add origin "$(git -C "$GITHUB_WORKSPACE" remote get-url origin)" 2>/dev/null || true
+          git -c http.extraheader="$(git -C "$GITHUB_WORKSPACE" config --get http.https://github.com/.extraheader)" fetch -q origin bench-results 2>/dev/null &&
+            git reset -q --soft FETCH_HEAD || true
+          git add -A
+          git commit -qm "bench: ${{ inputs.plan }} run ${{ github.run_id }}" || { echo "nothing new"; exit 0; }
+          git -c http.extraheader="$(git -C "$GITHUB_WORKSPACE" config --get http.https://github.com/.extraheader)" push -q origin HEAD:bench-results
