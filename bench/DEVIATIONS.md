@@ -23,3 +23,20 @@ The `trailkeep` arm's snapshot left out effort files, because `.trailkeep`
 ignores itself in git. The snapshot now deletes `.gitignore` files from its
 copy. This affects only the files saved for the failure taxonomy, not any
 run's outcome.
+
+## 2026-11-02: second batch of 12 traps, with a revised authoring brief
+
+- **What changed:** Two new blind authors are writing a second batch of 12
+  traps. They have the same spec and the same blindness to which tools are
+  compared. The brief now adds the pilot's lesson:
+  - facts must be team-specific, or must go against default good practice
+  - the last session's task must be concrete enough that a no-memory agent
+    attempts it rather than stopping to ask
+  - branch-isolation results must not depend on whether the agent commits
+- **Why:** The pilot showed that facts which coincide with good practice
+  give no headroom. The new guidance applies to every arm alike. Each new
+  trap still has to pass `validate-trap` and the headroom gate.
+- **Split:** `tools/split-traps` treats the second batch as its own group.
+  Held-out traps are assigned by the hash of the commit that adds that
+  batch, using the same rule as before. Batch-1 assignments stay as they
+  are.
