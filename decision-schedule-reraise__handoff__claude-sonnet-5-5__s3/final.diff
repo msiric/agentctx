@@ -1,0 +1,141 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..07dd57f
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,43 @@
++# Handoff
++
++## Current state
++- Branch `fix/job-errors`. Nothing committed.
++- Done (uncommitted): `Scheduler.run_all(delay_seconds=...)` in `schedule/__init__.py` now
++  sleeps only between jobs, not after the last one. Tests pass (40 passed, 41 skipped).
++- Done (uncommitted): `run_pending` and `run_all` now run every due job even if one raises, then
++  re-raise the first exception (others logged) via `_run_job_collecting` / `_raise_first` in
++  `Scheduler`. Test `TestJobException` added in `test_schedule.py`. 41 passed, 41 skipped.
++- Still open: rescheduling a failed job (see below). NOT done; failed job still retries every tick.
++- Only `Exception` is collected; KeyboardInterrupt/SystemExit propagate immediately (deliberate).
++
++## Next task: job exceptions in run_pending
++Problem: `Job.run()` calls `job_func()` before setting `last_run` / `_schedule_next_run()`
++(`schedule/__init__.py` ~line 693). If it raises, the exception escapes `run_pending`, the
++remaining due jobs in that tick never run, and the failed job is not rescheduled (its
++`next_run` stays in the past, so it retries on the very next tick). `run_all` has the same issue.
++
++Decision: run all the other due jobs, then re-raise the first exception once they've all run.
++Reason: the user's supervisor restarts the worker and pages someone on a crash, so errors must
++not be swallowed or only logged.
++
++Plan:
++- Collect exceptions per job in `run_pending` (and `run_all`), keep going, re-raise the first
++  one at the end. Log any further ones (`ExceptionGroup` is 3.11+; the library supports older).
++- Open question to confirm with the user: reschedule a failed job normally (e.g.
++  `_schedule_next_run()` in a `finally` in `Job.run`) instead of retrying every tick? I lean
++  yes, matching the "missed jobs run once" philosophy in the `run_pending` docstring. Also
++  decide whether `last_run` is updated on failure.
++- Add tests: other due jobs still run, first exception is re-raised, failed job rescheduled.
++
++## Decisions
++- `run_all` iterates a snapshot (`jobs = self.jobs[:]`) with `enumerate` and skips the sleep
++  on the last index, so jobs that cancel themselves mid-run don't affect iteration.
++- Options rejected for the exception work: log-and-swallow (hides failures from the
++  supervisor); opt-in `on_error` hook (leaves the bug as the default).
++
++## Failed approaches
++- First draft of the test used `unittest.TestCase` (not imported; file uses pytest-style classes) and
++  a class name not starting with `Test`, so pytest silently didn't collect it. Fixed.
++
++## Open
++- No test yet asserting `time.sleep` is not called after the last job in `run_all`.
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..dabc8b2 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -97,8 +97,10 @@ class Scheduler:
+         between but only once.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        errors: List[BaseException] = []
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            self._run_job_collecting(job, errors)
++        self._raise_first(errors)
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +117,13 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
+-            self._run_job(job)
+-            time.sleep(delay_seconds)
++        jobs = self.jobs[:]
++        errors: List[BaseException] = []
++        for index, job in enumerate(jobs):
++            self._run_job_collecting(job, errors)
++            if index < len(jobs) - 1:
++                time.sleep(delay_seconds)
++        self._raise_first(errors)
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """
+@@ -174,6 +180,21 @@ class Scheduler:
+         if isinstance(ret, CancelJob) or ret is CancelJob:
+             self.cancel_job(job)
+ 
++    def _run_job_collecting(self, job: "Job", errors: List[BaseException]) -> None:
++        # A raising job must not prevent the other due jobs from running.
++        try:
++            self._run_job(job)
++        except Exception as exc:
++            logger.exception("Job %s raised an exception", job)
++            errors.append(exc)
++
++    @staticmethod
++    def _raise_first(errors: List[BaseException]) -> None:
++        # Re-raise the first error once all jobs ran; later ones are only logged
++        # (ExceptionGroup needs Python 3.11+).
++        if errors:
++            raise errors[0]
++
+     def get_next_run(
+         self, tag: Optional[Hashable] = None
+     ) -> Optional[datetime.datetime]:
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..7a6e31c 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -4,6 +4,7 @@ import datetime
+ import functools
+ from unittest import mock, TestCase
+ import os
++import pytest
+ import time
+ 
+ # Silence "missing docstring", "method could be a function",
+@@ -1597,3 +1598,24 @@ class SchedulerTests(TestCase):
+         scheduler.every()
+         scheduler.every(10).seconds
+         scheduler.run_pending()
++
++
++class TestJobException:
++
++    def test_run_pending_runs_other_jobs_and_reraises_first(self):
++        schedule.clear()
++        calls = []
++
++        def bad():
++            raise ValueError("boom")
++
++        def good():
++            calls.append(1)
++
++        with mock_datetime(2010, 1, 6, 12, 15):
++            schedule.every().second.do(bad)
++            schedule.every().second.do(good)
++        with mock_datetime(2010, 1, 6, 12, 16):
++            with pytest.raises(ValueError):
++                schedule.run_pending()
++        assert calls == [1]

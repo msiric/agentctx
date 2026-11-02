@@ -1,0 +1,117 @@
+diff --git a/docs/exception-handling.rst b/docs/exception-handling.rst
+index 7afcb7c..5bfe963 100644
+--- a/docs/exception-handling.rst
++++ b/docs/exception-handling.rst
+@@ -1,7 +1,16 @@
+ Exception Handling
+ ##################
+ 
+-Schedule doesn't catch exceptions that happen during job execution. Therefore any exceptions thrown during job execution will bubble up and interrupt schedule's run_xyz function.
++Schedule doesn't swallow exceptions that happen during job execution.
++
++When ``run_pending()`` is called and a job raises, the other jobs that are due
++in the same call still run. Once they have all run, the first exception that
++was raised is re-raised, so your process still sees the failure. If several
++jobs fail, only the first exception is re-raised (the others are logged).
++A failed job is not rescheduled and stays due, so it is retried on the next
++``run_pending()`` call.
++
++``run_all()`` is unchanged: an exception interrupts it immediately.
+ 
+ If you want to guard against exceptions you can wrap your job function
+ in a decorator like this:
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..6a0342d 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -95,10 +95,21 @@ class Scheduler:
+         that should run every minute and you only call run_pending()
+         in one hour increments then your job won't be run 60 times in
+         between but only once.
++
++        If a job raises, the remaining due jobs still run; afterwards the
++        first exception raised is re-raised.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        first_error: Optional[BaseException] = None
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception as e:
++                logger.exception("Job %s raised an exception", job)
++                if first_error is None:
++                    first_error = e
++        if first_error is not None:
++            raise first_error
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +126,11 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
++        jobs = self.jobs[:]
++        for i, job in enumerate(jobs):
+             self._run_job(job)
+-            time.sleep(delay_seconds)
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..975f0ae 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1270,6 +1270,49 @@ class SchedulerTests(TestCase):
+         assert tuesday.hour == 10
+         assert tuesday.minute == 27
+ 
++    def test_run_all_delay_skips_last(self):
++        mock_job = make_mock_job()
++        schedule.every().second.do(mock_job)
++        schedule.every().second.do(mock_job)
++        schedule.every().second.do(mock_job)
++        with mock.patch("schedule.time.sleep") as sleep:
++            schedule.run_all(delay_seconds=2)
++        assert sleep.call_count == 2
++
++    def test_run_pending_failing_jobs(self):
++        calls = []
++
++        def ok():
++            calls.append("ok")
++
++        def bad1():
++            calls.append("bad1")
++            raise ValueError("first")
++
++        def bad2():
++            calls.append("bad2")
++            raise KeyError("second")
++
++        with mock_datetime(2010, 1, 6, 12, 15, 0):
++            schedule.every().second.do(ok)
++            schedule.every().second.do(bad1)
++            schedule.every().second.do(ok)
++            schedule.every().second.do(bad2)
++        with mock_datetime(2010, 1, 6, 12, 15, 5):
++            with self.assertRaises(ValueError):
++                schedule.run_pending()
++        assert sorted(calls) == ["bad1", "bad2", "ok", "ok"]
++
++    def test_run_pending_single_failure(self):
++        ran = []
++        with mock_datetime(2010, 1, 6, 12, 15, 0):
++            schedule.every().second.do(lambda: 1 / 0)
++            schedule.every().second.do(lambda: ran.append(1))
++        with mock_datetime(2010, 1, 6, 12, 15, 5):
++            with self.assertRaises(ZeroDivisionError):
++                schedule.run_pending()
++        assert ran == [1]
++
+     def test_run_all(self):
+         mock_job = make_mock_job()
+         every().minute.do(mock_job)

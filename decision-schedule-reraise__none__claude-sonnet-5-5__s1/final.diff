@@ -1,0 +1,18 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..0e3eb1d 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -115,9 +115,11 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
++        jobs = self.jobs[:]
++        for i, job in enumerate(jobs):
++            if i > 0:
++                time.sleep(delay_seconds)
+             self._run_job(job)
+-            time.sleep(delay_seconds)
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """

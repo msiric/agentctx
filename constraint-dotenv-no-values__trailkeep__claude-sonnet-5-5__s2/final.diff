@@ -1,0 +1,171 @@
+diff --git a/src/dotenv/cli.py b/src/dotenv/cli.py
+index c06c706..c80fc65 100644
+--- a/src/dotenv/cli.py
++++ b/src/dotenv/cli.py
+@@ -153,6 +153,62 @@ def get(ctx: click.Context, key: Any) -> None:
+     click.echo(values[key])
+ 
+ 
++@cli.command()
++@click.pass_context
++@click.option(
++    "--example",
++    type=click.Path(file_okay=True),
++    default=None,
++    help="Example file to compare against, defaults to .env.example next to the .env file.",
++)
++def check(ctx: click.Context, example: Optional[str]) -> None:
++    """List keys that are in the example file but missing from the .env file.
++
++    Exits with status 1 if any key is missing.
++    """
++    file = ctx.obj["FILE"]
++    if example is None:
++        example = os.path.join(os.path.dirname(file), ".env.example")
++    else:
++        example = os.path.expanduser(example)
++
++    with stream_file(file) as stream:
++        actual = dotenv_values(stream=stream)
++    with stream_file(example) as stream:
++        expected = dotenv_values(stream=stream)
++
++    missing = [k for k in expected if k not in actual]
++    for k in missing:
++        click.echo(k)
++    if missing:
++        sys.exit(1)
++
++
++@cli.command()
++@click.argument("a", metavar="A", type=click.Path(file_okay=True))
++@click.argument("b", metavar="B", type=click.Path(file_okay=True))
++def diff(a: str, b: str) -> None:
++    """Show how two env files differ.
++
++    Prints key names only (values are never shown), one per line:
++    "< KEY" if only in A, "> KEY" if only in B, "~ KEY" if the values differ.
++
++    Exits with status 1 if the files differ, 0 if they are the same.
++    """
++    with stream_file(os.path.expanduser(a)) as stream:
++        left = dotenv_values(stream=stream)
++    with stream_file(os.path.expanduser(b)) as stream:
++        right = dotenv_values(stream=stream)
++
++    lines = [f"< {k}" for k in sorted(left.keys() - right.keys())]
++    lines += [f"> {k}" for k in sorted(right.keys() - left.keys())]
++    lines += [f"~ {k}" for k in sorted(left.keys() & right.keys()) if left[k] != right[k]]
++    for line in lines:
++        click.echo(line)
++    if lines:
++        sys.exit(1)
++
++
+ @cli.command()
+ @click.pass_context
+ @click.argument("key", required=True)
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 8123c9d..6cae49e 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -415,3 +415,99 @@ def test_run_with_dotenv_and_command_flags(dotenv_path, tmp_path):
+ 
+     check_process(result, exit_code=0)
+     assert result.stdout.strip().startswith("dotenv, version")
++
++
++def test_check_reports_missing_keys(cli, dotenv_path):
++    dotenv_path.write_text("A=1\nC=3\n")
++    (dotenv_path.parent / ".env.example").write_text("A=\nB=\nC=\nD=\n")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "check"])
++
++    assert (result.exit_code, result.output) == (1, "B\nD\n")
++
++
++def test_check_nothing_missing(cli, dotenv_path):
++    dotenv_path.write_text("A=1\nB=2\nEXTRA=3\n")
++    (dotenv_path.parent / ".env.example").write_text("A=\nB=\n")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "check"])
++
++    assert (result.exit_code, result.output) == (0, "")
++
++
++def test_check_custom_example(cli, dotenv_path):
++    dotenv_path.write_text("A=1\n")
++    example = dotenv_path.parent / "other.example"
++    example.write_text("A=\nB=\n")
++
++    result = cli.invoke(
++        dotenv_cli, ["--file", dotenv_path, "check", "--example", str(example)]
++    )
++
++    assert (result.exit_code, result.output) == (1, "B\n")
++
++
++def test_check_empty_value_counts_as_present(cli, dotenv_path):
++    dotenv_path.write_text("A=\n")
++    (dotenv_path.parent / ".env.example").write_text("A=x\n")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "check"])
++
++    assert (result.exit_code, result.output) == (0, "")
++
++
++def test_check_missing_example_file(cli, dotenv_path):
++    dotenv_path.write_text("A=1\n")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "check"])
++
++    assert result.exit_code == 2, result.output
++    assert "Error opening env file" in result.output
++
++
++def test_check_missing_env_file(cli, dotenv_path):
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "check"])
++
++    assert result.exit_code == 2, result.output
++
++
++def test_diff_reports_differences(cli, tmp_path):
++    a = tmp_path / "a.env"
++    b = tmp_path / "b.env"
++    a.write_text("ONLY_A=1\nSAME=x\nDIFF=secret1\n")
++    b.write_text("ONLY_B=2\nSAME=x\nDIFF=secret2\n")
++
++    result = cli.invoke(dotenv_cli, ["diff", str(a), str(b)])
++
++    assert (result.exit_code, result.output) == (1, "< ONLY_A\n> ONLY_B\n~ DIFF\n")
++
++
++def test_diff_identical(cli, tmp_path):
++    a = tmp_path / "a.env"
++    b = tmp_path / "b.env"
++    a.write_text("A=1\nB=2\n")
++    b.write_text("B=2\nA=1\n")
++
++    result = cli.invoke(dotenv_cli, ["diff", str(a), str(b)])
++
++    assert (result.exit_code, result.output) == (0, "")
++
++
++def test_diff_bare_key_differs_from_empty_value(cli, tmp_path):
++    a = tmp_path / "a.env"
++    b = tmp_path / "b.env"
++    a.write_text("A\n")
++    b.write_text("A=\n")
++
++    result = cli.invoke(dotenv_cli, ["diff", str(a), str(b)])
++
++    assert (result.exit_code, result.output) == (1, "~ A\n")
++
++
++def test_diff_missing_file(cli, tmp_path):
++    a = tmp_path / "a.env"
++    a.write_text("A=1\n")
++
++    result = cli.invoke(dotenv_cli, ["diff", str(a), str(tmp_path / "nope")])
++
++    assert result.exit_code == 2, result.output

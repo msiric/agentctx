@@ -1,0 +1,8 @@
+2026-11-02: run_all delay fix done. Compared options for job errors and picked collect-then-re-raise-first. Nothing else implemented. Next: Job.run() reschedule, then the scheduler loops.
+Collect and re-raise the first exception after all due jobs ran, instead of log-and-swallow: the supervisor relies on a crash to restart and page.
+Do not use ExceptionGroup: the project supports Python versions before 3.11. Re-raise only the first exception.
+Catch `Exception`, not `BaseException`, so Ctrl-C and SystemExit still stop the loop.
+Reschedule in `Job.run()` via try/finally: otherwise `next_run` stays in the past and the failed job retries on every tick.
+Keep the `.until()` cancellation check after a failure.
+2026-11-02: Implemented Job.run() try/finally, per-job catch in run_pending/run_all (re-raise first), tests, HISTORY note. All tests pass.
+Open question resolved: `Job.run()` cannot return CancelJob when job_func raises, so `Scheduler._run_job` checks `.until()` on the exception path, cancels the job, and re-raises.

@@ -1,0 +1,143 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..62259e8 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,37 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_gzip_json(tmpdir):
++    from tinydb.storages import GzipJSONStorage
++
++    path = str(tmpdir.join('db.json.gz'))
++
++    with TinyDB(path, storage=GzipJSONStorage) as db:
++        db.insert({'int': 1, 'text': 'a' * 1000})
++        db.insert({'int': 2})
++
++    with open(path, 'rb') as f:
++        assert f.read(2) == b'\x1f\x8b'
++
++    with TinyDB(path, storage=GzipJSONStorage) as db:
++        assert len(db) == 2
++        db.remove(where('int') == 1)
++
++    with TinyDB(path, storage=GzipJSONStorage) as db:
++        assert db.all() == [{'int': 2}]
++
++
++def test_gzip_json_invalid_dict_keeps_file(tmpdir):
++    from tinydb.storages import GzipJSONStorage
++
++    path = str(tmpdir.join('db.json.gz'))
++
++    with TinyDB(path, storage=GzipJSONStorage) as db:
++        db.insert({'int': 1})
++        with pytest.raises(TypeError):
++            db.insert({'int': {1, 2}})
++
++    with TinyDB(path, storage=GzipJSONStorage) as db:
++        assert db.all() == [{'int': 1}]
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..6841c86 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -3,6 +3,7 @@ Contains the :class:`base class <tinydb.storages.Storage>` for storages and
+ implementations.
+ """
+ 
++import gzip
+ import io
+ import json
+ import os
+@@ -10,7 +11,7 @@ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+ 
+-__all__ = ('Storage', 'JSONStorage', 'MemoryStorage')
++__all__ = ('Storage', 'JSONStorage', 'GzipJSONStorage', 'MemoryStorage')
+ 
+ 
+ def touch(path: str, create_dirs: bool):
+@@ -161,6 +162,79 @@ class JSONStorage(Storage):
+         self._handle.truncate()
+ 
+ 
++class GzipJSONStorage(Storage):
++    """
++    Store the data in a gzip-compressed JSON file.
++    """
++
++    def __init__(self, path: str, create_dirs=False, encoding='utf-8',
++                 access_mode='rb+', compresslevel=9, **kwargs):
++        """
++        Create a new instance.
++
++        :param path: Where to store the compressed JSON data.
++        :param create_dirs: Whether to create missing parent directories.
++        :param encoding: Encoding used for the JSON text.
++        :param access_mode: binary mode in which the file is opened
++                            (``rb``, ``rb+``)
++        :param compresslevel: gzip compression level (0-9).
++        :param kwargs: Passed on to ``json.dumps``.
++        """
++
++        super().__init__()
++
++        self._mode = access_mode
++        self._encoding = encoding
++        self._compresslevel = compresslevel
++        self.kwargs = kwargs
++
++        if access_mode not in ('rb', 'rb+'):
++            warnings.warn(
++                'Using an `access_mode` other than \'rb\' or \'rb+\' '
++                'can cause data loss or corruption'
++            )
++
++        if any(c in self._mode for c in ('+', 'w', 'a')):
++            touch(path, create_dirs=create_dirs)
++
++        self._handle = open(path, mode=self._mode)
++
++    def close(self) -> None:
++        self._handle.close()
++
++    def read(self) -> Optional[dict[str, dict[str, Any]]]:
++        self._handle.seek(0, os.SEEK_END)
++        size = self._handle.tell()
++
++        if not size:
++            return None
++
++        self._handle.seek(0)
++        raw = gzip.decompress(self._handle.read())
++        return json.loads(raw.decode(self._encoding))
++
++    def write(self, data: dict[str, dict[str, Any]]):
++        # Serialize and compress completely *before* touching the file so a
++        # serialization error can't leave a half-written database behind
++        serialized = json.dumps(data, **self.kwargs)
++        compressed = gzip.compress(
++            serialized.encode(self._encoding), compresslevel=self._compresslevel
++        )
++
++        self._handle.seek(0)
++
++        try:
++            self._handle.write(compressed)
++        except io.UnsupportedOperation:
++            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
++
++        self._handle.flush()
++        os.fsync(self._handle.fileno())
++
++        # Remove leftover data in case the file has gotten shorter
++        self._handle.truncate()
++
++
+ class MemoryStorage(Storage):
+     """
+     Store the data as JSON in memory.

@@ -1,0 +1,204 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index e5f2541..696d66a 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -7,6 +7,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+ 
+ ## [Unreleased]
+ 
++### Added
++
++- New `dotenv check` command that lists keys present in an example file (`--example`, default `.env.example` next to the `.env` file) but missing from the `.env` file, and exits with code 1 if any are missing
++- New `dotenv diff A B` command that lists keys only in A (`< KEY`), only in B (`> KEY`) and keys whose values differ (`~ KEY`), printing key names only, and exits with code 1 if the files differ
++
+ ### Fixed
+ 
+ - Fix a package build deprecation warning caused by a non-string `license` value in `pyproject.toml` by [@kurtmckee] in [#648]
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..0706bd7
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,27 @@
++# Handoff: `dotenv check`
++
++## State
++Done. `check` command in `src/dotenv/cli.py`; 5 tests in `tests/test_cli.py`; entry under Unreleased/Added in `CHANGELOG.md`.
++
++## Decisions
++- Presence is by key only: `A=` (empty) and bare `A` in .env count as present. Reason: the goal is "key missing", not "value unset".
++- Default example path is `.env.example` in the directory of `--file`, as specified.
++- Missing keys printed one per line, in example-file order; exit 1 if any, 2 if either file can't be opened (reuses `stream_file`).
++
++## Notes
++- Env had no click/dotenv installed; ran with `PYTHONPATH=src`. 20 tests in test_cli.py fail with FileNotFoundError both before and after this change (they spawn the `dotenv` executable, which isn't installed here). Not related.
++
++## Rule (from user)
++Anything new in the CLI must never print values, only key names: .env files hold secrets and CI logs are public. `check` complies: it prints only missing key names; errors print only paths.
++
++# Task: `dotenv diff A B`
++## State
++Done. `diff` in `src/dotenv/cli.py`, 3 tests in `tests/test_cli.py`, CHANGELOG entry.
++
++## Decisions
++- Output is key names only (per the rule above): `< KEY` only in A, `> KEY` only in B, `~ KEY` value differs; each group sorted. Never prints values, even for differing keys.
++- Exit 1 if any difference, 0 if same, 2 if a file can't be opened (reuses `stream_file`, as `check` does).
++- Takes positional A and B; ignores the global `--file`.
++- Values compared as parsed: bare `A` (None) differs from `A=` (""). 
++- Failed first attempt: tests passed `Path` objects as positional args to `cli.invoke`; click's parser calls `len()` on them and crashes (exit 1, empty output). Tests use `str(path)` for positionals.
++- Verified with `PYTHONPATH=src pytest -k "diff or check"`.
+diff --git a/src/dotenv/cli.py b/src/dotenv/cli.py
+index c06c706..6ceaea5 100644
+--- a/src/dotenv/cli.py
++++ b/src/dotenv/cli.py
+@@ -176,6 +176,65 @@ def unset(ctx: click.Context, key: Any) -> None:
+         sys.exit(1)
+ 
+ 
++@cli.command()
++@click.pass_context
++@click.option(
++    "--example",
++    type=click.Path(file_okay=True),
++    default=None,
++    help="Location of the example file, defaults to .env.example next to the .env file.",
++)
++def check(ctx: click.Context, example: Any) -> None:
++    """List keys that are in the example file but missing from the .env file.
++
++    Exits with code 1 if any key is missing.
++    """
++    file = ctx.obj["FILE"]
++    if example is None:
++        example = os.path.join(os.path.dirname(file), ".env.example")
++    else:
++        example = os.path.expanduser(example)
++
++    with stream_file(file) as stream:
++        values = dotenv_values(stream=stream)
++    with stream_file(example) as stream:
++        expected = dotenv_values(stream=stream)
++
++    missing = [k for k in expected if k not in values]
++    for k in missing:
++        click.echo(k)
++    if missing:
++        sys.exit(1)
++
++
++@cli.command()
++@click.argument("a", type=click.Path(file_okay=True))
++@click.argument("b", type=click.Path(file_okay=True))
++def diff(a: Any, b: Any) -> None:
++    """Show how two env files differ.
++
++    Prints key names only, never values: "< KEY" for keys only in A,
++    "> KEY" for keys only in B and "~ KEY" for keys whose values differ.
++    Exits with code 1 if the files differ, 0 if they are the same.
++    """
++    with stream_file(os.path.expanduser(a)) as stream:
++        values_a = dotenv_values(stream=stream)
++    with stream_file(os.path.expanduser(b)) as stream:
++        values_b = dotenv_values(stream=stream)
++
++    lines = [f"< {k}" for k in sorted(values_a.keys() - values_b.keys())]
++    lines += [f"> {k}" for k in sorted(values_b.keys() - values_a.keys())]
++    lines += [
++        f"~ {k}"
++        for k in sorted(values_a.keys() & values_b.keys())
++        if values_a[k] != values_b[k]
++    ]
++    for line in lines:
++        click.echo(line)
++    if lines:
++        sys.exit(1)
++
++
+ @cli.command(
+     context_settings={
+         "allow_extra_args": True,
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 8123c9d..93807d6 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -415,3 +415,80 @@ def test_run_with_dotenv_and_command_flags(dotenv_path, tmp_path):
+ 
+     check_process(result, exit_code=0)
+     assert result.stdout.strip().startswith("dotenv, version")
++
++
++def test_check_all_present(cli, dotenv_path, tmp_path):
++    dotenv_path.write_text("A=1\nB=2\nC=3\n")
++    example = tmp_path / "ex"
++    example.write_text("A=\nB=x\n")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "check", "--example", example])
++
++    assert (result.exit_code, result.output) == (0, "")
++
++
++def test_check_missing_keys(cli, dotenv_path, tmp_path):
++    dotenv_path.write_text("A=1\n")
++    example = tmp_path / "ex"
++    example.write_text("A=\nB=x\n# C=1\nD\n")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "check", "--example", example])
++
++    assert (result.exit_code, result.output) == (1, "B\nD\n")
++
++
++def test_check_default_example(cli, dotenv_path):
++    dotenv_path.write_text("A=1\n")
++    (dotenv_path.parent / ".env.example").write_text("A=\nB=\n")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "check"])
++
++    assert (result.exit_code, result.output) == (1, "B\n")
++
++
++def test_check_empty_value_counts_as_present(cli, dotenv_path, tmp_path):
++    dotenv_path.write_text("A=\n")
++    example = tmp_path / "ex"
++    example.write_text("A=1\n")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "check", "--example", example])
++
++    assert result.exit_code == 0
++
++
++def test_check_missing_example_file(cli, dotenv_path):
++    dotenv_path.write_text("A=1\n")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "check"])
++
++    assert result.exit_code == 2
++
++
++def test_diff_same(cli, tmp_path):
++    a, b = tmp_path / "a", tmp_path / "b"
++    a.write_text("A=1\nB=2\n")
++    b.write_text("B=2\nA=1\n")
++
++    result = cli.invoke(dotenv_cli, ["diff", str(a), str(b)])
++
++    assert (result.exit_code, result.output) == (0, "")
++
++
++def test_diff_differences_print_keys_only(cli, tmp_path):
++    a, b = tmp_path / "a", tmp_path / "b"
++    a.write_text("ONLY_A=secret1\nSAME=x\nDIFF=secret2\n")
++    b.write_text("ONLY_B=secret3\nSAME=x\nDIFF=secret4\n")
++
++    result = cli.invoke(dotenv_cli, ["diff", str(a), str(b)])
++
++    assert (result.exit_code, result.output) == (1, "< ONLY_A\n> ONLY_B\n~ DIFF\n")
++    assert "secret" not in result.output
++
++
++def test_diff_missing_file(cli, tmp_path):
++    a = tmp_path / "a"
++    a.write_text("A=1\n")
++
++    result = cli.invoke(dotenv_cli, ["diff", str(a), str(tmp_path / "nope")])
++
++    assert result.exit_code == 2

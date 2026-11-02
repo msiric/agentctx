@@ -1,0 +1,189 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..82acb2c
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,37 @@
++# Handoff
++
++## Task
++Reduce the memory spike in `JSONStorage.write` (`tinydb/storages.py`), which builds the whole JSON string with `json.dumps` before writing.
++
++## State
++No code changes. `write()` is unchanged (original `json.dumps` version). Suite: 227 passed, 1 skipped.
++
++## Tried and failed
++Replaced `json.dumps` + `handle.write` with `json.dump(data, self._handle, **self.kwargs)`.
++- `tests/test_tinydb.py::test_insert_invalid_dict` failed with `JSONDecodeError`.
++- Why: `dumps` serializes fully before touching the file, so a `TypeError` on an unserializable value leaves the file intact. `json.dump` writes chunks as it goes, so the error leaves a half-written, corrupt file. This would corrupt real databases on a bad insert.
++
++## Decision
++Dropped for now (not worth the effort at the moment). Reverted.
++
++## If revisited
++- Write to a temp file, then `os.replace` over the original. Safe, but `r+` mode and the `seek`/`truncate` handling need rework.
++- `JSONEncoder.iterencode` with chunked writes has the same partial-write problem.
++
++## Running tests
++`pytest.ini` requires pytest-cov (not installed here). Use: `python -m pytest -q -c /dev/null --rootdir=. tests`
++
++---
++
++# Task 2: GzipJSONStorage
++
++## State
++Done. `GzipJSONStorage` added to `tinydb/storages.py` (and `__all__`), with 2 tests in `tests/test_storages.py`. Suite: 229 passed, 1 skipped. Not committed.
++
++## Decisions
++- Separate `Storage` subclass, not a `JSONStorage` subclass: it needs binary mode, and `JSONStorage` uses a text handle with `json.load`.
++- Default `access_mode='rb+'`; no `encoding` arg (always UTF-8 inside the gzip stream).
++- `write()` does `json.dumps` and `gzip.compress` fully before touching the file. Same reason as the failed streaming attempt above: a serialization error must not leave a half-written file. A test covers it.
++- Reads and writes whole-file via `gzip.decompress`/`gzip.compress` rather than `gzip.GzipFile` on the handle. Streaming gzip over an `r+` handle has the same partial-write and seek/truncate problems.
++- `compresslevel` param, default 9.
++- The memory spike noted in Task 1 still applies (it is now larger: the string plus the compressed bytes).
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..455b70d 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,42 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_gzip_json(tmpdir):
++    from tinydb.storages import GzipJSONStorage
++    import gzip
++
++    path = str(tmpdir.join('db.json.gz'))
++    db = TinyDB(path, storage=GzipJSONStorage)
++    db.insert({'a': 1})
++    db.insert({'b': 'x' * 1000})
++    db.close()
++
++    with gzip.open(path, 'rt') as f:
++        assert '"a": 1' in f.read() or '"a":1' in f.read()
++
++    db = TinyDB(path, storage=GzipJSONStorage)
++    assert len(db) == 2
++    assert db.get(doc_id=1) == {'a': 1}
++    db.truncate()
++    db.close()
++
++    db = TinyDB(path, storage=GzipJSONStorage)
++    assert len(db) == 0
++    db.close()
++
++
++def test_gzip_json_invalid_insert_keeps_file(tmpdir):
++    from tinydb.storages import GzipJSONStorage
++
++    path = str(tmpdir.join('db.json.gz'))
++    db = TinyDB(path, storage=GzipJSONStorage)
++    db.insert({'a': 1})
++    with pytest.raises(TypeError):
++        db.insert({'x': {1, 2}})
++    db.close()
++
++    db = TinyDB(path, storage=GzipJSONStorage)
++    assert len(db) == 1
++    db.close()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..bac72d7 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -3,6 +3,7 @@ Contains the :class:`base class <tinydb.storages.Storage>` for storages and
+ implementations.
+ """
+ 
++import gzip
+ import io
+ import json
+ import os
+@@ -10,7 +11,7 @@ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+ 
+-__all__ = ('Storage', 'JSONStorage', 'MemoryStorage')
++__all__ = ('Storage', 'JSONStorage', 'GzipJSONStorage', 'MemoryStorage')
+ 
+ 
+ def touch(path: str, create_dirs: bool):
+@@ -161,6 +162,77 @@ class JSONStorage(Storage):
+         self._handle.truncate()
+ 
+ 
++class GzipJSONStorage(Storage):
++    """
++    Store the data in a gzip-compressed JSON file.
++    """
++
++    def __init__(self, path: str, create_dirs=False, access_mode='rb+', compresslevel=9, **kwargs):
++        """
++        Create a new instance.
++
++        Also creates the storage file, if it doesn't exist and the access mode
++        is appropriate for writing.
++
++        **Note:** **Never** pass untrusted or user-controlled code as ``kwargs``
++        members like ``cls`` or ``default`` will be called on every write
++        operation.
++
++        :param path: Where to store the compressed JSON data.
++        :param access_mode: binary mode in which the file is opened
++                            (``rb``, ``rb+``)
++        :param compresslevel: gzip compression level (0-9)
++        """
++
++        super().__init__()
++
++        self._mode = access_mode
++        self._compresslevel = compresslevel
++        self.kwargs = kwargs
++
++        if access_mode not in ('rb', 'rb+'):
++            warnings.warn(
++                'Using an `access_mode` other than \'rb\' or \'rb+\' '
++                'can cause data loss or corruption'
++            )
++
++        if any([character in self._mode for character in ('+', 'w', 'a')]):
++            touch(path, create_dirs=create_dirs)
++
++        self._handle = open(path, mode=self._mode)
++
++    def close(self) -> None:
++        self._handle.close()
++
++    def read(self) -> Optional[dict[str, dict[str, Any]]]:
++        self._handle.seek(0, os.SEEK_END)
++        size = self._handle.tell()
++
++        if not size:
++            return None
++
++        self._handle.seek(0)
++        return json.loads(gzip.decompress(self._handle.read()).decode('utf-8'))
++
++    def write(self, data: dict[str, dict[str, Any]]):
++        # Serialize and compress before touching the file so that a
++        # serialization error can't leave a corrupt file behind
++        serialized = json.dumps(data, **self.kwargs).encode('utf-8')
++        compressed = gzip.compress(serialized, compresslevel=self._compresslevel)
++
++        self._handle.seek(0)
++
++        try:
++            self._handle.write(compressed)
++        except io.UnsupportedOperation:
++            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
++
++        self._handle.flush()
++        os.fsync(self._handle.fileno())
++
++        self._handle.truncate()
++
++
+ class MemoryStorage(Storage):
+     """
+     Store the data as JSON in memory.

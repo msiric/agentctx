@@ -1,0 +1,129 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..1d6fbc7
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,19 @@
++# HANDOFF
++
++## Current state
++- `Scheduler.run_all(delay_seconds)` in `schedule/__init__.py` now sleeps only between jobs, not after the last one.
++- Iterates over a copy of `self.jobs` (as before), using the copy's length for the "last job" check, so jobs that cancel themselves don't skew it.
++- Existing tests pass (40 passed, 41 skipped). No dedicated test for the delay yet.
++
++## Decisions
++- Used `enumerate` over the copied list rather than checking `self.jobs`, since jobs may be removed mid-run.
++
++## Failed approaches
++- None.
++
++## Job exceptions starve other due jobs (implemented, uncommitted)
++- `Scheduler.run_pending` and `run_all` catch `Exception` per job, log it, keep running the rest, then re-raise the **first** exception. Reason (user): supervisor restarts worker and pages on crash, so errors must not be swallowed.
++- `Job.run` reschedules (`last_run`, `_schedule_next_run`) on exception before re-raising, to avoid hot retry every tick. Not explicitly confirmed with user.
++- `run_all` got the same treatment for consistency (assumed, not confirmed). It still sleeps between jobs after a failure.
++- Tests added in `JobErrorTests` (test_schedule.py). Suite: 42 passed, 41 skipped.
++- Caveats: only `Exception` is caught (KeyboardInterrupt/SystemExit propagate immediately). Later exceptions are logged but not raised. A failed job with `.until()` past deadline is not cancelled on the exception path.
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..1582150 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -97,8 +97,16 @@ class Scheduler:
+         between but only once.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        first_exc: Optional[Exception] = None
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception as e:
++                logger.exception("Job %s raised an exception", job)
++                if first_exc is None:
++                    first_exc = e
++        if first_exc is not None:
++            raise first_exc
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +123,19 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
+-            self._run_job(job)
+-            time.sleep(delay_seconds)
++        jobs = self.jobs[:]
++        first_exc: Optional[Exception] = None
++        for i, job in enumerate(jobs):
++            try:
++                self._run_job(job)
++            except Exception as e:
++                logger.exception("Job %s raised an exception", job)
++                if first_exc is None:
++                    first_exc = e
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
++        if first_exc is not None:
++            raise first_exc
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """
+@@ -688,7 +706,13 @@ class Job:
+             return CancelJob
+ 
+         logger.debug("Running job %s", self)
+-        ret = self.job_func()
++        try:
++            ret = self.job_func()
++        except Exception:
++            # Reschedule so a failing job is not retried on every tick.
++            self.last_run = datetime.datetime.now()
++            self._schedule_next_run()
++            raise
+         self.last_run = datetime.datetime.now()
+         self._schedule_next_run()
+ 
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..91f0e3d 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1597,3 +1597,39 @@ class SchedulerTests(TestCase):
+         scheduler.every()
+         scheduler.every(10).seconds
+         scheduler.run_pending()
++
++
++class JobErrorTests(TestCase):
++    def setUp(self):
++        schedule.clear()
++
++    def tearDown(self):
++        schedule.clear()
++
++    def test_failing_job_does_not_starve_others(self):
++        calls = []
++
++        def bad():
++            calls.append("bad")
++            raise ValueError("boom")
++
++        def good():
++            calls.append("good")
++
++        every().second.do(bad)
++        every().second.do(good)
++        time.sleep(1.1)
++        with self.assertRaises(ValueError):
++            schedule.run_pending()
++        assert calls == ["bad", "good"]
++
++    def test_failing_job_is_rescheduled(self):
++        def bad():
++            raise ValueError("boom")
++
++        job = every().hour.do(bad)
++        job.next_run = datetime.datetime.now() - datetime.timedelta(seconds=1)
++        with self.assertRaises(ValueError):
++            schedule.run_pending()
++        assert job.last_run is not None
++        assert not job.should_run

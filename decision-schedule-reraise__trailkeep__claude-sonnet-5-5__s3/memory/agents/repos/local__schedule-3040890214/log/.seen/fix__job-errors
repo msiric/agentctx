@@ -1,0 +1,6 @@
+2026-11-02: Added between-jobs-only sleep in `run_all` (done, tests pass). Discussed options for job errors and chose "run the rest, re-raise first". Not started on implementation.
+Run remaining due jobs, then re-raise the first exception: supervisor restarts the worker and pages on crash, so errors must surface; log-and-swallow rejected.
+Re-raise only the first exception, not an aggregate: user's choice; avoids ExceptionGroup, which needs Python 3.11+ while the project supports older versions.
+2026-11-02: Implemented run-the-rest/re-raise-first in `run_pending` and `run_all`, with 5 new tests, docs and HISTORY updated. Suite: 45 passed, 41 skipped.
+Catch `Exception` only, not `BaseException`: KeyboardInterrupt/SystemExit propagate immediately without running the rest. Later failures are logged with `logger.exception` (not swallowed silently; first is re-raised).
+Failed job is not rescheduled (kept current behavior): it stays due and retries on the next `run_pending`. Pinned by `test_run_pending_failed_job_stays_due`; revisit if the user wants otherwise.

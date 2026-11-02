@@ -1,0 +1,75 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..dcf12f3 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -95,10 +95,22 @@ class Scheduler:
+         that should run every minute and you only call run_pending()
+         in one hour increments then your job won't be run 60 times in
+         between but only once.
++
++        If a job raises, the remaining due jobs still run, and then the
++        first exception is re-raised.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        first_exc: Optional[BaseException] = None
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception as exc:
++                logger.exception("Job %s raised an exception", job)
++                if first_exc is None:
++                    first_exc = exc
++        if first_exc is not None:
++            # Re-raise so the supervisor can restart the worker.
++            raise first_exc
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +127,11 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
++        jobs = self.jobs[:]
++        for i, job in enumerate(jobs):
+             self._run_job(job)
+-            time.sleep(delay_seconds)
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..a60e617 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -5,6 +5,7 @@ import functools
+ from unittest import mock, TestCase
+ import os
+ import time
++import pytest
+ 
+ # Silence "missing docstring", "method could be a function",
+ # "class already defined", and "too many public methods" messages:
+@@ -1597,3 +1598,20 @@ class SchedulerTests(TestCase):
+         scheduler.every()
+         scheduler.every(10).seconds
+         scheduler.run_pending()
++
++
++class TestRunPendingErrors:
++    def test_other_jobs_run_then_first_exception_raised(self):
++        ran = []
++
++        def bad(n):
++            raise ValueError(n)
++
++        s = schedule.Scheduler()
++        s.every().second.do(bad, "first")
++        s.every().second.do(lambda: ran.append(1))
++        s.every().second.do(bad, "second")
++        time.sleep(1.1)
++        with pytest.raises(ValueError, match="first"):
++            s.run_pending()
++        assert ran == [1]
