@@ -1,0 +1,212 @@
+diff --git a/README.md b/README.md
+index 4a26073..acb9f53 100644
+--- a/README.md
++++ b/README.md
+@@ -504,6 +504,17 @@ Removes leading slash from the URL or pathname.
+ withoutLeadingSlash("/foo"); // "foo"
+ ```
+ 
++### `parseDataURL(input)`
++
++Parses a `data:` URL into `{ mimeType, base64, data }`. `base64` is a boolean, `mimeType` defaults to `text/plain`, and `data` is the raw (not decoded) payload. Throws a `TypeError` for invalid input.
++
++**Example:**
++
++```js
++parseDataURL("data:text/plain;base64,SGVsbG8=");
++// { mimeType: "text/plain", base64: true, data: "SGVsbG8=" }
++```
++
+ ### `withoutProtocol(input)`
+ 
+ Removes the protocol from the input.
+@@ -514,6 +525,16 @@ Removes the protocol from the input.
+ withoutProtocol("http://example.com"); // "example.com"
+ ```
+ 
++### `withoutQuery(input)`
++
++Removes the query section from the URL while preserving the hash.
++
++**Example:**
++
++```js
++withoutQuery("/foo?bar=1#baz"); // "/foo#baz"
++```
++
+ ### `withoutTrailingSlash(input, respectQueryAndFragment?)`
+ 
+ Removes the trailing slash from the URL or pathname.
+diff --git a/src/data-url.ts b/src/data-url.ts
+new file mode 100644
+index 0000000..fb32198
+--- /dev/null
++++ b/src/data-url.ts
+@@ -0,0 +1,37 @@
++export interface ParsedDataURL {
++  /** MIME type (including any parameters, e.g. `text/plain;charset=utf-8`). Defaults to `text/plain`. */
++  mimeType: string;
++  /** Whether the payload is base64-encoded. */
++  base64: boolean;
++  /** The raw payload following the first comma (not decoded). */
++  data: string;
++}
++
++/**
++ * Parses a `data:` URL into its MIME type, base64 flag and raw data.
++ *
++ * Throws a `TypeError` if the input is not a valid `data:` URL.
++ *
++ * @example
++ *
++ * ```js
++ * parseDataURL("data:text/plain;base64,SGVsbG8=");
++ * // { mimeType: "text/plain", base64: true, data: "SGVsbG8=" }
++ * ```
++ *
++ * @group parse
++ */
++export function parseDataURL(input: string): ParsedDataURL {
++  const match = /^data:([^,]*),([\S\s]*)$/i.exec(input.trim());
++  if (!match) {
++    throw new TypeError(`Invalid data URL: ${input}`);
++  }
++  let meta = match[1]!;
++  let base64 = false;
++  const b64 = /;\s*base64$/i.exec(meta);
++  if (b64) {
++    base64 = true;
++    meta = meta.slice(0, b64.index);
++  }
++  return { mimeType: meta.trim() || "text/plain", base64, data: match[2]! };
++}
+diff --git a/src/index.ts b/src/index.ts
+index ede636a..5c43dd6 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,3 +1,4 @@
++export * from "./data-url";
+ export * from "./encoding";
+ export * from "./parse";
+ export * from "./query";
+diff --git a/src/utils.ts b/src/utils.ts
+index ea98aba..39b9ef5 100644
+--- a/src/utils.ts
++++ b/src/utils.ts
+@@ -758,6 +758,21 @@ export function withoutFragment(input: string): string {
+   return stringifyParsedURL({ ...parseURL(input), hash: "" });
+ }
+ 
++/**
++ * Removes the query section from the URL while preserving the hash.
++ *
++ * @example
++ *
++ * ```js
++ * withoutQuery("/foo?bar=1#baz"); // "/foo#baz"
++ * ```
++ *
++ * @group utils
++ */
++export function withoutQuery(input: string): string {
++  return stringifyParsedURL({ ...parseURL(input), search: "" });
++}
++
+ /**
+  * Removes the host from the URL while preserving everything else.
+  *
+diff --git a/test/data-url.test.ts b/test/data-url.test.ts
+new file mode 100644
+index 0000000..4968358
+--- /dev/null
++++ b/test/data-url.test.ts
+@@ -0,0 +1,53 @@
++import { describe, expect, test } from "vitest";
++import { parseDataURL } from "../src";
++
++describe("parseDataURL", () => {
++  const tests = [
++    {
++      input: "data:text/plain;base64,SGVsbG8=",
++      out: { mimeType: "text/plain", base64: true, data: "SGVsbG8=" },
++    },
++    {
++      input: "data:text/plain;charset=utf-8,Hello%20World",
++      out: {
++        mimeType: "text/plain;charset=utf-8",
++        base64: false,
++        data: "Hello%20World",
++      },
++    },
++    {
++      input: "data:text/html;charset=utf-8;base64,PGI+",
++      out: { mimeType: "text/html;charset=utf-8", base64: true, data: "PGI+" },
++    },
++    {
++      input: "data:,Hello",
++      out: { mimeType: "text/plain", base64: false, data: "Hello" },
++    },
++    {
++      input: "data:;base64,SGk=",
++      out: { mimeType: "text/plain", base64: true, data: "SGk=" },
++    },
++    {
++      input: "DATA:image/png;BASE64,abc",
++      out: { mimeType: "image/png", base64: true, data: "abc" },
++    },
++    {
++      input: "data:text/plain,a,b",
++      out: { mimeType: "text/plain", base64: false, data: "a,b" },
++    },
++    {
++      input: "data:text/plain,",
++      out: { mimeType: "text/plain", base64: false, data: "" },
++    },
++  ];
++  for (const t of tests) {
++    test(t.input, () => {
++      expect(parseDataURL(t.input)).toEqual(t.out);
++    });
++  }
++
++  test("throws on invalid input", () => {
++    expect(() => parseDataURL("http://example.com")).toThrow(TypeError);
++    expect(() => parseDataURL("data:text/plain")).toThrow(TypeError);
++  });
++});
+diff --git a/test/query.test.ts b/test/query.test.ts
+index 8ef15e4..a4927b1 100644
+--- a/test/query.test.ts
++++ b/test/query.test.ts
+@@ -1,5 +1,5 @@
+ import { describe, expect, test } from "vitest";
+-import { filterQuery, getQuery, withQuery } from "../src";
++import { filterQuery, getQuery, withQuery, withoutQuery } from "../src";
+ 
+ describe("withQuery", () => {
+   const tests = [
+@@ -109,3 +109,24 @@ describe("getQuery", () => {
+     });
+   }
+ });
++
++describe("withoutQuery", () => {
++  const tests = [
++    { input: "", out: "" },
++    { input: "/foo", out: "/foo" },
++    { input: "/foo?bar=1", out: "/foo" },
++    { input: "/foo?bar=1#baz", out: "/foo#baz" },
++    { input: "/foo#baz", out: "/foo#baz" },
++    { input: "?bar=1", out: "" },
++    {
++      input: "http://foo.com/path?a=1&b=2#hash",
++      out: "http://foo.com/path#hash",
++    },
++  ];
++
++  for (const t of tests) {
++    test(JSON.stringify(t.input), () => {
++      expect(withoutQuery(t.input)).toBe(t.out);
++    });
++  }
++});

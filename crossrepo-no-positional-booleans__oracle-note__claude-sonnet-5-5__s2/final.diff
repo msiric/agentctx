@@ -1,0 +1,76 @@
+diff --git a/src/utils.ts b/src/utils.ts
+index ea98aba..0b8f6e5 100644
+--- a/src/utils.ts
++++ b/src/utils.ts
+@@ -254,6 +254,8 @@ export function withLeadingSlash(input = ""): string {
+ /**
+  * Removes double slashes from the URL.
+  *
++ * If `respectQueryAndFragment` option is `true`, the query string and fragment are left untouched.
++ *
+  * @example
+  *
+  * ```js
+@@ -261,11 +263,23 @@ export function withLeadingSlash(input = ""): string {
+  *
+  * cleanDoubleSlashes("http://example.com/analyze//http://localhost:3000//");
+  * // Returns "http://example.com/analyze/http://localhost:3000/"
++ *
++ * cleanDoubleSlashes("/foo//bar?redirect=//baz", { respectQueryAndFragment: true });
++ * // Returns "/foo/bar?redirect=//baz"
+  * ```
+  *
+  * @group utils
+  */
+-export function cleanDoubleSlashes(input = ""): string {
++export function cleanDoubleSlashes(
++  input = "",
++  options: { respectQueryAndFragment?: boolean } = {},
++): string {
++  if (options.respectQueryAndFragment) {
++    const index = input.search(/[?#]/);
++    if (index !== -1) {
++      return cleanDoubleSlashes(input.slice(0, index)) + input.slice(index);
++    }
++  }
+   return input
+     .split("://")
+     .map((string_) => string_.replace(/\/{2,}/g, "/"))
+diff --git a/test/double-slash.test.ts b/test/double-slash.test.ts
+index 6824666..3e942e3 100644
+--- a/test/double-slash.test.ts
++++ b/test/double-slash.test.ts
+@@ -19,4 +19,33 @@ describe("cleanDoubleSlashes", () => {
+   test("no input", () => {
+     expect(cleanDoubleSlashes()).toBe("");
+   });
++
++  describe("respectQueryAndFragment", () => {
++    const opts = { respectQueryAndFragment: true };
++    const cases = {
++      "/foo//bar?redirect=//baz": "/foo/bar?redirect=//baz",
++      "//foo//bar#//frag": "/foo/bar#//frag",
++      "/foo//bar?a=//b#//c": "/foo/bar?a=//b#//c",
++      "http://foo.com//bar//?next=http://x.com//y":
++        "http://foo.com/bar/?next=http://x.com//y",
++      "/foo//bar": "/foo/bar",
++      "?a=//b": "?a=//b",
++    };
++    for (const input in cases) {
++      test(input, () => {
++        expect(cleanDoubleSlashes(input, opts)).toBe(cases[input]);
++      });
++    }
++
++    test("default behaviour is unchanged", () => {
++      expect(cleanDoubleSlashes("/foo//bar?redirect=//baz")).toBe(
++        "/foo/bar?redirect=/baz",
++      );
++      expect(
++        cleanDoubleSlashes("/foo//bar?redirect=//baz", {
++          respectQueryAndFragment: false,
++        }),
++      ).toBe("/foo/bar?redirect=/baz");
++    });
++  });
+ });

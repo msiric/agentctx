@@ -1,0 +1,143 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..3122244
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,88 @@
++"""Benchmark TinyDB read performance on a large JSON db file.
++
++Usage: python scripts/bench_read.py [--mb 40] [--repeat 5]
++"""
++import argparse
++import json
++import os
++import random
++import tempfile
++import time
++
++from tinydb import TinyDB, where
++
++
++def make_db(path, target_mb):
++    rnd = random.Random(0)
++    db = TinyDB(path)
++    target = target_mb * 1024 * 1024
++    batch, i = [], 0
++    # Build the data in one go (much faster than insert() per doc).
++    while True:
++        batch.extend(
++            {'id': i + k, 'name': 'user%d' % rnd.randrange(10**6),
++             'group': rnd.randrange(100), 'tags': ['a', 'b', 'c'],
++             'text': 'x' * 100}
++            for k in range(10000))
++        i += 10000
++        if len(json.dumps(batch[-10000:])) * (i // 10000) >= target:
++            break
++    db.insert_multiple(batch)
++    db.close()
++    return len(batch)
++
++
++def timeit(fn, repeat):
++    times = []
++    for _ in range(repeat):
++        t = time.perf_counter()
++        fn()
++        times.append(time.perf_counter() - t)
++    return min(times), sum(times) / len(times)
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument('--mb', type=int, default=40)
++    ap.add_argument('--repeat', type=int, default=5)
++    a = ap.parse_args()
++
++    with tempfile.TemporaryDirectory() as d:
++        path = os.path.join(d, 'big.json')
++        t = time.perf_counter()
++        n = make_db(path, a.mb)
++        print('generated %d docs, %.1f MB in %.1fs'
++              % (n, os.path.getsize(path) / 2**20, time.perf_counter() - t))
++
++        db = TinyDB(path)
++        table = db.table('_default')
++        storage = db.storage
++
++        def row(label, fn):
++            lo, avg = timeit(fn, a.repeat)
++            print('%-40s min %7.1f ms  avg %7.1f ms' % (label, lo * 1e3, avg * 1e3))
++
++        print('\n-- end to end --')
++        row('db.all()', db.all)
++        row('db.search(group == 7)  (cache miss)',
++            lambda: (table._query_cache.clear(), db.search(where('group') == 7)))
++        db.search(where('group') == 7)
++        row('db.search(group == 7)  (cache hit)', lambda: db.search(where('group') == 7))
++
++        print('\n-- breakdown --')
++        row('storage.read()  (json.load of file)', storage.read)
++        data = storage.read()
++        docs = data['_default']
++        row('wrap docs in Document (all)',
++            lambda: [table.document_class(v, table.document_id_class(k))
++                     for k, v in docs.items()])
++        cond = where('group') == 7
++        row('apply query to parsed docs', lambda: [v for v in docs.values() if cond(v)])
++        with open(path) as f:
++            raw = f.read()
++        row('json.loads(str) alone', lambda: json.loads(raw))
++        db.close()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..d109bc4 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -119,6 +119,14 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Cache of the last parsed contents together with the raw file
++        # contents they were parsed from. The file is always re-read and
++        # compared by content (never by mtime/stat data, which is unreliable
++        # on network shares), so external writers are always picked up; only
++        # the expensive JSON parsing is skipped when nothing changed.
++        self._raw_cache = None
++        self._parsed_cache = None
++
+     def close(self) -> None:
+         self._handle.close()
+ 
+@@ -131,15 +139,27 @@ class JSONStorage(Storage):
+         if not size:
+             # File is empty, so we return ``None`` so TinyDB can properly
+             # initialize the database
++            self._raw_cache = self._parsed_cache = None
+             return None
+         else:
+             # Return the cursor to the beginning of the file
+             self._handle.seek(0)
+ 
+-            # Load the JSON contents of the file
+-            return json.load(self._handle)
++            raw = self._handle.read()
++
++            # Unchanged contents: reuse the previously parsed data
++            if self._raw_cache is not None and raw == self._raw_cache:
++                return self._parsed_cache
++
++            parsed = json.loads(raw)
++            self._raw_cache = raw
++            self._parsed_cache = parsed
++            return parsed
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The caller may have mutated the cached object; never reuse it
++        self._raw_cache = self._parsed_cache = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 

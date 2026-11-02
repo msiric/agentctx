@@ -1,0 +1,159 @@
+diff --git a/src/index.ts b/src/index.ts
+index ede636a..0c8338c 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,5 +1,6 @@
+ export * from "./encoding";
+ export * from "./parse";
++export * from "./parse-data-url";
+ export * from "./query";
+ export * from "./url";
+ export * from "./utils";
+diff --git a/src/parse-data-url.ts b/src/parse-data-url.ts
+new file mode 100644
+index 0000000..3650f26
+--- /dev/null
++++ b/src/parse-data-url.ts
+@@ -0,0 +1,32 @@
++export interface ParsedDataURL {
++  /** MIME type (defaults to `text/plain` when omitted). Parameters such as `charset` are excluded. */
++  mimeType: string;
++  /** Whether the URL uses `;base64` encoding. */
++  base64: boolean;
++  /** Raw payload after the first comma (not decoded). */
++  data: string;
++}
++
++/**
++ * Parses a `data:` URL into its mime type, base64 flag and raw data.
++ *
++ * @example
++ * ```js
++ * parseDataURL("data:text/plain;base64,SGVsbG8="); // { mimeType: "text/plain", base64: true, data: "SGVsbG8=" }
++ * ```
++ *
++ * @param input - The `data:` URL to parse.
++ * @throws {TypeError} If the input is not a valid `data:` URL.
++ */
++export function parseDataURL(input: string): ParsedDataURL {
++  const match = /^\s*data:([^,]*),(.*)$/is.exec(input);
++  if (!match) {
++    throw new TypeError(`Invalid data URL: ${input}`);
++  }
++  const [, meta, data] = match;
++  const parts = meta.split(";").map((p) => p.trim());
++  const base64 =
++    parts.length > 1 && parts[parts.length - 1].toLowerCase() === "base64";
++  const mimeType = parts[0] || "text/plain";
++  return { mimeType, base64, data };
++}
+diff --git a/src/utils.ts b/src/utils.ts
+index ea98aba..5848c8f 100644
+--- a/src/utils.ts
++++ b/src/utils.ts
+@@ -352,6 +352,21 @@ export function withQuery(input: string, query: QueryObject): string {
+   return stringifyParsedURL(parsed);
+ }
+ 
++/**
++ * Removes the query section from the URL while preserving the hash.
++ *
++ * @example
++ *
++ * ```js
++ * withoutQuery("/foo?bar=1#baz"); // "/foo#baz"
++ * ```
++ *
++ * @group utils
++ */
++export function withoutQuery(input: string): string {
++  return stringifyParsedURL({ ...parseURL(input), search: "" });
++}
++
+ /**
+  * Removes the query section of the URL.
+  *
+diff --git a/test/parse-data-url.test.ts b/test/parse-data-url.test.ts
+new file mode 100644
+index 0000000..31b78a3
+--- /dev/null
++++ b/test/parse-data-url.test.ts
+@@ -0,0 +1,44 @@
++import { describe, expect, test } from "vitest";
++import { parseDataURL } from "../src";
++
++describe("parseDataURL", () => {
++  test("base64", () => {
++    expect(parseDataURL("data:text/plain;base64,SGVsbG8=")).toEqual({
++      mimeType: "text/plain",
++      base64: true,
++      data: "SGVsbG8=",
++    });
++  });
++
++  test("plain with params", () => {
++    expect(parseDataURL("data:text/html;charset=utf-8,<h1>Hi</h1>")).toEqual({
++      mimeType: "text/html",
++      base64: false,
++      data: "<h1>Hi</h1>",
++    });
++  });
++
++  test("params with base64", () => {
++    expect(parseDataURL("data:image/png;charset=x;base64,AAA")).toMatchObject({
++      mimeType: "image/png",
++      base64: true,
++    });
++  });
++
++  test("default mime type", () => {
++    expect(parseDataURL("data:,hello")).toEqual({
++      mimeType: "text/plain",
++      base64: false,
++      data: "hello",
++    });
++  });
++
++  test("commas in data", () => {
++    expect(parseDataURL("data:text/plain,a,b").data).toBe("a,b");
++  });
++
++  test("invalid", () => {
++    expect(() => parseDataURL("https://foo.com")).toThrow(TypeError);
++    expect(() => parseDataURL("data:text/plain")).toThrow(TypeError);
++  });
++});
+diff --git a/test/utilities.test.ts b/test/utilities.test.ts
+index 16c3f12..2eccb79 100644
+--- a/test/utilities.test.ts
++++ b/test/utilities.test.ts
+@@ -12,6 +12,7 @@ import {
+   isScriptProtocol,
+   withFragment,
+   withoutFragment,
++  withoutQuery,
+   withoutHost,
+ } from "../src";
+ 
+@@ -379,3 +380,21 @@ describe("withoutHost", () => {
+     });
+   }
+ });
++
++describe("withoutQuery", () => {
++  const tests = [
++    { input: "/foo?bar=1#baz", out: "/foo#baz" },
++    { input: "/foo?bar=1", out: "/foo" },
++    { input: "/foo#baz", out: "/foo#baz" },
++    { input: "/foo", out: "/foo" },
++    { input: "/foo/?bar#baz", out: "/foo/#baz" },
++    { input: "https://example.com?a=1#b", out: "https://example.com#b" },
++    { input: "https://example.com/p?a=1&b=2", out: "https://example.com/p" },
++  ];
++
++  for (const t of tests) {
++    test(`${t.input}`, () => {
++      expect(withoutQuery(t.input)).toBe(t.out);
++    });
++  }
++});

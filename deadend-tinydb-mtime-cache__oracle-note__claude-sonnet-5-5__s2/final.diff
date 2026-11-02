@@ -1,0 +1,217 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..30156b0
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,86 @@
++"""Benchmark TinyDB read performance on a large JSON db file.
++
++Usage: python scripts/bench_read.py [--size-mb 40] [--keep PATH]
++"""
++import argparse
++import cProfile
++import json
++import os
++import pstats
++import random
++import tempfile
++import time
++
++from tinydb import TinyDB, where
++
++
++def generate(path, target_mb):
++    rng = random.Random(0)
++    docs, size, i = {}, 0, 0
++    target = target_mb * 1024 * 1024
++    while size < target:
++        i += 1
++        doc = {
++            'name': f'user{i}',
++            'age': rng.randint(18, 90),
++            'city': rng.choice(['Berlin', 'Paris', 'Rome', 'Oslo', 'Wien']),
++            'tags': [rng.choice('abcdefgh') for _ in range(5)],
++            'bio': ''.join(rng.choices('abcdefghij klmnop', k=200)),
++        }
++        docs[str(i)] = doc
++        size += len(json.dumps(doc)) + 8
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return len(docs)
++
++
++def timed(label, fn, repeat=3):
++    times = []
++    for _ in range(repeat):
++        t = time.perf_counter()
++        result = fn()
++        times.append(time.perf_counter() - t)
++    print(f'{label:<34} best {min(times)*1000:9.1f} ms  '
++          f'(runs: {", ".join(f"{x*1000:.0f}" for x in times)})')
++    return result
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument('--size-mb', type=float, default=40)
++    ap.add_argument('--keep', help='reuse/keep db file at this path')
++    args = ap.parse_args()
++
++    path = args.keep or os.path.join(tempfile.mkdtemp(), 'bench.json')
++    if not (args.keep and os.path.exists(path)):
++        n = generate(path, args.size_mb)
++        print(f'generated {n} docs')
++    print(f'file: {path} ({os.path.getsize(path)/1e6:.1f} MB)\n')
++
++    with open(path) as f:
++        raw = f.read()
++    timed('raw read() of file', lambda: open(path).read())
++    timed('json.loads (pure parse floor)', lambda: json.loads(raw))
++
++    db = TinyDB(path)
++    timed('storage.read() (seek + json.load)', db.storage.read)
++    timed('db.all()', db.all)
++    q = where('age') > 80
++    # Equal queries hash equal, so vary the threshold to bypass the cache
++    thresholds = iter(range(70, 90))
++    timed('search (uncached)', lambda: db.search(where('age') > next(thresholds)))
++    db.search(q)
++    timed('search (cache hit)', lambda: db.search(q))
++    timed('len(db)', lambda: len(db))
++
++    print('\ncProfile of one uncached search (top by tottime):')
++    pr = cProfile.Profile()
++    pr.enable()
++    db.search(where('city') == 'Rome')
++    pr.disable()
++    pstats.Stats(pr).sort_stats('tottime').print_stats(6)
++    db.close()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..65d04e0 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,30 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_read_shared_sees_external_writes(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    storage = JSONStorage(path)
++    storage.write({'_default': {'1': {'a': 1}}})
++    first = storage.read_shared()
++    assert storage.read_shared() is first  # unchanged file: no re-parse
++
++    # Another writer changes the file immediately (same-second, same size)
++    with open(path, 'w') as f:
++        json.dump({'_default': {'1': {'a': 2}}}, f)
++
++    assert storage.read_shared() == {'_default': {'1': {'a': 2}}}
++
++    storage.write({'_default': {}})
++    assert storage.read_shared() == {'_default': {}}
++    storage.close()
++
++
++def test_json_read_is_private_copy(tmpdir):
++    storage = JSONStorage(str(tmpdir.join('db.json')))
++    storage.write({'_default': {'1': {'a': 1}}})
++    storage.read_shared()
++    storage.read()['_default']['1']['a'] = 99
++    assert storage.read_shared() == {'_default': {'1': {'a': 1}}}
++    storage.close()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..e662cf2 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -103,6 +103,7 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
++        self._cached = None  # (raw contents, parsed data) for read_shared()
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+@@ -122,24 +123,50 @@ class JSONStorage(Storage):
+     def close(self) -> None:
+         self._handle.close()
+ 
++    def _read_contents(self):
++        # Always read the file itself: other processes may have changed it, and
++        # file metadata (mtime, size) is not a reliable change indicator.
++        self._handle.seek(0)
++        return self._handle.read()
++
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
+-        # Get the file size by moving the cursor to the file end and reading
+-        # its location
+-        self._handle.seek(0, os.SEEK_END)
+-        size = self._handle.tell()
++        # Returns a freshly parsed object the caller may modify freely.
++        contents = self._read_contents()
+ 
+-        if not size:
++        if not contents:
+             # File is empty, so we return ``None`` so TinyDB can properly
+             # initialize the database
+             return None
+-        else:
+-            # Return the cursor to the beginning of the file
+-            self._handle.seek(0)
+ 
+-            # Load the JSON contents of the file
+-            return json.load(self._handle)
++        return json.loads(contents)
++
++    def read_shared(self) -> Optional[dict[str, dict[str, Any]]]:
++        """
++        Like :meth:`read`, but skips parsing if the file's contents are
++        identical to the last time they were parsed.
++
++        The returned object is shared between calls and **must not be
++        modified**. Whether the file changed is decided by comparing its
++        contents, so changes made by other processes are always picked up.
++        """
++        contents = self._read_contents()
++
++        if not contents:
++            self._cached = None
++            return None
++
++        cached = self._cached
++        if cached is not None and cached[0] == contents:
++            return cached[1]
++
++        data = json.loads(contents)
++        self._cached = (contents, data)
++        return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The cached parse is stale after a write
++        self._cached = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..5a7d76b 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -785,8 +785,10 @@ class Table:
+         only one document for example.
+         """
+ 
+-        # Retrieve the tables from the storage
+-        tables = self._storage.read()
++        # Retrieve the tables from the storage. The result is only read, never
++        # modified, so storages may hand out a shared (cached) object.
++        read = getattr(self._storage, 'read_shared', self._storage.read)
++        tables = read()
+ 
+         if tables is None:
+             # The database is empty

@@ -1,0 +1,158 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..a5c9c36
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,88 @@
++"""Benchmark TinyDB read performance on a large JSON db.
++
++Usage: python scripts/bench_read.py [--size-mb 40] [--repeat 3] [--profile]
++"""
++import argparse
++import cProfile
++import json
++import os
++import pstats
++import random
++import string
++import tempfile
++import time
++
++from tinydb import TinyDB, where
++from tinydb.storages import JSONStorage
++
++
++def generate(path, size_mb):
++    rnd = random.Random(0)
++    docs, n = {}, 0
++    target = size_mb * 1024 * 1024
++    approx = 0
++    while approx < target:
++        n += 1
++        doc = {
++            'name': ''.join(rnd.choices(string.ascii_letters, k=12)),
++            'age': rnd.randint(0, 99),
++            'tags': [rnd.choice(['a', 'b', 'c', 'd']) for _ in range(5)],
++            'bio': ''.join(rnd.choices(string.ascii_lowercase + ' ', k=100)),
++        }
++        docs[str(n)] = doc
++        approx += 180
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return n
++
++
++def timeit(label, fn, repeat):
++    times = []
++    for _ in range(repeat):
++        t = time.perf_counter()
++        result = fn()
++        times.append(time.perf_counter() - t)
++    print(f'{label:<34} min {min(times)*1000:8.1f} ms   '
++          f'avg {sum(times)/len(times)*1000:8.1f} ms   ({len(result)} results)')
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument('--size-mb', type=int, default=40)
++    ap.add_argument('--repeat', type=int, default=3)
++    ap.add_argument('--profile', action='store_true')
++    args = ap.parse_args()
++
++    with tempfile.TemporaryDirectory() as d:
++        path = os.path.join(d, 'db.json')
++        n = generate(path, args.size_mb)
++        print(f'{n} docs, {os.path.getsize(path)/1e6:.1f} MB')
++
++        with open(path) as f:
++            t = time.perf_counter()
++            json.load(f)
++            print(f'{"raw json.load baseline":<34} {(time.perf_counter()-t)*1000:8.1f} ms')
++
++        db = TinyDB(path, storage=JSONStorage)
++        timeit('db.all()', db.all, args.repeat)
++
++        def search():
++            db.clear_cache()  # defeat query cache: measure real cost
++            return db.search(where('age') == 42)
++        timeit('db.search (cache cleared)', search, args.repeat)
++
++        db.search(where('age') == 7)
++        timeit('db.search (cache hit)', lambda: db.search(where('age') == 7), args.repeat)
++
++        if args.profile:
++            db.clear_cache()
++            pr = cProfile.Profile()
++            pr.enable()
++            db.search(where('age') == 42)
++            pr.disable()
++            pstats.Stats(pr).sort_stats('cumulative').print_stats(8)
++        db.close()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..e356039 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -119,27 +119,40 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Last seen raw file contents and their parsed form
++        self._cache_raw = None
++        self._cache_data = None
++
+     def close(self) -> None:
+         self._handle.close()
+ 
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
+-        # Get the file size by moving the cursor to the file end and reading
+-        # its location
+-        self._handle.seek(0, os.SEEK_END)
+-        size = self._handle.tell()
++        # Always re-read the raw contents so changes made by other processes
++        # are seen. We deliberately don't use stat data (mtime/size) to detect
++        # changes: mtime has coarse resolution on some filesystems (e.g. NFS)
++        # and would serve stale data after same-second writes.
++        self._handle.seek(0)
++        raw = self._handle.read()
+ 
+-        if not size:
++        if not raw:
+             # File is empty, so we return ``None`` so TinyDB can properly
+             # initialize the database
++            self._cache_raw = self._cache_data = None
+             return None
+-        else:
+-            # Return the cursor to the beginning of the file
+-            self._handle.seek(0)
+ 
+-            # Load the JSON contents of the file
+-            return json.load(self._handle)
++        # Only the (expensive) JSON parsing is skipped when the contents are
++        # byte-for-byte identical to what we parsed or wrote last time.
++        if self._cache_raw is not None and raw == self._cache_raw:
++            return self._cache_data
++
++        data = json.loads(raw)
++        self._cache_raw, self._cache_data = raw, data
++        return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # Drop the cache first so a failed write can't leave it stale
++        self._cache_raw = self._cache_data = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
+@@ -160,6 +173,8 @@ class JSONStorage(Storage):
+         # gotten shorter
+         self._handle.truncate()
+ 
++        self._cache_raw, self._cache_data = serialized, data
++
+ 
+ class MemoryStorage(Storage):
+     """
