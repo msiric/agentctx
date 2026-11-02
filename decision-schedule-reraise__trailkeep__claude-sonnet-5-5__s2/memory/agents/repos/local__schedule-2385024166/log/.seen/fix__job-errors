@@ -1,4 +1,0 @@
-2026-11-02: `run_all` no longer sleeps after the last job. Compared options for job exceptions and chose collect-and-re-raise-first. Nothing implemented yet. Next: implement in `run_pending`, add tests, update docs.
-Run all due jobs, collect exceptions, re-raise the first at the end: the supervisor needs the crash to page someone, so no log-and-swallow.
-Rejected catch-and-log in `_run_job`, an opt-in `catch_exceptions` flag, and an `on_error` callback: all hide the error by default or add API surface that isn't needed.
-2026-11-02: Implemented collect-and-re-raise-first in `run_pending` (logs each failure, re-raises first), added 3 tests, updated docs. 43 passed (41 skipped pre-existing). `run_all` error behavior left unchanged pending decision.
