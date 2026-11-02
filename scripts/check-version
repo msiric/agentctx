@@ -12,5 +12,8 @@ for pair in "bin/trailkeep:$cli" "package.json:$pkg" ".claude-plugin/plugin.json
   f=${pair%%:*}; v=${pair#*:}
   if [ "$v" != "$want" ]; then echo "version mismatch: $f has '$v', expected '$want'"; bad=1; fi
 done
+pkgname=$(sed -n 's/^  "name": "\(.*\)",$/\1/p' package.json)
+cliname=$(sed -n 's/^PKG="\(.*\)"$/\1/p' bin/trailkeep)
+if [ "$pkgname" != "$cliname" ]; then echo "package name mismatch: package.json has '$pkgname', bin/trailkeep has '$cliname'"; bad=1; fi
 [ "$bad" -eq 0 ] && echo "version $want everywhere"
 exit "$bad"

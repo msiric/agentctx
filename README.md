@@ -7,7 +7,7 @@ It's a single POSIX shell script that needs only `git`. It never changes your re
 ## Install (one command, once per machine)
 
 ```sh
-npm install -g @trailkeep/trailkeep && trailkeep install
+npm install -g @trailkeep/cli && trailkeep install
 ```
 
 Or without npm:

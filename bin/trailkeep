@@ -6,6 +6,7 @@
 set -u
 
 VERSION="0.3.0"
+PKG="@trailkeep/cli"
 MARKER="managed by trailkeep"
 
 # ---------------------------------------------------------------- paths ----
@@ -1073,10 +1074,10 @@ cmd_update() {
       exec "$path/bin/trailkeep" install "$@" ;;
     npm)
       has npm || die "npm not found"
-      if [ "$dry" -eq 1 ]; then say "Dry run: would run npm install -g @trailkeep/trailkeep@latest, then install"; exec "$RT_BIN" install "$@"; fi
+      if [ "$dry" -eq 1 ]; then say "Dry run: would run npm install -g $PKG@latest, then install"; exec "$RT_BIN" install "$@"; fi
       say "Updating with npm"
-      npm install -g @trailkeep/trailkeep@latest || die "npm install failed"
-      np=$(npm root -g)/@trailkeep/trailkeep/bin/trailkeep
+      npm install -g "$PKG@latest" || die "npm install failed"
+      np=$(npm root -g)/$PKG/bin/trailkeep
       [ -x "$np" ] || die "trailkeep not found in $(npm root -g)"
       exec "$np" install "$@" ;;
   esac

@@ -611,6 +611,8 @@ test_npm_package() {
   contains "$list" "package/bin/trailkeep"; contains "$list" "package/hooks/hooks.json"; contains "$list" "package/.claude-plugin/plugin.json"
   lacks "$list" "tests/" "tests are not shipped"
   npm install -g --silent --prefix "$SB/npm" "$tgz" >/dev/null 2>&1 || { flunk "npm install -g"; return; }
+  pkg=$(sed -n 's/^PKG="\(.*\)"$/\1/p' "$ROOT/bin/trailkeep")
+  [ -x "$SB/npm/lib/node_modules/$pkg/bin/trailkeep" ] && pass || flunk "not installed under node_modules/$pkg (update would miss it)"
   mkdir -p "$HOME/.codex"
   out=$("$SB/npm/bin/trailkeep" install --no-claude --no-copilot 2>&1); st=$?
   status $st 0 "install from npm"
@@ -627,6 +629,8 @@ test_npm_package() {
 test_release() {
   t "versions and release script"; sandbox
   out=$(sh "$ROOT/scripts/check-version" 2>&1); status $? 0 "all version fields agree"
+  cp -R "$ROOT" "$SB/nm" && sed -i.bak 's/^PKG=".*"$/PKG="@someone\/else"/' "$SB/nm/bin/trailkeep"
+  out=$(sh "$SB/nm/scripts/check-version" 2>&1); status $? 1 "package name mismatch fails"; contains "$out" "package name mismatch"
   eq "$(ax --version)" "trailkeep $(sed -n 's/^  "version": "\(.*\)",$/\1/p' "$ROOT/package.json")" "cli matches package.json"
   cp -R "$ROOT" "$SB/rel" && rm -rf "$SB/rel/.git"
   (cd "$SB/rel" && git init -q -b main && git add -A && git commit -qm base) || { flunk "snapshot"; return; }
