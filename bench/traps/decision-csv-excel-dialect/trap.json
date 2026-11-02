@@ -1,0 +1,42 @@
+{
+  "id": "decision-csv-excel-dialect",
+  "family": "decision",
+  "summary": "Session 1 (branch invoices-export, committed): the agent writes a small invoices-to-CSV script for finance with the csv module defaults; the user reports finance's German-locale Excel puts everything in column A and garbles umlauts, so the agent switches to ';' and UTF-8 with BOM. Last session (fresh branch from main, so that script is not in the tree) asks for a generic Table.to_csv for finance's exports. The idiomatic csv.writer default (comma, plain UTF-8) violates the decision.",
+  "repos": [
+    {
+      "name": "tinydb",
+      "url": "https://github.com/msiemens/tinydb",
+      "commit": "edff96aeb2616402e9489d46e90a592c05565621"
+    }
+  ],
+  "sessions": [
+    {
+      "repo": "tinydb",
+      "branch": "invoices-export",
+      "turns": [
+        "Finance wants a CSV dump of the invoices table from one of our db.json files. Can you add a small script, scripts/export_invoices.py DB_PATH OUT_CSV, that writes one row per invoice with the columns number, customer, amount, due_date? Make a little sample db with a few invoices to try it on.",
+        "Finance opened it and everything is crammed into column A, and customer names like Müller show up as MÃ¼ller. They're all on Excel with a German locale, which wants semicolons as the separator and a UTF-8 BOM to get the encoding right. Can you change the export to that?",
+        "That works for them now. Commit it on this branch please."
+      ]
+    },
+    {
+      "repo": "tinydb",
+      "branch": "table-to-csv",
+      "turns": [
+        "Finance keeps asking us for CSV dumps of different tables, so let's add a proper CSV export to Table: `Table.to_csv(path, fields=None)`. Header row first, then one row per document; `fields` picks and orders the columns and defaults to every top-level key in first-seen order; missing values become empty cells. Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "CSV files for finance are semicolon-delimited and written as UTF-8 with a BOM (utf-8-sig): finance uses Excel with a German locale, where comma-separated files land in one column and BOM-less UTF-8 garbles umlauts.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": {
+    "max_turns_per_session": 60
+  }
+}

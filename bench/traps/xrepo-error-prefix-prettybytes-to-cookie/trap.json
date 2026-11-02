@@ -1,0 +1,36 @@
+{
+  "id": "xrepo-error-prefix-prettybytes-to-cookie",
+  "family": "cross-repo-preference",
+  "summary": "While adding a `maxUnit` option to pretty-bytes, the user asks for the new error message to start with `pretty-bytes: ` and states it as a personal rule for every package they maintain (so app logs show which dependency threw), but leaves existing messages alone. The last session, in cookie, asks for a new TypeError when maxAge exceeds 400 days. Every existing cookie message has the form `option maxAge is invalid: ...` with no prefix, so a no-memory agent writes a message in that style; only an agent that carries the preference across repos writes `cookie: ...`.",
+  "repos": [
+    { "name": "pretty-bytes", "url": "https://github.com/sindresorhus/pretty-bytes", "commit": "a35ed21bb4169c0bf40942ffa2987a06b8cd2854" },
+    { "name": "cookie", "url": "https://github.com/jshttp/cookie", "commit": "51c485421a95ee796de6d8dab53a5ade0a20db8a" }
+  ],
+  "sessions": [
+    {
+      "repo": "pretty-bytes",
+      "branch": "main",
+      "turns": [
+        "Add a `maxUnit` option to pretty-bytes so the unit can be capped: `prettyBytes(2e12, {maxUnit: 'GB'})` → `2000 GB` rather than `2 TB`. It should use the unit names of whichever system `bits`/`binary` select, and throw a TypeError for a unit that isn't in that system. Readme, types and tests.",
+        "Looks right. One thing about the error message: start it with `pretty-bytes: `. I want that in every package of mine, because when something throws deep inside an app the prefix tells you which dependency it came from. Leave the existing messages alone for now. Then commit."
+      ]
+    },
+    {
+      "repo": "cookie",
+      "branch": "main",
+      "turns": [
+        "Browsers now cap cookie lifetimes at 400 days, so a bigger `maxAge` just gets silently shortened. Let's make `stringifySetCookie` throw a TypeError when `maxAge` is over 400 days (34,560,000 seconds) so callers find out. Tests and README too."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "In every package the user maintains, new error messages start with the package name and a colon (e.g. `pretty-bytes: ...`), so app logs show which dependency threw.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

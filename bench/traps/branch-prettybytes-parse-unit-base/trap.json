@@ -1,0 +1,50 @@
+{
+  "id": "branch-prettybytes-parse-unit-base",
+  "family": "branch-isolation",
+  "summary": "Two branches of pretty-bytes are pinned by two internal consumers and each gets a `parseBytes(string)` export. On `storage-app` (session 1) the agent implements byte counts and the binary units only; the user then says that on this branch the units without an `i` (kB/KB, MB, GB, ...) must be powers of 1024, because users paste sizes from Windows Explorer. On `billing-svc` (session 2) the same first step is done and the user says that on that branch `1 MB` must be exactly 1,000,000 (strict SI, matching prettyBytes output). Session 3 is back on `storage-app` and asks to add the units without the `i`. The repo states loudly that it is base-10 (`kB` = 1000), so a no-memory agent reads `1 MB` as 1e6, and a branch-blind memory tends to apply the most recent (billing) rule; only the storage-app rule passes. Neither earlier session encodes its rule in code, so commits don't matter.",
+  "repos": [
+    { "name": "pretty-bytes", "url": "https://github.com/sindresorhus/pretty-bytes", "commit": "a35ed21bb4169c0bf40942ffa2987a06b8cd2854" }
+  ],
+  "sessions": [
+    {
+      "repo": "pretty-bytes",
+      "branch": "storage-app",
+      "turns": [
+        "This branch is what our storage web app pins. They need the reverse of prettyBytes: a named export `parseBytes(string)` that returns a number of bytes. Start with plain numbers (`'512'`, `'512 B'`) and the binary units (`KiB` … `YiB`), fractional values allowed (`'1.5 KiB'` → 1536), units case-sensitive like our output. Leave out kB/MB/GB and friends for now; I still have to check with the storage team how they want those read. Tests and types please.",
+        "Heard back from them: their users paste sizes out of Windows Explorer, so on this branch the units without the `i` are powers of 1024: `1 KB` (or `kB`) is 1024 and `1 MB` is 1048576. We'll add those next time. Commit what you have."
+      ]
+    },
+    {
+      "repo": "pretty-bytes",
+      "branch": "billing-svc",
+      "turns": [
+        "This branch is what the billing service pins. They want the same thing: a named export `parseBytes(string)` returning bytes, for now plain numbers and the binary units (`KiB` … `YiB`) only, no kB/MB/GB yet. Tests and types please.",
+        "For when we add the others here: billing quotes in strict SI, so on this branch `1 MB` has to be exactly 1,000,000 bytes, matching what prettyBytes prints. Commit please."
+      ]
+    },
+    {
+      "repo": "pretty-bytes",
+      "branch": "storage-app",
+      "turns": [
+        "Let's finish parseBytes: add kB/KB, MB, GB, TB and the rest of the units without the `i`, and document parseBytes in the readme."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "On the `storage-app` branch, parseBytes reads units without an `i` (kB/KB, MB, GB, ...) as powers of 1024, because users paste sizes from Windows Explorer.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    },
+    {
+      "id": "f2",
+      "text": "On the `billing-svc` branch, parseBytes is strict SI (`1 MB` = 1,000,000), matching prettyBytes output. Does not apply on `storage-app`.",
+      "source": "user",
+      "session": 2,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

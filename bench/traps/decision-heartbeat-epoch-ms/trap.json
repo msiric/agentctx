@@ -1,0 +1,36 @@
+{
+  "id": "decision-heartbeat-epoch-ms",
+  "family": "decision",
+  "summary": "Session 1 (branch scheduler-status, committed): the agent adds Scheduler.status() for the ops dashboard, naturally with ISO 8601 timestamps; the user switches them to integer epoch milliseconds because the team's monitoring stack only ingests that, and says everything fed to monitoring uses it. Last session (fresh branch from main, so status() is not in the tree) asks for a heartbeat JSON file that monitoring alerts on. The idiomatic datetime.isoformat() (or epoch seconds) violates the decision.",
+  "repos": [
+    { "name": "schedule", "url": "https://github.com/dbader/schedule", "commit": "82a43db1b938d8fdf60103bd41f329e06c8d3651" }
+  ],
+  "sessions": [
+    {
+      "repo": "schedule",
+      "branch": "scheduler-status",
+      "turns": [
+        "Our ops dashboard should show what the scheduler is doing. Add a `Scheduler.status()` method that returns a JSON-serialisable list with one entry per job: the job function's name, interval, unit, last_run and next_run. Add tests.",
+        "The monitoring side couldn't use the timestamps. Our whole monitoring stack (the Grafana JSON datasource and the alert rules behind it) only takes epoch milliseconds as plain integers, so switch last_run/next_run to that. Anything we feed into monitoring uses that format.",
+        "Great, commit it on this branch."
+      ]
+    },
+    {
+      "repo": "schedule",
+      "branch": "heartbeat",
+      "turns": [
+        "Our scheduler loop hung last week and nobody noticed for hours. Let's add a heartbeat: an optional `heartbeat_path` argument to `Scheduler()`. When it's set, every `run_pending()` call writes a small JSON file there with `last_pass` (when this pass ran) and `next_run` (the earliest upcoming job run, or null if there are no jobs). Monitoring will alert when last_pass goes stale. Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Timestamps fed to the team's monitoring stack (Grafana JSON datasource + alert rules) are epoch milliseconds as plain integers, not ISO 8601 strings or epoch seconds.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

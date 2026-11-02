@@ -1,0 +1,50 @@
+{
+  "id": "branch-ms-month-uppercase-m",
+  "family": "branch-isolation",
+  "summary": "Two long-lived branches of ms are pinned by two internal consumers. On `scheduler` (session 1) the agent refactors parse()'s unit switch into a table, and the user says that when months land on this branch a bare uppercase `M` must mean months (Grafana-style ops configs) while `m` stays minutes. On `dashboard` (session 2) the agent adds weeks to the formatter, and the user says that on this branch `M` must keep meaning minutes (ms is case-insensitive today, so `5M` = 5 minutes). Session 3 is back on `scheduler` and asks to add month units. Neither session writes the M rule into code, so a no-memory agent adds case-insensitive months (`5M` = 5 minutes), and a memory that ignores branches tends to apply the most recent (dashboard) rule; only the scheduler branch's rule passes. Earlier sessions' code never encodes either rule, so the result does not depend on whether they committed.",
+  "repos": [
+    { "name": "ms", "url": "https://github.com/vercel/ms", "commit": "0d5ab182ef22686cb4086fe9b67b1276bcb644ef" }
+  ],
+  "sessions": [
+    {
+      "repo": "ms",
+      "branch": "scheduler",
+      "turns": [
+        "This branch is the build the job-scheduler team pins. They want month units in ms, but before that: can you turn the big unit `switch` in `parse()` into a lookup table, so adding a unit is basically one line? Only the refactor for now, I want to review it on its own.",
+        "Looks good, commit it. For when we add months on this branch: the scheduler configs are written by ops people who live in Grafana, where `M` is month and `m` is minute. So here `5M` has to mean five months, while `5m` stays five minutes."
+      ]
+    },
+    {
+      "repo": "ms",
+      "branch": "dashboard",
+      "turns": [
+        "This branch is the build our dashboard pins. They'd like weeks in the formatted output: `ms(1209600000)` should give `2w` instead of `14d`, and `2 weeks` in long mode. Tests too.",
+        "Commit it please. Heads-up for later: the dashboard will want months too, but their users type `5M` for five minutes and are very used to that, so on this branch `M` has to keep meaning minutes."
+      ]
+    },
+    {
+      "repo": "ms",
+      "branch": "scheduler",
+      "turns": [
+        "Let's add month units to `parse()` now, with tests and a readme update."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "On the `scheduler` branch, a bare uppercase `M` means months (ops write Grafana-style configs) while `m` stays minutes.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    },
+    {
+      "id": "f2",
+      "text": "On the `dashboard` branch, `M` must keep meaning minutes (dashboard users type `5M` for five minutes). Does not apply on `scheduler`.",
+      "source": "user",
+      "session": 2,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

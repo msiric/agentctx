@@ -1,0 +1,128 @@
+diff --git a/index.d.ts b/index.d.ts
+index 4fac6e9..bbfec3a 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -216,3 +216,23 @@ export default function prettyBytes(
+ 	number: number | bigint,
+ 	options?: Options
+ ): string;
++
++/**
++Parse a human readable size into a number of bytes.
++
++Units with an `i` (`KiB`, `MiB`, …) are powers of 1024. Units without it (`kB`/`KB`, `MB`, `GB`, …) are powers of 1000. A plain number is a byte count.
++
++Throws a `TypeError` for a string it cannot read.
++
++@example
++```
++import {parseBytes} from 'pretty-bytes';
++
++parseBytes('1.5 KiB');
++//=> 1536
++
++parseBytes('1 MB');
++//=> 1000000
++```
++*/
++export function parseBytes(string: string): number;
+diff --git a/index.js b/index.js
+index c5f37ab..12ad74e 100644
+--- a/index.js
++++ b/index.js
+@@ -285,3 +285,34 @@ export default function prettyBytes(number, options) {
+ 	const result = prefix + numberString + separator + UNITS[exponent];
+ 	return result.padStart(options.fixedWidth ?? 0);
+ }
++
++const BINARY_PARSE_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
++const PLAIN_PARSE_UNITS = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
++
++/*
++Units with an `i` are powers of 1024. Units without it are read as powers of 1000, matching what `prettyBytes` prints (`1 MB` is 1000000 bytes).
++*/
++const PARSE_MULTIPLIERS = new Map([
++	...PLAIN_PARSE_UNITS.map((unit, exponent) => [unit, 1000 ** exponent]),
++	['KB', 1000],
++	...BINARY_PARSE_UNITS.map((unit, exponent) => [unit, 1024 ** exponent]),
++]);
++
++export function parseBytes(string) {
++	if (typeof string !== 'string') {
++		throw new TypeError(`Expected a string, got ${typeof string}: ${string}`);
++	}
++
++	const match = /^\s*(\d+(?:\.\d+)?|\.\d+)\s*([A-Za-z]*)\s*$/.exec(string);
++	if (!match) {
++		throw new TypeError(`Expected a size like \`1.5 KiB\`, got: ${string}`);
++	}
++
++	const [, value, unit] = match;
++	const multiplier = PARSE_MULTIPLIERS.get(unit || 'B');
++	if (multiplier === undefined) {
++		throw new TypeError(`Unknown unit \`${unit}\` in: ${string}`);
++	}
++
++	return Number(value) * multiplier;
++}
+diff --git a/readme.md b/readme.md
+index 48aa7b7..ba163d6 100644
+--- a/readme.md
++++ b/readme.md
+@@ -240,6 +240,27 @@ prettyBytes(100_000, {fixedWidth: 10});
+ //=> ['    1 kB', '   10 kB', '  100 kB']
+ ```
+ 
++### parseBytes(string)
++
++Parse a human readable size into a number of bytes.
++
++Units with an `i` (`KiB`, `MiB`, …) are powers of 1024. Units without it (`kB`/`KB`, `MB`, `GB`, …) are powers of 1000. A plain number is a byte count.
++
++Throws a `TypeError` for a string it cannot read.
++
++```js
++import {parseBytes} from 'pretty-bytes';
++
++parseBytes('512');
++//=> 512
++
++parseBytes('1.5 KiB');
++//=> 1536
++
++parseBytes('1 MB');
++//=> 1000000
++```
++
+ ## FAQ
+ 
+ ### Why kB and not KB?
+diff --git a/test.js b/test.js
+index cf4a4d9..f54c47b 100644
+--- a/test.js
++++ b/test.js
+@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
+ import process from 'node:process';
+ import {promisify} from 'node:util';
+ import test from 'ava';
+-import prettyBytes from './index.js';
++import prettyBytes, {parseBytes} from './index.js';
+ 
+ const DECIMAL_UNITS = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+ const BINARY_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+@@ -1147,3 +1147,15 @@ test('the options shape the output as documented', t => {
+ 		t.is(prettyBytes(value, {signed: true}), prefix + prettyBytes(Math.abs(value)));
+ 	}
+ });
++
++test('parseBytes', t => {
++	t.is(parseBytes('512'), 512);
++	t.is(parseBytes('512 B'), 512);
++	t.is(parseBytes('1.5 KiB'), 1536);
++	t.is(parseBytes('2 MiB'), 2 * 1024 ** 2);
++	t.is(parseBytes('1 kB'), 1000);
++	t.is(parseBytes('1 KB'), 1000);
++	t.is(parseBytes('1 MB'), 1000 ** 2);
++	t.is(parseBytes('1.5 GB'), 1.5 * (1000 ** 3));
++	t.throws(() => parseBytes('1 XB'), {instanceOf: TypeError});
++});

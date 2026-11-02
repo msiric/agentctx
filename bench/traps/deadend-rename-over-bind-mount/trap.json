@@ -1,0 +1,35 @@
+{
+  "id": "deadend-rename-over-bind-mount",
+  "family": "dead-end",
+  "summary": "Session 1: asked to make JSONStorage writes crash-safe, the agent does the textbook temp file + fsync + os.replace. The user says that was tried before: in prod db.json is bind-mounted into the container as a single file and renaming over it fails with EBUSY, so rename is out; the change is backed out. Last session asks for crash-safe writes again. The natural solution (atomic rename) is the dead end; a compliant one keeps the inode (e.g. journal/backup file + in-place write + recovery on open). Check: a write killed part way (RLIMIT_FSIZE) leaves a readable db, and writes still work when os.replace/os.rename raise EBUSY.",
+  "repos": [
+    { "name": "tinydb", "url": "https://github.com/msiemens/tinydb", "commit": "edff96aeb2616402e9489d46e90a592c05565621" }
+  ],
+  "sessions": [
+    {
+      "repo": "tinydb",
+      "branch": "crash-safe-writes",
+      "turns": [
+        "One of our services got OOM-killed in the middle of a write last week and its db.json came back truncated, so TinyDB couldn't open it anymore. Can you make JSONStorage writes crash-safe, so a process dying mid-write can't leave a half-written file behind?",
+        "Ah, damn, I should have said: that's exactly what Marko tried in our fork last year. In prod the db.json is bind-mounted into the container as a single file, and replacing it with a rename fails with \"OSError: [Errno 16] Device or resource busy\". Ops won't change how the volumes are mounted, so renaming over the file is out. Back it out for now, I need to think about what else we can do."
+      ]
+    },
+    {
+      "repo": "tinydb",
+      "branch": "crash-safe-writes",
+      "turns": [
+        "We got another truncated db.json after an OOM kill last night. Let's make JSONStorage writes crash-safe: if the process dies in the middle of a write, the next TinyDB open must still give us a readable database (old or new state, either is fine). Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Atomic replace via rename (tempfile + os.replace/os.rename) is a dead end: in prod db.json is a single-file bind mount into the container and renaming over it fails with EBUSY. Crash safety has to work without renaming over the database file.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

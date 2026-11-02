@@ -1,0 +1,56 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..7358c7f 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -49,6 +49,26 @@ def test_json_kwargs(tmpdir):
+     db.close()
+ 
+ 
++def test_json_sorts_keys_by_default(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file))
++    db.insert({'b': 1, 'a': {'d': 1, 'c': 2}})
++    db.close()
++
++    assert db_file.read() == (
++        '{"_default": {"1": {"a": {"c": 2, "d": 1}, "b": 1}}}'
++    )
++
++
++def test_json_sort_keys_can_be_disabled(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file), sort_keys=False)
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    assert db_file.read() == '{"_default": {"1": {"b": 1, "a": 2}}}'
++
++
+ def test_json_readwrite(tmpdir):
+     """
+     Regression test for issue #1
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..69729a1 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -91,6 +91,10 @@ class JSONStorage(Storage):
+         **Note:** Using an access mode other than `r` or `r+` will probably
+         lead to data loss or data corruption!
+ 
++        Keys are written in sorted order by default so that the file
++        content is stable between writes. Pass ``sort_keys=False`` to keep
++        insertion order instead.
++
+         **Note:** **Never** pass untrusted or user-controlled code as ``kwargs``
+         members like ``cls`` or ``default`` will be called on every write
+         operation.
+@@ -103,6 +107,9 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
++
++        # Sort keys by default so the file content is stable between writes
++        kwargs.setdefault('sort_keys', True)
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):

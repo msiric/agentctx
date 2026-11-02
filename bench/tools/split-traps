@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Assign about a third of the traps to held-out, deterministically.
 
-    bench/tools/split-traps [COMMIT]   (default: the first commit that added bench/traps)
+    bench/tools/split-traps
+
+Traps are split in batches: a batch is the traps added by one commit. Batches
+already in bench/plans/SPLIT.json keep their assignment.
 
 Each trap's rank is sha256(COMMIT + id). For each family with at least two
 traps, the lowest-ranked one is a held-out candidate; candidates are taken in
@@ -14,22 +17,35 @@ import glob, hashlib, json, os, subprocess, sys
 
 BENCH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 traps_dir = os.path.join(BENCH, "traps")
-commit = sys.argv[1] if len(sys.argv) > 1 else subprocess.run(
-    ["git", "log", "--reverse", "--format=%H", "--", traps_dir], cwd=BENCH, text=True, capture_output=True).stdout.split("\n")[0].strip()
-if not commit:
-    sys.exit("commit the traps first")
+
+def added_in(tid):
+    out = subprocess.run(["git", "log", "--diff-filter=A", "--format=%H", "--", os.path.join(traps_dir, tid, "trap.json")],
+                         cwd=BENCH, text=True, capture_output=True).stdout.split()
+    return out[-1] if out else None
+
+out_path = os.path.join(BENCH, "plans", "SPLIT.json")
+prev = json.load(open(out_path)) if os.path.exists(out_path) else {"batches": []}
+if "batches" not in prev:  # first format: one batch
+    prev = {"batches": [prev]}
+done = {t for b in prev["batches"] for t in b["held_out"] + b["dev"]}
 traps = [json.load(open(f)) for f in sorted(glob.glob(os.path.join(traps_dir, "*", "trap.json")))]
-rank = lambda t: hashlib.sha256((commit + t["id"]).encode()).hexdigest()
-fams = {}
+groups = {}
 for t in traps:
-    fams.setdefault(t["family"], []).append(t)
-candidates = sorted((min(ts, key=rank) for ts in fams.values() if len(ts) >= 2), key=rank)
-held = {t["id"] for t in candidates[: round(len(traps) / 3)]}
-dev = [t for t in traps if t["id"] not in held]
-pilot, seen = [], set()
-for t in sorted(dev, key=rank):
-    if t["family"] != "control" and t["family"] not in seen and len(pilot) < 3:
-        pilot.append(t["id"]); seen.add(t["family"])
-split = {"commit": commit, "held_out": sorted(held), "dev": sorted(t["id"] for t in dev), "pilot": pilot}
-json.dump(split, open(os.path.join(BENCH, "plans", "SPLIT.json"), "w"), indent=1)
-print(json.dumps(split, indent=1))
+    if t["id"] not in done:
+        c = added_in(t["id"])
+        if not c:
+            sys.exit(f"commit trap {t['id']} first")
+        groups.setdefault(c, []).append(t)
+for commit, batch in sorted(groups.items(), key=lambda kv: kv[0]):
+    rank = lambda t: hashlib.sha256((commit + t["id"]).encode()).hexdigest()
+    fams = {}
+    for t in batch:
+        fams.setdefault(t["family"], []).append(t)
+    candidates = sorted((min(ts, key=rank) for ts in fams.values() if len(ts) >= 2), key=rank)
+    held = {t["id"] for t in candidates[: round(len(batch) / 3)]}
+    prev["batches"].append({"commit": commit, "held_out": sorted(held), "dev": sorted(t["id"] for t in batch if t["id"] not in held)})
+prev["held_out"] = sorted(t for b in prev["batches"] for t in b["held_out"])
+prev["dev"] = sorted(t for b in prev["batches"] for t in b["dev"])
+prev["pilot"] = prev["batches"][0].get("pilot", [])
+json.dump(prev, open(out_path, "w"), indent=1)
+print(json.dumps({k: prev[k] for k in ("held_out", "dev")}, indent=1))

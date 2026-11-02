@@ -1,0 +1,91 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..d34d096 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -95,10 +95,18 @@ class Scheduler:
+         that should run every minute and you only call run_pending()
+         in one hour increments then your job won't be run 60 times in
+         between but only once.
++
++        A job that raises an exception does not stop the other pending jobs
++        from running: the exception is logged and the failing job is
++        rescheduled for its next regular run.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception:
++                logger.exception("Job %s raised an exception; it stays scheduled", job)
++                job._reschedule_after_failure()
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -697,6 +705,15 @@ class Job:
+             return CancelJob
+         return ret
+ 
++    def _reschedule_after_failure(self) -> None:
++        """
++        Schedule the next regular run after the job function raised.
++        """
++        self.last_run = datetime.datetime.now()
++        self._schedule_next_run()
++        if self._is_overdue(self.next_run) and self.scheduler is not None:
++            self.scheduler.cancel_job(self)
++
+     def _schedule_next_run(self) -> None:
+         """
+         Compute the instant when this job should run next.
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..119879a 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1384,6 +1384,46 @@ class SchedulerTests(TestCase):
+         assert "bar=True" in job_str
+         assert "somekey=23" in job_str
+ 
++    def test_run_pending_keeps_going_when_a_job_raises(self):
++        failing = make_mock_job(name="failing")
++        failing.side_effect = ValueError("boom")
++        other = make_mock_job(name="other")
++
++        with mock_datetime(2010, 1, 6, 12, 0):
++            failing_job = every().hour.do(failing)
++            every().hour.do(other)
++
++        with mock_datetime(2010, 1, 6, 13, 0):
++            with self.assertLogs("schedule", level="ERROR") as logs:
++                schedule.run_pending()
++            assert failing.call_count == 1
++            assert other.call_count == 1
++            assert failing_job.next_run == datetime.datetime(2010, 1, 6, 14, 0)
++            [record] = logs.records
++            assert record.levelname == "ERROR"
++            assert record.exc_info[0] is ValueError
++
++            # the failing job is not retried until its next regular run
++            schedule.run_pending()
++            assert failing.call_count == 1
++
++        with mock_datetime(2010, 1, 6, 14, 0):
++            schedule.run_pending()
++            assert failing.call_count == 2
++            assert other.call_count == 2
++
++    def test_run_pending_cancels_failing_job_past_its_deadline(self):
++        failing = make_mock_job(name="failing")
++        failing.side_effect = ValueError("boom")
++
++        with mock_datetime(2010, 1, 6, 12, 0):
++            every().hour.until(datetime.datetime(2010, 1, 6, 13, 30)).do(failing)
++
++        with mock_datetime(2010, 1, 6, 13, 0):
++            with self.assertLogs("schedule", level="ERROR"):
++                schedule.run_pending()
++            assert schedule.jobs == []
++
+     def test_run_pending(self):
+         """Check that run_pending() runs pending jobs.
+         We do this by overriding datetime.datetime with mock objects

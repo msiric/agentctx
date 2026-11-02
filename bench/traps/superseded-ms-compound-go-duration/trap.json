@@ -1,0 +1,50 @@
+{
+  "id": "superseded-ms-compound-go-duration",
+  "family": "superseded",
+  "summary": "Session 1 builds ms's `compound` format option the way the user first asks (space-separated parts, days as the largest unit: `1d 1h 30m`) and commits it. Session 2 reverses that: the logs are read by a Go service via time.ParseDuration, so compound output must have no separators and hours as the largest unit (`25h30m`); the user explicitly defers the change and has the agent fix an unrelated parse() whitespace bug instead. Session 3 only asks to wrap the option up with docs and tests. The committed code still shows the session-1 shape, so a no-memory agent (or one remembering only session 1) documents and tests `1d 1h 30m`; only an agent that carries session 2's reversal rewrites the output first.",
+  "repos": [
+    { "name": "ms", "url": "https://github.com/vercel/ms", "commit": "4ff48cec099f0514c3e9bbca18706c9c21122bfb" }
+  ],
+  "sessions": [
+    {
+      "repo": "ms",
+      "branch": "feat/compound-format",
+      "turns": [
+        "I'd like a compound mode for the short formatter: `format(5400000, { compound: true })` should give `1h 30m` instead of `2h`. Largest unit first, skip parts that are zero, separate parts with a space. Smallest unit is seconds (just drop leftover milliseconds) and go up to days at most, no weeks/months/years in this mode. Negative values just get a leading `-`.",
+        "Nice. Add tests for it and commit."
+      ]
+    },
+    {
+      "repo": "ms",
+      "branch": "feat/compound-format",
+      "turns": [
+        "Change of plan on the compound format. The deploy logs it's meant for get scraped by a Go service that runs every duration through `time.ParseDuration`, and that rejects spaces and has no `d` unit. So compound output has to be ParseDuration-compatible: parts glued together and hours as the biggest unit, e.g. `25h30m` rather than `1d 1h 30m`. Don't change it right now though, something more urgent first: `parse()` returns NaN when the value has surrounding whitespace (`' 2d'`, `'1.5h '`), and we get exactly that from YAML configs all the time. Make it tolerate leading and trailing whitespace.",
+        "Thanks. Add a test for that and commit."
+      ]
+    },
+    {
+      "repo": "ms",
+      "branch": "feat/compound-format",
+      "turns": [
+        "Let's wrap up the compound format option: document it in the README and round out the tests so it's ready for review."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Compound output: parts separated by a space, days as the largest unit, e.g. `1d 1h 30m`.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": "f2"
+    },
+    {
+      "id": "f2",
+      "text": "Compound output must be Go time.ParseDuration-compatible because a Go service parses the logs: no separators and hours as the largest unit, e.g. `25h30m`.",
+      "source": "user",
+      "session": 2,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

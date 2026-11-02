@@ -1,0 +1,46 @@
+{
+  "id": "xrepo-version-bump-cookie-to-ms",
+  "family": "cross-repo-preference",
+  "summary": "While adding a small feature to cookie, the user states a personal rule for all their packages: every change bumps package.json's version in the same change (minor for features, patch for fixes), because their own release script publishes any version on main that isn't on npm yet. The last session, in ms, asks for a feature (microsecond units). Nothing in ms suggests bumping (its CI publishes nightlies from main and features never touch the version field), and agents essentially never bump versions unprompted; only an agent that carries the preference across repos bumps 4.0.0 to 4.1.0.",
+  "repos": [
+    {
+      "name": "cookie",
+      "url": "https://github.com/jshttp/cookie",
+      "commit": "51c485421a95ee796de6d8dab53a5ade0a20db8a"
+    },
+    {
+      "name": "ms",
+      "url": "https://github.com/vercel/ms",
+      "commit": "4ff48cec099f0514c3e9bbca18706c9c21122bfb"
+    }
+  ],
+  "sessions": [
+    {
+      "repo": "cookie",
+      "branch": "main",
+      "turns": [
+        "Small feature for cookie: let `stringifySetCookie` take `expires` as a number (milliseconds since the epoch) as well as a `Date`. A number that isn't a valid time should throw the same way an invalid Date does. Update the type and add tests.",
+        "Good. Bump the version too, minor since it's a feature. I want that in all my packages: my release script publishes whatever version on main isn't on npm yet, so the bump has to ride along with the change itself. Minor for features, patch for fixes. Then commit."
+      ]
+    },
+    {
+      "repo": "ms",
+      "branch": "main",
+      "turns": [
+        "Let's add microseconds to ms: `ms('500us')` should give 0.5, and it should also accept `µs`, `microsecond` and `microseconds` (any case, like the other units). Update the types, README and tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "In all of the user's packages, a change bumps the version in package.json in the same change (minor for features, patch for fixes), because the user's release script publishes any version on main that isn't on npm yet.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": {
+    "max_turns_per_session": 60
+  }
+}

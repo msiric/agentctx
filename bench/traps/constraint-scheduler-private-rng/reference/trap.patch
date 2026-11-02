@@ -1,0 +1,166 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..076c6ba 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -251,6 +251,11 @@ class Job:
+         # optional time of final run
+         self.cancel_after: Optional[datetime.datetime] = None
+ 
++        # retry configuration, see Job.retry()
++        self.retry_times: int = 0
++        self.retry_base_delay: float = 0
++        self.retry_attempt: int = 0  # retries made since the last regular run
++
+         self.tags: Set[Hashable] = set()  # unique set of tags for the job
+         self.scheduler: Optional[Scheduler] = scheduler  # scheduler to register with
+ 
+@@ -641,6 +646,30 @@ class Job:
+             )
+         return self
+ 
++    def retry(self, times: int, base_delay: float):
++        """
++        Retry the job when it raises an exception.
++
++        The first retry happens `base_delay` seconds after the failure, the
++        next ones after 2x, 4x, ... `base_delay` seconds. Each delay gets a
++        random jitter of 0 to `base_delay` seconds added, so that many jobs
++        failing at the same time don't retry in lockstep. When all `times`
++        retries have failed, the job goes back to its regular schedule.
++
++        Exceptions of a job with retries are not propagated.
++
++        :param times: Maximum number of retries after a failed run
++        :param base_delay: Delay before the first retry, in seconds
++        :return: The invoked job instance
++        """
++        if times < 0:
++            raise ScheduleValueError("`times` must not be negative")
++        if base_delay < 0:
++            raise ScheduleValueError("`base_delay` must not be negative")
++        self.retry_times = times
++        self.retry_base_delay = base_delay
++        return self
++
+     def do(self, job_func: Callable, *args, **kwargs):
+         """
+         Specifies the job_func that should be called every time the
+@@ -688,8 +717,24 @@ class Job:
+             return CancelJob
+ 
+         logger.debug("Running job %s", self)
+-        ret = self.job_func()
+-        self.last_run = datetime.datetime.now()
++        try:
++            ret = self.job_func()
++        except Exception:
++            if not self.retry_times:
++                raise
++            ret = None
++            self.last_run = datetime.datetime.now()
++            if self.retry_attempt < self.retry_times:
++                self._schedule_retry()
++                if self._is_overdue(self.next_run):
++                    logger.debug("Cancelling job %s", self)
++                    return CancelJob
++                return ret
++            logger.debug("Job %s failed after %i retries", self, self.retry_times)
++        else:
++            self.last_run = datetime.datetime.now()
++
++        self.retry_attempt = 0
+         self._schedule_next_run()
+ 
+         if self._is_overdue(self.next_run):
+@@ -697,6 +742,23 @@ class Job:
+             return CancelJob
+         return ret
+ 
++    def _schedule_retry(self) -> None:
++        """
++        Schedule the next retry after a failed run (exponential backoff with
++        random jitter).
++        """
++        delay = self.retry_base_delay * 2**self.retry_attempt
++        delay += random.uniform(0, self.retry_base_delay)
++        self.retry_attempt += 1
++        logger.debug(
++            "Retrying job %s in %.1f seconds (retry %i of %i)",
++            self,
++            delay,
++            self.retry_attempt,
++            self.retry_times,
++        )
++        self.next_run = datetime.datetime.now() + datetime.timedelta(seconds=delay)
++
+     def _schedule_next_run(self) -> None:
+         """
+         Compute the instant when this job should run next.
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..5e8a891 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1384,6 +1384,63 @@ class SchedulerTests(TestCase):
+         assert "bar=True" in job_str
+         assert "somekey=23" in job_str
+ 
++    def test_retry_with_backoff(self):
++        mock_job = make_mock_job()
++        mock_job.side_effect = [ValueError, ValueError, ValueError, ValueError, None]
++
++        def at(moment):
++            # mock_datetime has whole-second resolution: round up
++            moment += datetime.timedelta(microseconds=999999)
++            return mock_datetime(
++                moment.year,
++                moment.month,
++                moment.day,
++                moment.hour,
++                moment.minute,
++                moment.second,
++            )
++
++        with mock_datetime(2010, 1, 6, 12, 0):
++            job = every().hour.do(mock_job).retry(times=3, base_delay=30)
++
++        failed_at = datetime.datetime(2010, 1, 6, 13, 0)
++        with at(failed_at):
++            schedule.run_pending()
++        for retry, base in enumerate([30, 60, 120], start=2):
++            delay = (job.next_run - failed_at).total_seconds()
++            assert base <= delay <= base + 30
++            with at(job.next_run):
++                failed_at = datetime.datetime.now()
++                schedule.run_pending()
++            assert mock_job.call_count == retry
++
++        # all retries failed: back to the regular schedule
++        assert job.next_run == failed_at + datetime.timedelta(hours=1)
++        assert job.retry_attempt == 0
++
++    def test_retry_resets_after_success(self):
++        mock_job = make_mock_job()
++        mock_job.side_effect = [ValueError, None, ValueError]
++
++        with mock_datetime(2010, 1, 6, 12, 0):
++            job = every().hour.do(mock_job).retry(times=1, base_delay=10)
++        with mock_datetime(2010, 1, 6, 13, 0):
++            schedule.run_pending()
++        assert job.retry_attempt == 1
++        with mock_datetime(2010, 1, 6, 13, 1):
++            schedule.run_pending()
++        assert mock_job.call_count == 2
++        assert job.retry_attempt == 0
++        assert job.next_run == datetime.datetime(2010, 1, 6, 14, 1)
++
++    def test_no_retry_by_default(self):
++        mock_job = make_mock_job()
++        mock_job.side_effect = ValueError
++        with mock_datetime(2010, 1, 6, 12, 0):
++            every().hour.do(mock_job)
++        with mock_datetime(2010, 1, 6, 13, 0):
++            self.assertRaises(ValueError, schedule.run_pending)
++
+     def test_run_pending(self):
+         """Check that run_pending() runs pending jobs.
+         We do this by overriding datetime.datetime with mock objects

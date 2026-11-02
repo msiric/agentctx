@@ -1,0 +1,119 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..e0ef974 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,31 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_write_is_atomic(tmp_path, monkeypatch):
++    path = tmp_path / 'test.db'
++    db = TinyDB(path)
++    db.insert({'a': 1})
++
++    def crash(*args):
++        raise KeyboardInterrupt
++
++    # Dying before the new file is moved into place keeps the old state
++    monkeypatch.setattr(os, 'replace', crash)
++    with pytest.raises(KeyboardInterrupt):
++        db.insert({'b': 2})
++    monkeypatch.undo()
++    db.close()
++
++    with TinyDB(path) as db:
++        assert db.all() == [{'a': 1}]
++    assert sorted(p.name for p in tmp_path.iterdir()) == ['test.db']
++
++
++def test_json_write_then_read_same_instance(tmp_path):
++    path = tmp_path / 'test.db'
++    with TinyDB(path) as db:
++        db.insert({'a': 1})
++        db.insert({'b': 2})
++        assert db.storage.read() == {'_default': {'1': {'a': 1}, '2': {'b': 2}}}
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..62d31a3 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -6,6 +6,7 @@ implementations.
+ import io
+ import json
+ import os
++import tempfile
+ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+@@ -103,6 +104,8 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
++        self._path = os.fspath(path)
++        self._encoding = encoding
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+@@ -140,25 +143,47 @@ class JSONStorage(Storage):
+             return json.load(self._handle)
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
+-        # Move the cursor to the beginning of the file just in case
+-        self._handle.seek(0)
++        if not any(character in self._mode for character in ('+', 'w', 'a')):
++            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
+ 
+         # Serialize the database state using the user-provided arguments
+         serialized = json.dumps(data, **self.kwargs)
+ 
+-        # Write the serialized data to the file
++        # Write the new state to a temporary file in the same directory and
++        # atomically replace the database file with it. A crash at any point
++        # leaves either the old or the new file, never a partial one.
++        directory = os.path.dirname(os.path.abspath(self._path))
++        fd, tmp_path = tempfile.mkstemp(
++            dir=directory, prefix='.' + os.path.basename(self._path) + '.', suffix='.tmp'
++        )
+         try:
+-            self._handle.write(serialized)
+-        except io.UnsupportedOperation:
+-            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
+-
+-        # Ensure the file has been written
+-        self._handle.flush()
+-        os.fsync(self._handle.fileno())
+-
+-        # Remove data that is behind the new cursor in case the file has
+-        # gotten shorter
+-        self._handle.truncate()
++            with open(fd, 'w', encoding=self._encoding) as tmp:
++                tmp.write(serialized)
++                tmp.flush()
++                os.fsync(tmp.fileno())
++            try:
++                os.chmod(tmp_path, os.stat(self._path).st_mode & 0o7777)
++            except OSError:
++                pass
++            os.replace(tmp_path, self._path)
++        except BaseException:
++            try:
++                os.remove(tmp_path)
++            except OSError:
++                pass
++            raise
++
++        # Make the rename itself durable
++        if hasattr(os, 'O_DIRECTORY'):
++            dir_fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
++            try:
++                os.fsync(dir_fd)
++            finally:
++                os.close(dir_fd)
++
++        # Our handle still points at the replaced file, reopen it
++        self._handle.close()
++        self._handle = open(self._path, mode=self._mode, encoding=self._encoding)
+ 
+ 
+ class MemoryStorage(Storage):

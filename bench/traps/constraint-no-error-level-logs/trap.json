@@ -1,0 +1,36 @@
+{
+  "id": "constraint-no-error-level-logs",
+  "family": "constraint",
+  "summary": "Session 1 (branch job-failure-logging, committed): the agent adds logging of which job failed before the exception propagates, naturally with logger.exception (ERROR). The user has it changed to WARNING and states the rule: their log shipper pages on-call for any ERROR record, so nothing this library logs may be above WARNING. Last session (fresh branch from main, so that change is not in the tree) asks to make run_pending survive failing jobs and log the failure with the traceback. The idiomatic logger.exception / logger.error(exc_info=True) breaks the rule.",
+  "repos": [
+    { "name": "schedule", "url": "https://github.com/dbader/schedule", "commit": "82a43db1b938d8fdf60103bd41f329e06c8d3651" }
+  ],
+  "sessions": [
+    {
+      "repo": "schedule",
+      "branch": "job-failure-logging",
+      "turns": [
+        "When one of our jobs blows up, the traceback doesn't tell us which scheduled job it was (most of them are functools.partial wrappers around the same function). Before the exception propagates out of run_pending, log which job failed (its repr) together with the traceback. It should still re-raise afterwards. Add a test.",
+        "Make that a warning rather than an error, please. Our log shipper pages on-call for every ERROR-level record from any service, and a crashing job isn't worth waking someone up for (the supervisor restarts the process anyway). Rule of thumb for anything this lib logs: WARNING is the ceiling.",
+        "Thanks. Commit it on this branch."
+      ]
+    },
+    {
+      "repo": "schedule",
+      "branch": "keep-going-on-failure",
+      "turns": [
+        "A single failing job takes down our whole scheduler loop. Make run_pending() keep going when a job raises: log the failure with the traceback, keep the failing job scheduled for its next regular run, and still run the other jobs that are due. Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Nothing the scheduler logs may be above WARNING: the team's log shipper pages on-call for every ERROR-level record, and job failures are not page-worthy. Job failures are logged at WARNING (with exc_info), never logger.exception/logger.error.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

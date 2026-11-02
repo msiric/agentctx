@@ -1,0 +1,106 @@
+diff --git a/readme.md b/readme.md
+index dd74b7a..65f2aed 100644
+--- a/readme.md
++++ b/readme.md
+@@ -44,17 +44,21 @@ ms(ms('10 hours'), { long: true })    // "10 hours"
+ 
+ ```ts
+ type Years = 'years' | 'year' | 'yrs' | 'yr' | 'y'
++type Months = 'months' | 'month' | 'mo' | 'M'
+ type Weeks = 'weeks' | 'week' | 'w'
+ type Days = 'days' | 'day' | 'd'
+ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h'
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm'
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's'
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms'
+-type Unit = Years | Weeks | Days | Hours | Minutes | Seconds | Milliseconds
++type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds
+ ```
+ 
+ These formats can be lowercase (`minutes`), uppercase (`MINUTES`), or capitalized (`Minutes`). There can be a space (`2 minutes`) or not (`2minutes`).
+ 
++The one exception is the single letter `M`, which means months (`5M`), while `m` means minutes (`5m`).
++A month is a twelfth of a year (30.4375 days).
++
+ > [!NOTE]
+ > The casing and spacing is enforced at a type level if you use [`parseStrict`](#enhanced-type-safety).
+ 
+diff --git a/src/index.ts b/src/index.ts
+index 8c5c825..0b56238 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -5,17 +5,23 @@ const h = m * 60;
+ const d = h * 24;
+ const w = d * 7;
+ const y = d * 365.25;
++const mo = y / 12;
+ 
+ type Years = 'years' | 'year' | 'yrs' | 'yr' | 'y';
++type Months = 'months' | 'month' | 'mo';
+ type Weeks = 'weeks' | 'week' | 'w';
+ type Days = 'days' | 'day' | 'd';
+ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h';
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm';
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's';
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms';
+-type Unit = Years | Weeks | Days | Hours | Minutes | Seconds | Milliseconds;
++type Unit =
++  | Years
++  | Months
++  | Weeks
++  | Days | Hours | Minutes | Seconds | Milliseconds;
+ 
+-type UnitAnyCase = Capitalize<Unit> | Uppercase<Unit> | Unit;
++type UnitAnyCase = Capitalize<Unit> | Uppercase<Unit> | Unit | 'M';
+ 
+ export type StringValue =
+   | `${number}`
+@@ -66,7 +72,7 @@ export function parse(str: string): number {
+     );
+   }
+   const match =
+-    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|years?|yrs?|y)?$/i.exec(
++    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
+       str,
+     );
+ 
+@@ -83,6 +89,11 @@ export function parse(str: string): number {
+ 
+   const n = parseFloat(value);
+ 
++  // A bare uppercase `M` means months (Grafana style); `m` stays minutes.
++  if (unit === 'M') {
++    return n * mo;
++  }
++
+   const matchUnit = unit.toLowerCase() as Lowercase<Unit>;
+ 
+   /* istanbul ignore next - istanbul doesn't understand, but thankfully the TypeScript the exhaustiveness check in the default case keeps us type safe here */
+@@ -93,6 +104,10 @@ export function parse(str: string): number {
+     case 'yr':
+     case 'y':
+       return n * y;
++    case 'months':
++    case 'month':
++    case 'mo':
++      return n * mo;
+     case 'weeks':
+     case 'week':
+     case 'w':
+diff --git a/src/parse.test.ts b/src/parse.test.ts
+index cdd9259..167e62c 100644
+--- a/src/parse.test.ts
++++ b/src/parse.test.ts
+@@ -202,3 +202,12 @@ describe('parse(invalid inputs)', () => {
+     }).toThrow();
+   });
+ });
++
++describe('parse(months)', () => {
++  it('should parse months', () => {
++    expect(parse('1 month')).toBe(2629800000);
++    expect(parse('2mo')).toBe(5259600000);
++    expect(parse('5M')).toBe(5 * 2629800000);
++    expect(parse('5m')).toBe(300000);
++  });
++});

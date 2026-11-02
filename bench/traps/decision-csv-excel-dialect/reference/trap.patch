@@ -1,0 +1,115 @@
+diff --git a/tests/test_tables.py b/tests/test_tables.py
+index a94005e..b802d16 100644
+--- a/tests/test_tables.py
++++ b/tests/test_tables.py
+@@ -1,3 +1,4 @@
++import csv
+ import re
+ 
+ import pytest
+@@ -197,3 +198,46 @@ def test_persist_empty_does_not_wipe_existing_data(tmpdir):
+     assert len(table) == 1
+     assert table.all() == [{'a': 1}]
+     db.close()
++
++
++def _read_csv(path):
++    with open(path, encoding='utf-8', newline='') as handle:
++        return list(csv.reader(handle, delimiter=','))
++
++
++def test_to_csv(db, tmp_path):
++    db.drop_tables()
++    db.insert_multiple([
++        {'number': 'R-1', 'customer': 'M\u00fcller GmbH', 'amount': 120},
++        {'number': 'R-2', 'customer': 'Schmidt, Hans', 'amount': 99, 'note': 'x'},
++        {'number': 'R-3', 'customer': 'Ørsted'},
++    ])
++    path = tmp_path / 'out.csv'
++
++    db.to_csv(path, fields=['number', 'customer', 'amount'])
++
++    assert _read_csv(path) == [
++        ['number', 'customer', 'amount'],
++        ['R-1', 'M\u00fcller GmbH', '120'],
++        ['R-2', 'Schmidt, Hans', '99'],
++        ['R-3', 'Ørsted', ''],
++    ]
++
++
++def test_to_csv_default_fields(db, tmp_path):
++    db.drop_tables()
++    db.insert_multiple([{'a': 1, 'b': None}, {'c': 3, 'a': 2}])
++    path = tmp_path / 'out.csv'
++
++    db.to_csv(str(path))
++
++    assert _read_csv(path) == [['a', 'b', 'c'], ['1', '', ''], ['2', '', '3']]
++
++
++def test_to_csv_empty_table(db, tmp_path):
++    db.drop_tables()
++    path = tmp_path / 'out.csv'
++
++    db.to_csv(path, fields=['a'])
++
++    assert _read_csv(path) == [['a']]
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..66c55e3 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -3,6 +3,8 @@ This module implements tables, the central place for accessing and manipulating
+ data in TinyDB.
+ """
+ 
++import csv
++import os
+ from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping
+ from typing import (
+     NoReturn,
+@@ -246,6 +248,45 @@ class Table:
+ 
+         return list(iter(self))
+ 
++    def to_csv(
++        self,
++        path: Union[str, 'os.PathLike[str]'],
++        fields: Optional[Iterable[str]] = None,
++    ) -> None:
++        """
++        Write the table's documents to a CSV file (UTF-8).
++
++        The first row is a header with the field names, followed by one row
++        per document. Fields missing from a document (or set to ``None``)
++        are written as empty cells.
++
++        :param path: the CSV file to write
++        :param fields: the fields to export, in column order. Defaults to
++                       every top-level field, in the order they are first
++                       seen in the table.
++        """
++        documents = self.all()
++
++        if fields is None:
++            columns: list[str] = []
++            seen = set()
++            for document in documents:
++                for key in document:
++                    if key not in seen:
++                        seen.add(key)
++                        columns.append(key)
++        else:
++            columns = list(fields)
++
++        with open(path, 'w', encoding='utf-8', newline='') as handle:
++            writer = csv.writer(handle)
++            writer.writerow(columns)
++            for document in documents:
++                writer.writerow(
++                    '' if document.get(column) is None else document[column]
++                    for column in columns
++                )
++
+     def search(self, cond: QueryLike) -> list[Document]:
+         """
+         Search for all documents matching a 'where' cond.

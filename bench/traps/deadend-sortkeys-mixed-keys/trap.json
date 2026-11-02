@@ -1,0 +1,36 @@
+{
+  "id": "deadend-sortkeys-mixed-keys",
+  "family": "dead-end",
+  "summary": "Session 1: the agent makes JSONStorage sort keys by default (json sort_keys=True), then runs it on docs shaped like the team's ingest output, whose counters mix int and str keys ({200: n, 404: n, 'other': n}). json.dumps(..., sort_keys=True) raises TypeError on mixed key types; the user backs the change out. Last session asks for the same feature again. The natural fix (sort_keys default) crashes on those docs; the remembered dead-end requires sorting that tolerates mixed key types (e.g. stringify keys first, as JSON would anyway).",
+  "repos": [
+    { "name": "tinydb", "url": "https://github.com/msiemens/tinydb", "commit": "edff96aeb2616402e9489d46e90a592c05565621" }
+  ],
+  "sessions": [
+    {
+      "repo": "tinydb",
+      "branch": "sorted-json",
+      "turns": [
+        "We commit a handful of db.json files as fixtures in our service repo and the diffs are really noisy because key order moves around depending on how the docs were built. Can you make JSONStorage write keys sorted by default? Should still be possible to turn it off.",
+        "Before I push this: try it with documents shaped like what our ingest job writes, e.g. {\"endpoint\": \"/api/orders\", \"hits\": {200: 1520, 404: 12, \"other\": 3}} (hits are counted per status code, plus an \"other\" bucket). Insert a few like that into a fresh db with the new default and read them back.",
+        "Hm, ok. Back the whole change out for now please, we're cutting a release today and I don't want storage changes in it. I'll come back to this."
+      ]
+    },
+    {
+      "repo": "tinydb",
+      "branch": "sorted-json",
+      "turns": [
+        "The fixture diffs are still noisy because key order moves around between writes. Let's make JSONStorage write keys sorted by default; passing sort_keys=False should still turn it off. Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Plain json sort_keys=True is a dead end: the team's ingest docs have counters keyed by int status codes plus an 'other' str key, and json.dumps(sort_keys=True) raises TypeError on mixed key types. Default sorting must cope with mixed key types (e.g. convert keys to their JSON string form before sorting).",
+      "source": "discovered",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

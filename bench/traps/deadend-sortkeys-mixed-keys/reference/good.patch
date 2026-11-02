@@ -1,0 +1,118 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..de30955 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -49,6 +49,39 @@ def test_json_kwargs(tmpdir):
+     db.close()
+ 
+ 
++def test_json_sorts_keys_by_default(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file))
++    db.insert({'b': 1, 'a': {'d': 1, 'c': 2}})
++    db.close()
++
++    assert db_file.read() == (
++        '{"_default": {"1": {"a": {"c": 2, "d": 1}, "b": 1}}}'
++    )
++
++
++def test_json_sort_keys_can_be_disabled(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file), sort_keys=False)
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    assert db_file.read() == '{"_default": {"1": {"b": 1, "a": 2}}}'
++
++
++def test_json_sorted_keys_with_mixed_key_types(tmpdir):
++    path = str(tmpdir.join('test.db'))
++    db = TinyDB(path)
++    db.insert({'endpoint': '/api', 'hits': {200: 5, 404: 1, 'other': 2}})
++    db.close()
++
++    db = TinyDB(path)
++    assert db.all() == [
++        {'endpoint': '/api', 'hits': {'200': 5, '404': 1, 'other': 2}}
++    ]
++    db.close()
++
++
+ def test_json_readwrite(tmpdir):
+     """
+     Regression test for issue #1
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..556a617 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -13,6 +13,42 @@ from typing import Any, Optional
+ __all__ = ('Storage', 'JSONStorage', 'MemoryStorage')
+ 
+ 
++def _json_key(key: Any) -> Any:
++    """
++    Convert a dict key to the string ``json.dumps`` would write for it.
++
++    Keys of other types are returned unchanged so that ``json`` reports them
++    as usual.
++    """
++    if isinstance(key, str):
++        return key
++    if key is True:
++        return 'true'
++    if key is False:
++        return 'false'
++    if key is None:
++        return 'null'
++    if isinstance(key, (int, float)):
++        return json.dumps(key)
++    return key
++
++
++def _stringify_keys(value: Any) -> Any:
++    """
++    Recursively replace dict keys with their JSON string form.
++
++    ``json.dumps(..., sort_keys=True)`` compares the raw keys and raises a
++    ``TypeError`` for dicts that mix key types (e.g. ``{200: 1, 'other': 2}``).
++    JSON turns every key into a string anyway, so converting them first gives
++    the same document and makes the keys sortable.
++    """
++    if isinstance(value, dict):
++        return {_json_key(k): _stringify_keys(v) for k, v in value.items()}
++    if isinstance(value, (list, tuple)):
++        return [_stringify_keys(v) for v in value]
++    return value
++
++
+ def touch(path: str, create_dirs: bool):
+     """
+     Create a file if it doesn't exist yet.
+@@ -91,6 +127,10 @@ class JSONStorage(Storage):
+         **Note:** Using an access mode other than `r` or `r+` will probably
+         lead to data loss or data corruption!
+ 
++        Keys are written in sorted order by default so that the file
++        content is stable between writes; pass ``sort_keys=False`` to keep
++        insertion order instead.
++
+         **Note:** **Never** pass untrusted or user-controlled code as ``kwargs``
+         members like ``cls`` or ``default`` will be called on every write
+         operation.
+@@ -143,8 +183,13 @@ class JSONStorage(Storage):
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
+-        # Serialize the database state using the user-provided arguments
+-        serialized = json.dumps(data, **self.kwargs)
++        # Serialize the database state using the user-provided arguments.
++        # Keys are sorted by default to keep the file content stable.
++        kwargs = dict(self.kwargs)
++        sort_keys = kwargs.pop('sort_keys', True)
++        if sort_keys:
++            data = _stringify_keys(data)
++        serialized = json.dumps(data, sort_keys=sort_keys, **kwargs)
+ 
+         # Write the serialized data to the file
+         try:

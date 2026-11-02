@@ -1,0 +1,36 @@
+{
+  "id": "constraint-scheduler-private-rng",
+  "family": "constraint",
+  "summary": "Session 1 (branch job-jitter, committed): the agent adds Job.jitter() using the random module (as Job.to() already does). The user explains their replay tool seeds the global random module and diffs runs against golden output, so the scheduler must never draw from the global RNG; it gets its own generator. Last session (fresh branch from main, so the jitter work and any private RNG are not in the tree, and Job.to() still uses global random) asks for retries with exponential backoff plus random jitter. The idiomatic random.uniform(...) consumes the global RNG.",
+  "repos": [
+    { "name": "schedule", "url": "https://github.com/dbader/schedule", "commit": "82a43db1b938d8fdf60103bd41f329e06c8d3651" }
+  ],
+  "sessions": [
+    {
+      "repo": "schedule",
+      "branch": "job-jitter",
+      "turns": [
+        "We run about 40 workers that all do `every(10).minutes` and they hit the upstream API in the very same second. Add a `.jitter(seconds)` modifier on Job that shifts each computed next_run by a random offset between 0 and `seconds`. Add tests.",
+        "One thing: our replay tool seeds the global `random` module and diffs every run against golden output. Anything in the scheduler pulling numbers from the module-level RNG shifts the sequence and breaks the replays, which is what happened last time someone added randomness here. The scheduler must not touch the global random state; give it its own generator.",
+        "Good. Commit it on this branch."
+      ]
+    },
+    {
+      "repo": "schedule",
+      "branch": "retry-backoff",
+      "turns": [
+        "Let's add retries for flaky jobs: `every(1).hour.do(sync).retry(times=3, base_delay=30)`. If a run raises, retry it after base_delay seconds, then after 2x base_delay, 4x base_delay and so on, each delay plus a random 0 to base_delay seconds of jitter so the workers don't all retry in lockstep. At most `times` retries; if they all fail, give up and go back to the job's normal schedule. Exceptions from a job that has retries configured shouldn't propagate out of run_pending. Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "The scheduler must never draw from the global `random` module state (random.random/uniform/randint...): the team's replay tool seeds it globally and diffs runs against golden output. Use a private generator (random.Random() instance or SystemRandom).",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

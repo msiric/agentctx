@@ -1,0 +1,98 @@
+diff --git a/README.md b/README.md
+index d752132..1ec45ec 100644
+--- a/README.md
++++ b/README.md
+@@ -43,6 +43,17 @@ ms(-3 * 60000, { long: true })        // "-3 minutes"
+ ms(ms('10 hours'), { long: true })    // "10 hours"
+ ```
+ 
++### Compound Format
++
++```ts
++ms(5400000, { compound: true })       // "1h 30m"
++ms(90061000, { compound: true })      // "1d 1h 1m 1s"
++ms(-5400000, { compound: true })      // "-1h 30m"
++```
++
++Parts are separated by a space, days are the largest unit and leftover
++milliseconds are dropped.
++
+ ### Input Formats (Units)
+ 
+ ```ts
+diff --git a/src/format.test.ts b/src/format.test.ts
+index cdabb0f..06cc8ca 100644
+--- a/src/format.test.ts
++++ b/src/format.test.ts
+@@ -259,3 +259,15 @@ describe('format(invalid inputs)', () => {
+     }).toThrow();
+   });
+ });
++
++describe('format(number, { compound: true })', () => {
++  it('should list each non-zero unit', () => {
++    expect(format(5400000, { compound: true })).toBe('1h 30m');
++    expect(format(90061000, { compound: true })).toBe('1d 1h 1m 1s');
++    expect(format(45000, { compound: true })).toBe('45s');
++  });
++
++  it('should support negative numbers', () => {
++    expect(format(-5400000, { compound: true })).toBe('-1h 30m');
++  });
++});
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..ea3a362 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -36,6 +36,12 @@ interface Options {
+    * Set to `true` to use verbose formatting. Defaults to `false`.
+    */
+   long?: boolean;
++  /**
++   * Set to `true` to format as a sequence of units, e.g. `1h 30m` instead of
++   * `2h`. Days are the largest unit and leftover milliseconds are dropped.
++   * Ignored when `long` is set. Defaults to `false`.
++   */
++  compound?: boolean;
+ }
+ 
+ /**
+@@ -215,6 +221,26 @@ function fmtLong(ms: number): StringValue {
+   return `${ms} ms`;
+ }
+ 
++/**
++ * Compound format for `ms`.
++ */
++function fmtCompound(ms: number): string {
++  const sign = ms < 0 ? '-' : '';
++  let rest = Math.floor(Math.abs(ms) / s);
++  const parts: string[] = [];
++  for (const [size, unit] of [
++    [86400, 'd'],
++    [3600, 'h'],
++    [60, 'm'],
++    [1, 's'],
++  ] as const) {
++    const count = Math.floor(rest / size);
++    rest -= count * size;
++    if (count) parts.push(`${count}${unit}`);
++  }
++  return sign + (parts.length ? parts.join(' ') : '0s');
++}
++
+ /**
+  * Format the given integer as a string.
+  *
+@@ -227,7 +253,10 @@ export function format(ms: number, options?: Options): string {
+     throw new Error('Value provided to ms.format() must be of type number.');
+   }
+ 
+-  return options?.long ? fmtLong(ms) : fmtShort(ms);
++  if (options?.long) {
++    return fmtLong(ms);
++  }
++  return options?.compound ? fmtCompound(ms) : fmtShort(ms);
+ }
+ 
+ /**
