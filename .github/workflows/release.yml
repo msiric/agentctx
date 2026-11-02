@@ -3,12 +3,13 @@ name: release
 # Two ways in:
 #   - Actions tab > release > Run workflow (or: gh workflow run release.yml -f version=patch)
 #     bumps the version, tests, commits, tags, pushes and publishes. No local machine needed.
+#     Given an exact version that is already tagged, it publishes that tag instead (a retry).
 #   - pushing a vX.Y.Z tag (sh scripts/release X.Y.Z) publishes that tag.
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "patch, minor, major, or an exact X.Y.Z"
+        description: "patch, minor, major, or an exact X.Y.Z (an existing tag is re-published)"
         required: true
         default: patch
   push:
@@ -26,11 +27,11 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0   # tags, so the release script can refuse an existing one
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
@@ -44,9 +45,16 @@ jobs:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           [ "$GITHUB_REF_NAME" = main ] || { echo "run this from main"; exit 1; }
+          case $INPUT_VERSION in [0-9]*.[0-9]*.[0-9]*)
+            if git rev-parse -q --verify "refs/tags/v$INPUT_VERSION" >/dev/null; then
+              echo "v$INPUT_VERSION is already tagged; publishing that tag"
+              git checkout -q "v$INPUT_VERSION"; echo "PUSH=0" >> "$GITHUB_ENV"; exit 0
+            fi ;;
+          esac
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           TRAILKEEP_RELEASE_SKIP_TESTS=1 sh scripts/release "$INPUT_VERSION" --no-push
+          echo "PUSH=1" >> "$GITHUB_ENV"
 
       - name: Resolve version
         run: |
@@ -65,15 +73,13 @@ jobs:
         run: sh tests/run.sh
 
       - name: Push the release commit and tag
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && env.PUSH == '1'
         # Pushed with GITHUB_TOKEN, so the tag does not start this workflow a second time.
         run: git push origin main "v$V"
 
       - name: Publish to npm
-        env:
-          # Only needed until trusted publishing is set up on npmjs.com;
-          # leave the secret unset afterwards and npm uses OIDC instead.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        # Trusted publishing (OIDC): npmjs.com trusts this repo's release.yml, no token.
+        # If a publish fails after the tag was pushed, Run workflow with that exact version.
         run: |
           name=$(node -p 'require("./package.json").name')
           if npm view "$name@$V" version >/dev/null 2>&1; then

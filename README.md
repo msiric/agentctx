@@ -10,7 +10,7 @@ It's a single POSIX shell script that needs only `git`. It never changes your re
 npm install -g @trailkeep/cli && trailkeep install
 ```
 
-Or without npm:
+Or without npm, or if your npm goes through a company mirror that doesn't carry the package (a 404 from a feed proxy):
 
 ```sh
 git clone https://github.com/msiric/trailkeep ~/.trailkeep && ~/.trailkeep/bin/trailkeep install
@@ -148,6 +148,8 @@ The workflow bumps the version in all three places, runs the tests, and only the
 
 From a clone, `sh scripts/release patch` (or `X.Y.Z`) does the bump, tests, commit and tag locally and pushes; the tag starts the same workflow, which checks the versions, tests again and publishes. Either way, no machine but GitHub's talks to npm.
 
-npm authentication works one of two ways:
+npm authentication:
 - **Trusted publishing (preferred):** on npmjs.com, open the package's Settings, then Trusted Publisher, then GitHub Actions. Enter owner `msiric`, repository `trailkeep`, workflow `release.yml`. No secret is needed. npm only offers this for packages that already exist.
-- **An `NPM_TOKEN` repository secret,** for the first release only: a granular token with read-and-write access to packages and a short expiry. Delete it once trusted publishing is set up.
+- **An `NPM_TOKEN` repository secret** was used for the very first publish only. The workflow no longer reads it; trusted publishing is set up for `@trailkeep/cli`.
+
+If a publish fails after the release commit and tag were pushed, run the workflow again with that exact version (`-f version=X.Y.Z`); it publishes the existing tag without bumping.
