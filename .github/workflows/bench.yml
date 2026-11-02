@@ -59,6 +59,7 @@ jobs:
           npm install -g bun
           pip install -q basic-memory uv
           basic-memory --version || true
+          if grep -q '"hindsight"' "bench/plans/${{ inputs.plan }}.json"; then pip install -q hindsight-api && pip show hindsight-api | head -2; fi
           claude --version
 
       - name: Load earlier results
@@ -80,6 +81,7 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: python3 bench/harness/matrix.py --plan "bench/plans/${{ inputs.plan }}.json" --minutes "${{ inputs.minutes }}"
 
       - name: Save results

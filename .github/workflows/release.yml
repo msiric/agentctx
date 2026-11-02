@@ -90,7 +90,9 @@ jobs:
 
       - name: GitHub release
         env:
-          GH_TOKEN: ${{ github.token }}
+          # RELEASE_TOKEN (optional): a fine-grained token from the maintainer's
+          # account, so the release is shown as theirs rather than github-actions.
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
         run: |
           gh release view "v$V" >/dev/null 2>&1 ||
             gh release create "v$V" --verify-tag --generate-notes --title "v$V"
