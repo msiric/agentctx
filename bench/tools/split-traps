@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+"""Assign about a third of the traps to held-out, deterministically.
+
+    bench/tools/split-traps [COMMIT]   (default: the last commit that touched bench/traps)
+
+Each trap's rank is sha256(COMMIT + id). For each family with at least two
+traps, the lowest-ranked one is a held-out candidate; candidates are taken in
+rank order until a third of all traps are held out. Writes bench/traps/SPLIT.json.
+Nobody picks: the commit that adds the traps fixes the split.
+"""
+import glob, hashlib, json, os, subprocess, sys
+
+BENCH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+traps_dir = os.path.join(BENCH, "traps")
+commit = sys.argv[1] if len(sys.argv) > 1 else subprocess.run(
+    ["git", "log", "-1", "--format=%H", "--", traps_dir], cwd=BENCH, text=True, capture_output=True).stdout.strip()
+if not commit:
+    sys.exit("commit the traps first")
+traps = [json.load(open(f)) for f in sorted(glob.glob(os.path.join(traps_dir, "*", "trap.json")))]
+rank = lambda t: hashlib.sha256((commit + t["id"]).encode()).hexdigest()
+fams = {}
+for t in traps:
+    fams.setdefault(t["family"], []).append(t)
+candidates = sorted((min(ts, key=rank) for ts in fams.values() if len(ts) >= 2), key=rank)
+held = {t["id"] for t in candidates[: round(len(traps) / 3)]}
+split = {"commit": commit, "held_out": sorted(held), "dev": sorted(t["id"] for t in traps if t["id"] not in held)}
+json.dump(split, open(os.path.join(traps_dir, "SPLIT.json"), "w"), indent=1)
+print(json.dumps(split, indent=1))
