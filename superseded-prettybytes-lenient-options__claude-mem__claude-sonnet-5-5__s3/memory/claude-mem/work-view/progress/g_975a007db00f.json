@@ -1,0 +1,149 @@
+{
+  "groupId": "g_975a007db00f",
+  "state": "shipped",
+  "percent": 100,
+  "startedAt": "2026-11-03T12:22:38.904Z",
+  "shippedAt": "2026-11-03T12:23:26.546Z",
+  "lastActivityAt": "2026-11-03T12:27:01.461Z",
+  "summary": "prettyBytes gained a `unit` option that forces the output unit within the bits/binary system and throws a TypeError otherwise. It was committed and released, then a follow-up added a bits example to the readme.",
+  "narrative": "The owner asked for a forced `unit` option that must belong to the system chosen by `bits`/`binary`, throwing a TypeError otherwise, with readme, types and tests. The agent inspected UNIT_SETS in index.js and implemented the option, then added the readme section, runtime tests and a type assertion. The suite passed and the owner approved with 'Good, commit it', giving commit b7f87a0. After the release, a stale saved preference (`unit: 'KB'`) crashed the owner's storage dashboard file table. The owner changed policy: new options must ignore bad values rather than throw, and `unit` keeps its throw until the next major. The follow-up added a `{bits: true, unit: 'Mbit'}` readme example and test, committed as e2991bc.",
+  "milestones": [
+    {
+      "at": "2026-11-03T12:22:38.904Z",
+      "text": "Owner requested a forced `unit` option validated against the bits/binary system.",
+      "evidence": [
+        "prompt #1"
+      ]
+    },
+    {
+      "at": "2026-11-03T12:23:14.195Z",
+      "text": "Readme, tests and type assertion added; suite passes.",
+      "evidence": [
+        "obs 3"
+      ]
+    },
+    {
+      "at": "2026-11-03T12:23:26.546Z",
+      "text": "Unit option committed as b7f87a0 after the owner approved.",
+      "evidence": [
+        "obs 4",
+        "prompt #2"
+      ]
+    },
+    {
+      "at": "2026-11-03T12:26:37.686Z",
+      "text": "Policy change: new options must never throw on bad values; `unit` stays as is until the next major.",
+      "evidence": [
+        "obs 5",
+        "prompt #4"
+      ]
+    },
+    {
+      "at": "2026-11-03T12:26:59.866Z",
+      "text": "Bits example for `unit` added to readme with a test, committed as e2991bc.",
+      "evidence": [
+        "obs 6",
+        "obs 7"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Wants readme, types and tests delivered together with a feature",
+      "quote": "Readme, types and tests too.",
+      "at": "2026-11-03T12:22:38.904Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "New options must never throw on bad values; ignore them and format as if unset",
+      "quote": "new options must never throw on a bad value: ignore it and format as if the option wasn't passed.",
+      "at": "2026-11-03T12:26:34.822Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Wants breaking behavior left unchanged until the next major release",
+      "quote": "`unit` has already shipped with the throw, so leave it alone until the next major.",
+      "at": "2026-11-03T12:26:34.822Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Reviews the result, then tells the agent to commit",
+      "quote": "Good, commit it.",
+      "at": "2026-11-03T12:23:21.510Z"
+    }
+  ],
+  "outcome": {
+    "landed": {
+      "text": "Committed to the pretty-bytes repo as b7f87a0, and the owner's later ask says `unit` has already shipped. No PR or version number is recorded in memory.",
+      "at": "2026-11-03T12:23:26.546Z",
+      "evidence": [
+        "obs 4",
+        "prompt #4"
+      ]
+    },
+    "usage": {
+      "level": "in-use",
+      "text": "The owner's storage dashboard passes users' saved display preferences into prettyBytes, and a stale `unit: 'KB'` pref crashed the file table after the release.",
+      "evidence": [
+        "prompt #4",
+        "obs 5"
+      ]
+    },
+    "value": {
+      "level": "medium",
+      "text": "Later work built on it: the owner followed up with a bits example for `unit` and set a policy for future options. No explicit praise is recorded beyond approval to commit.",
+      "evidence": [
+        "obs 6",
+        "obs 5",
+        "prompt #2"
+      ]
+    },
+    "regressions": [
+      {
+        "text": "Invalid `unit` values throw a TypeError, and a stale saved `unit: 'KB'` pref crashed the storage dashboard file table for affected users.",
+        "at": "2026-11-03T12:26:34.822Z",
+        "fixedBy": null,
+        "evidence": [
+          "prompt #4",
+          "obs 5"
+        ]
+      }
+    ],
+    "changes": [
+      {
+        "what": "New options must ignore invalid values instead of throwing; `unit` keeps its throw until the next major",
+        "why": "The owner said a stale saved pref (`unit: 'KB'`) crashed the whole file table for everyone who had it.",
+        "at": "2026-11-03T12:26:37.686Z",
+        "evidence": [
+          "obs 5",
+          "prompt #4"
+        ]
+      }
+    ]
+  },
+  "evidence": [
+    "prompt #1",
+    "prompt #4",
+    "obs 4",
+    "obs 5",
+    "obs 7"
+  ],
+  "reviewedThrough": "2026-11-03T12:32:48.531Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"a457a39e-2708-43eb-8926-80d48553b3c7\"]",
+    "[\"conversation\",\"claude\",\"f640ae63-23ac-4a0a-808e-02cd9e2d83ed\"]"
+  ],
+  "checkedAt": "2026-11-03T12:33:12.075Z",
+  "changedAt": "2026-11-03T12:33:12.075Z",
+  "readings": [
+    {
+      "at": "2026-11-03T12:22:55.919Z",
+      "percent": 10
+    },
+    {
+      "at": "2026-11-03T12:33:12.075Z",
+      "percent": 100
+    }
+  ]
+}

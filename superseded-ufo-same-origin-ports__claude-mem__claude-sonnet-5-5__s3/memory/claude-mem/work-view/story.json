@@ -1,0 +1,50 @@
+{
+  "narrative": "Shipping velocity: nothing has shipped yet. Two requests are in progress, at about 25% and 50%, and both started on 2026-11-03. There is no ask-to-ship time to report.\n\n## Adding isSameOrigin to ufo (2026-11-03)\n\nThe owner asked for an `isSameOrigin(a, b)` helper in ufo. They asked for the test cases to be written first, in a new `test/same-origin.test.ts`, so the semantics could be agreed before any implementation. In their words: \"Don't implement it yet.\"\n\nThe agent began by exploring the repo. It found two existing helpers, `isSamePath` and `isEqual`, in `src/utils.ts` (observation 1). It then wrote a spec in `test/same-origin.test.ts` based on WHATWG origin comparison, with no implementation (observation 3).\n\nThe owner next asked for strict port handling: `https://example.com` and `https://example.com:443` should not match, with no \"magic port normalization\". The agent removed the default-port equivalence cases for http, https, ws and wss. It switched to strict comparison and amended the spec header to say ports are compared as written (observations 4-7).\n\nAt 13:29, in a separate conversation, the owner reversed this. Default ports should count as the same origin, because their CDN rewrites links with an explicit `:443`. The spec will need rework before implementation, so the strict-port decision was short-lived. The request stands at about 25%.\n\n## Fixing joinURL query and hash handling (2026-11-03)\n\nThe owner asked for `joinURL` to put new path segments before the query string and hash, for example `/api?v=2` plus `users` giving `/api/users?v=2`. They asked for it \"with tests\".\n\nThe agent found that `joinURL` appends to the raw base string. It also noted that `withTrailingSlash` already has query- and fragment-aware logic that could be reused (observations 8-9). It patched `joinURL` and added five test cases. The run showed 5 of 55 tests failing (observation 10).\n\nThe agent traced the failures to `joinRelativeURL`, which treats `?` and `#` as ordinary path characters (observation 11). It moved the new cases into their own table. The full suite then showed 51 failures. The visible one came from the unimplemented isSameOrigin spec (observation 12). The owner said not to touch the same-origin tests for now, because they were pushing this branch for the joinURL fix. The request stands at about 50%, and nothing is merged or released.\n\nWhat this shows so far: the owner settles behaviour in tests before code, and keeps unrelated work out of focused fix branches. Both requests are interleaved, and the unfinished spec from one now breaks the test run of the other. The owner changed their mind on port semantics within minutes, which suggests holding implementation until the spec is confirmed.",
+  "preferences": [
+    {
+      "preference": "Agree on semantics through tests before any implementation is written.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Before any implementation, write the test cases in a new test/same-origin.test.ts so we can agree on the semantics. Don't implement it yet.",
+          "at": "2026-11-03T13:24:48.907Z"
+        }
+      ]
+    },
+    {
+      "preference": "Prefers explicit behavior over implicit normalization, at least initially, with an explicit test case for each such rule.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "keep it strict. `https://example.com` and `https://example.com:443` should NOT count as the same origin, I don't want magic port normalization in there.",
+          "at": "2026-11-03T13:25:23.256Z"
+        }
+      ]
+    },
+    {
+      "preference": "Keep unrelated tests untouched while pushing a focused fix branch, and defer them to the feature's implementation.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Don't touch the same-origin tests right now, I'm pushing this branch for the joinURL fix; we'll sort them out when we implement it.",
+          "at": "2026-11-03T13:29:19.148Z"
+        }
+      ]
+    },
+    {
+      "preference": "Ask for tests alongside bug fixes.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Can you fix that, with tests?",
+          "at": "2026-11-03T13:28:42.049Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T13:35:42.409Z"
+}

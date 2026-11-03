@@ -1,0 +1,28 @@
+{
+  "narrative": "Shipping velocity: nothing has shipped yet. One request is on record, started on 2026-11-03, and it is about 60 percent done, built but not released. There is no ask-to-ship time to report.\n\n## Add parseCompound helper for compound durations in ms\n\nOn 2026-11-03 the owner asked for a `parseCompound` helper in ms. It should turn compound durations such as \"1h 30m\" or \"2 days 4 hours\" into total milliseconds. The owner asked for three things: reuse `parse` for each piece, export the helper from src/index.ts, and put tests in a new file next to the existing ones.\n\nThe agent added `parseCompound`, exported it from src/index.ts and wrote the new test file (obs 1-3). Jest enforces 100% coverage, which shaped the tests (obs 2).\n\nThe owner then corrected the error handling. They asked for a TypeError that includes the input instead of returning NaN, because a NaN once ended up in a setTimeout and took a long time to track down. The agent reworked the error handling and the tests (obs 4).\n\nIn a second conversation the owner continued with `parseClock` for m:ss and h:mm:ss timer strings. It was added with its own test file (obs 10). The two conversations are grouped as one request.\n\nMemory shows no PR, merge or release yet. The request is in-progress at about 60 percent, and its last recorded activity is 2026-11-03 at 12:16 UTC.\n\nOne lesson so far: the owner wants bad input to fail loudly, and wants new code to reuse existing helpers. The next review should check whether the work was merged and released.",
+  "preferences": [
+    {
+      "preference": "Fail loudly with a descriptive error on bad input rather than returning NaN.",
+      "kind": "correction",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "make it throw a TypeError that includes the input, not return NaN. We had NaN end up in a setTimeout once and it took ages to track down.",
+          "at": "2026-11-03T12:08:26.209Z"
+        }
+      ]
+    },
+    {
+      "preference": "Reuse existing helpers and put tests in a new test file next to the others.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "reuse `parse` for the pieces, and put its tests in a new test file next to the others.",
+          "at": "2026-11-03T12:07:41.629Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T12:18:24.240Z"
+}

@@ -1,0 +1,65 @@
+{
+  "narrative": "Shipping velocity: one request has shipped and one is nearly done, all on 2026-11-03. The unit option went from ask (12:22) to commit (12:23) in under a minute of recorded time, and the significantDigits option reached a passing suite within about 30 seconds of its ask, with no commit recorded yet.\n\n## Forced unit option for prettyBytes (2026-11-03)\n\nThe owner asked for a `unit` option on prettyBytes that forces the output unit. Their examples were `{unit: 'MB'}`, which gives `0.00134 MB`, and `{unit: 'B'}`, which gives `1337 B`. The unit has to belong to the system chosen by the `bits` and `binary` options. A unit outside that system should throw a TypeError, the same as the other option checks. The owner also asked for readme, types and tests in the same change.\n\nThe agent inspected UNIT_SETS in index.js, implemented the option, and added the readme section, runtime tests and a type assertion. The suite passed and the owner approved with \"Good, commit it\". The work was committed as b7f87a0 at 12:23.\n\nAfter the release, a stale saved preference (`unit: 'KB'`) crashed the owner's storage dashboard file table. The owner changed policy: new options must ignore bad values and format as if unset, while `unit` keeps its throw until the next major release. A follow-up added a `{bits: true, unit: 'Mbit'}` readme example and test, committed as e2991bc. Memory records no PR or version number. The throwing behavior remains an unfixed regression, left in place on purpose.\n\n## Significant digits option (2026-11-03)\n\nAt 12:30 the owner asked for a `significantDigits` option that changes the default 3-digit rounding. For 1337 it gives `1.3 kB` at 2 digits and `1.337 kB` at 4. It applies only when the fraction-digit options are unset. They asked for \"Readme, types and tests as usual.\"\n\nThe agent mapped the toPrecision logic in index.js, which uses a minimum of 3 digits. It then added the option to the implementation, types and readme. Following the new policy, invalid values fall back to 3 digits instead of throwing. Tests cover 1 to 4 digits, integer-part preservation, fraction-option precedence and the invalid fallback, plus a type assertion. npm test passes with 55 tests. The request is at about 80%, with no commit, PR or release recorded.\n\n## What this teaches so far\n\nThe owner writes concrete requests: they give example outputs, name the failure behavior, and list the supporting deliverables up front. Agents should treat validation, documentation, type definitions and tests as part of the feature itself.\n\nA shipped throw caused a production crash, and the owner turned that into a standing rule within minutes. The next option applied it straight away. Agents should default to forgiving handling of bad input for new options, and should not change shipped behavior before a major release.",
+  "preferences": [
+    {
+      "preference": "Wants readme, types and tests delivered together with each feature",
+      "kind": "directive",
+      "supportCount": 2,
+      "quotes": [
+        {
+          "quote": "Readme, types and tests too.",
+          "at": "2026-11-03T12:22:38.904Z"
+        },
+        {
+          "quote": "Readme, types and tests as usual.",
+          "at": "2026-11-03T12:30:04.999Z"
+        }
+      ]
+    },
+    {
+      "preference": "New options must never throw on bad values; ignore them and format as if unset",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "new options must never throw on a bad value: ignore it and format as if the option wasn't passed.",
+          "at": "2026-11-03T12:26:34.822Z"
+        }
+      ]
+    },
+    {
+      "preference": "Wants shipped breaking behavior left unchanged until the next major release",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "`unit` has already shipped with the throw, so leave it alone until the next major.",
+          "at": "2026-11-03T12:26:34.822Z"
+        }
+      ]
+    },
+    {
+      "preference": "Reviews the result first, then tells the agent to commit",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Good, commit it.",
+          "at": "2026-11-03T12:23:21.510Z"
+        }
+      ]
+    },
+    {
+      "preference": "Gives concrete example outputs and failure behavior in the ask",
+      "kind": "directive",
+      "supportCount": 2,
+      "quotes": [
+        {
+          "quote": "A unit that isn't in the active system should throw a TypeError, same as the other option checks.",
+          "at": "2026-11-03T12:22:38.904Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T12:33:38.329Z"
+}

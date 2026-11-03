@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-03T12:32:48.519Z",
+  "conversations": {
+    "[\"conversation\",\"claude\",\"a457a39e-2708-43eb-8926-80d48553b3c7\"]": "g_975a007db00f",
+    "[\"conversation\",\"claude\",\"f640ae63-23ac-4a0a-808e-02cd9e2d83ed\"]": "g_975a007db00f",
+    "[\"conversation\",\"claude\",\"d12594c7-211e-4032-956b-e87c0339e8a7\"]": "g_96a07d6bdcdb"
+  },
+  "groups": {
+    "g_975a007db00f": {
+      "title": "Add a forced unit option to prettyBytes",
+      "anchor": "[\"conversation\",\"claude\",\"a457a39e-2708-43eb-8926-80d48553b3c7\"]",
+      "projectRoot": "pretty-bytes",
+      "links": [
+        {
+          "kind": "agent-judgment",
+          "conversations": [
+            "[\"conversation\",\"claude\",\"a457a39e-2708-43eb-8926-80d48553b3c7\"]",
+            "[\"conversation\",\"claude\",\"f640ae63-23ac-4a0a-808e-02cd9e2d83ed\"]"
+          ],
+          "evidence": "Opening ask: \"Change of plan on option validation... `unit` has already shipped with the throw\" refers back to the forced `unit` option built in the open request and changes how its invalid values are handled."
+        }
+      ],
+      "decidedAt": "2026-11-03T12:32:48.519Z",
+      "anchorAsk": {
+        "text": "Let's add a `unit` option that forces the output unit instead of picking one automatically: `prettyBytes(1337, {unit: 'MB'})` → `0.00134 MB`, `prettyBytes(1337, {unit: 'B'})` → `1337 B`. It has to belong to the unit system that `bits`/`binary` select (so `KiB` only with `binary: true`, `Mbit` only with `bits: true`). A unit that isn't in the active system should throw a TypeError, same as the other option checks. Readme, types and tests too.",
+        "source": "user-prompt",
+        "sourceId": 1,
+        "url": "/api/work-view/evidence/prompt/1",
+        "promptNumber": 1,
+        "atEpoch": 1793708558904
+      }
+    },
+    "g_96a07d6bdcdb": {
+      "title": "Add significantDigits option to prettyBytes",
+      "anchor": "[\"conversation\",\"claude\",\"d12594c7-211e-4032-956b-e87c0339e8a7\"]",
+      "projectRoot": "pretty-bytes",
+      "links": [],
+      "decidedAt": "2026-11-03T12:32:48.519Z",
+      "anchorAsk": {
+        "text": "Next for pretty-bytes: a `significantDigits` option so callers can change the default rounding to 3 significant digits, e.g. `prettyBytes(1337, {significantDigits: 2})` → `1.3 kB` and `{significantDigits: 4}` → `1.337 kB`. It only applies when the fraction-digit options aren't set. Readme, types and tests as usual.",
+        "source": "user-prompt",
+        "sourceId": 7,
+        "url": "/api/work-view/evidence/prompt/7",
+        "promptNumber": 1,
+        "atEpoch": 1793709004999
+      }
+    }
+  },
+  "ignored": {}
+}

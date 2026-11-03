@@ -1,0 +1,84 @@
+{
+  "groupId": "g_aea2693a7617",
+  "state": "in-progress",
+  "percent": 60,
+  "startedAt": "2026-11-03T12:07:41.629Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-03T12:16:03.457Z",
+  "summary": "Add duration helpers to ms: `parseCompound` totals strings like \"1h 30m\" in ms and throws a TypeError on bad input. `parseClock` for m:ss and h:mm:ss strings follows. Both are implemented with tests but not yet shipped.",
+  "narrative": "The owner asked for `parseCompound` on 2026-11-03. It sums `parse` results per piece, is exported from src/index.ts, and has a new test file (obs 1-3). Jest enforces 100% coverage, which shaped the tests (obs 2). The owner then asked it to throw a TypeError that includes the input instead of returning NaN, citing a past NaN in a setTimeout. The agent reworked the error handling and tests (obs 4). In a second conversation the owner continued with `parseClock` for m:ss and h:mm:ss strings, and it was added with its own tests (obs 10). Memory shows no PR, merge or release yet, so the work is built but not shipped.",
+  "milestones": [
+    {
+      "at": "2026-11-03T12:07:41.629Z",
+      "text": "Owner asked for a parseCompound helper, exported from src/index.ts, reusing parse, with tests in a new file.",
+      "evidence": [
+        "prompt 1"
+      ]
+    },
+    {
+      "at": "2026-11-03T12:08:20.134Z",
+      "text": "parseCompound added and exported from src/index.ts with a new test file.",
+      "evidence": [
+        "obs 3"
+      ]
+    },
+    {
+      "at": "2026-11-03T12:08:41.559Z",
+      "text": "parseCompound reworked to throw a TypeError including the input on invalid strings, per the owner's request.",
+      "evidence": [
+        "obs 4",
+        "prompt 2"
+      ]
+    },
+    {
+      "at": "2026-11-03T12:15:56.581Z",
+      "text": "parseClock added for m:ss and h:mm:ss timer strings, with its own test file, in a follow-up conversation.",
+      "evidence": [
+        "obs 10",
+        "prompt 7"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "correction",
+      "preference": "Fail loudly with a descriptive error on bad input rather than returning NaN.",
+      "quote": "make it throw a TypeError that includes the input, not return NaN. We had NaN end up in a setTimeout once and it took ages to track down.",
+      "at": "2026-11-03T12:08:26.209Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Reuse existing helpers and put tests in a new test file next to the others.",
+      "quote": "reuse `parse` for the pieces, and put its tests in a new test file next to the others.",
+      "at": "2026-11-03T12:07:41.629Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "obs 1",
+    "obs 2",
+    "obs 3",
+    "obs 4",
+    "obs 10",
+    "prompt 1",
+    "prompt 2",
+    "prompt 7"
+  ],
+  "reviewedThrough": "2026-11-03T12:17:48.189Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"3e7e5654-6fdb-47d0-8393-495342e9a99d\"]",
+    "[\"conversation\",\"claude\",\"671a9ddd-994c-426d-9987-66c708fd8f1a\"]"
+  ],
+  "checkedAt": "2026-11-03T12:18:07.315Z",
+  "changedAt": "2026-11-03T12:18:07.315Z",
+  "readings": [
+    {
+      "at": "2026-11-03T12:07:59.166Z",
+      "percent": 10
+    },
+    {
+      "at": "2026-11-03T12:18:07.315Z",
+      "percent": 60
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+- [isSameOrigin default ports](issameorigin-default-ports.md) — :443/:80 count as same origin; same-origin tests need flipping at implementation

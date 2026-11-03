@@ -1,0 +1,1 @@
+- [New options never throw](new-options-never-throw.md) — bad option values are ignored, not thrown; `unit` throw stays until next major
