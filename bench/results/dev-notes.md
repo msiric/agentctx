@@ -151,3 +151,12 @@ Freeze trailkeep at the `trailkeep@capture` commit (released as 0.4.0) and
 every other tool at the versions recorded in the dev cells, size the filler
 arm from trailkeep's measured injection, and run the 6 held-out fact traps
 plus the held-out control once, all arms, 3 seeds.
+
+## 4. Correction: Hindsight's dev results are invalid (2026-11-03)
+
+Hindsight's memory extraction failed in every dev cell: its LLM provider
+defaulted to a model that is no longer served, so it stored nothing from the
+conversations (see `DEVIATIONS.md`). Its 3% in the tables above measures a
+broken setup, not Hindsight. With the model set explicitly it stores
+memories again (one-episode smoke check, which passed). Its held-out cells
+run with the fix.
