@@ -1,0 +1,76 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..20a537b 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -95,10 +95,21 @@ class Scheduler:
+         that should run every minute and you only call run_pending()
+         in one hour increments then your job won't be run 60 times in
+         between but only once.
++
++        If a job raises, the remaining due jobs still run; the first
++        exception is re-raised after all of them have been attempted.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        first_error: Optional[BaseException] = None
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception as e:
++                logger.exception("Job %s raised an exception", job)
++                if first_error is None:
++                    first_error = e
++        if first_error is not None:
++            raise first_error
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +126,11 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
++        jobs = self.jobs[:]
++        for i, job in enumerate(jobs):
+             self._run_job(job)
+-            time.sleep(delay_seconds)
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..da0ed89 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1,5 +1,6 @@
+ """Unit tests for schedule.py"""
+ 
++import pytest
+ import datetime
+ import functools
+ from unittest import mock, TestCase
+@@ -1597,3 +1598,23 @@ class SchedulerTests(TestCase):
+         scheduler.every()
+         scheduler.every(10).seconds
+         scheduler.run_pending()
++
++
++class TestRunPendingErrors:
++    def test_run_pending_runs_all_then_raises_first(self):
++        ran = []
++
++        def bad(name):
++            ran.append(name)
++            raise ValueError(name)
++
++        with mock_datetime(2010, 1, 6, 12, 15, 0):
++            s = schedule.Scheduler()
++            s.every().second.do(bad, "a")
++            s.every().second.do(lambda: ran.append("ok"))
++            s.every().second.do(bad, "b")
++        with mock_datetime(2010, 1, 6, 12, 15, 5):
++            with pytest.raises(ValueError) as cm:
++                s.run_pending()
++        assert str(cm.value) == "a"
++        assert sorted(ran) == ["a", "b", "ok"]
