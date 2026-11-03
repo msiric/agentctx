@@ -89,3 +89,22 @@ Open point for H3: the last session's total input tokens are higher with
 trailkeep@capture (median 140k) than with none (105k) or oracle-note (118k).
 Some of that is the agent doing the full task correctly instead of the
 trap's shortcut; the rest needs a look once all arms have 3 seeds.
+
+### Update after the second phase-A batch (2026-11-03 06:30 UTC)
+
+Other arms now have seed 1 complete and most of seed 2. Fact traps passed:
+
+| Arm | All seeds so far | Seed 1 only |
+|---|---|---|
+| oracle-note | 33/33 (100%) | 11/11 |
+| trailkeep@capture | 30/33 (91%) | 10/11 |
+| handoff | 13/20 (65%) | 7/11 |
+| resume | 12/19 (63%) | 8/11 |
+| native | 8/18 (44%) | 5/11 |
+| claude-mem | 8/19 (42%) | 4/11 |
+| hindsight | 1/19 (5%) | 0/11 |
+| basic-memory | 0/19 (0%) | 0/11 |
+| none | 1/33 (3%) | 0/11 |
+
+Session-start cost is unchanged from the table above. Phase A has 96 cells
+left (seeds 2 and 3); the next batch is running.
