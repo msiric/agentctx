@@ -1,0 +1,77 @@
+diff --git a/README.md b/README.md
+index 04307bd..5b05d9c 100644
+--- a/README.md
++++ b/README.md
+@@ -109,6 +109,8 @@ The [cookie storage model specification](https://tools.ietf.org/html/rfc6265#sec
+ `maxAge` are set, then `maxAge` takes precedence, but it is possible not all clients by obey this,
+ so if both are set, they should point to the same date and time.
+ 
++Browsers cap cookie lifetimes at 400 days, so `stringifySetCookie` throws a `TypeError` if `maxAge` is greater than 400 days (34,560,000 seconds).
++
+ ### expires
+ 
+ Specifies the `Date` object to be the value for the [`Expires` `Set-Cookie` attribute](https://tools.ietf.org/html/rfc6265#section-5.2.1).
+diff --git a/src/index.ts b/src/index.ts
+index 23fe8ea..463665c 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -66,6 +66,11 @@ const pathValueRegExp = /^[\u0020-\u003A\u003D-\u007E]*$/;
+ /**
+  * RegExp to match max-age-value in RFC 6265 sec 5.6.2
+  */
++/**
++ * Browsers cap cookie lifetimes at 400 days (in seconds).
++ */
++const maxMaxAge = 400 * 24 * 60 * 60;
++
+ const maxAgeRegExp = /^-?\d+$/;
+ 
+ /**
+@@ -204,6 +209,8 @@ export interface SetCookie {
+    * The [cookie storage model specification](https://tools.ietf.org/html/rfc6265#section-5.3) states that if both `expires` and
+    * `maxAge` are set, then `maxAge` takes precedence, but it is possible not all clients by obey this,
+    * so if both are set, they should point to the same date and time.
++   *
++   * Browsers cap cookie lifetimes at 400 days, so a `maxAge` greater than 34,560,000 seconds throws a `TypeError`.
+    */
+   maxAge?: number;
+   /**
+@@ -305,6 +312,12 @@ export function stringifySetCookie(
+       throw new TypeError(`option maxAge is invalid: ${cookie.maxAge}`);
+     }
+ 
++    if (cookie.maxAge > maxMaxAge) {
++      throw new TypeError(
++        `option maxAge exceeds the 400 day limit: ${cookie.maxAge}`,
++      );
++    }
++
+     str += "; Max-Age=" + cookie.maxAge;
+   }
+ 
+diff --git a/src/stringify-set-cookie.spec.ts b/src/stringify-set-cookie.spec.ts
+index f4e9cd4..18cdd6c 100644
+--- a/src/stringify-set-cookie.spec.ts
++++ b/src/stringify-set-cookie.spec.ts
+@@ -187,6 +187,21 @@ describe("cookie.stringifySetCookie", () => {
+       ).toThrow(/option maxAge is invalid/);
+     });
+ 
++    it("should throw when maxAge is over 400 days", () => {
++      expect(() =>
++        stringifySetCookie({ name: "foo", value: "bar", maxAge: 34560001 }),
++      ).toThrow(TypeError);
++      expect(() =>
++        stringifySetCookie({ name: "foo", value: "bar", maxAge: 34560001 }),
++      ).toThrow(/400 day limit/);
++    });
++
++    it("should allow maxAge of exactly 400 days", () => {
++      expect(
++        stringifySetCookie({ name: "foo", value: "bar", maxAge: 34560000 }),
++      ).toEqual("foo=bar; Max-Age=34560000");
++    });
++
+     it("should set max-age to value", () => {
+       expect(
+         stringifySetCookie({ name: "foo", value: "bar", maxAge: 1000 }),

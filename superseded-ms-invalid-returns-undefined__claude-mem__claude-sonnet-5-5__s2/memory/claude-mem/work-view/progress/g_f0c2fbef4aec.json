@@ -1,0 +1,98 @@
+{
+  "groupId": "g_f0c2fbef4aec",
+  "state": "in-progress",
+  "percent": 60,
+  "startedAt": "2026-11-03T05:07:18.668Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-03T05:15:20.499Z",
+  "summary": "Duration helpers for the ms library. parseCompound sums compound durations like \"1h 30m\" into milliseconds and throws a TypeError on bad input. parseClock handles m:ss and h:mm:ss strings. Both are tested.",
+  "narrative": "The owner asked for parseCompound on 2026-11-03. It reuses parse, is exported from src/index.ts, and has its own test file. A follow-up asked that bad input throw a TypeError that includes the input, not return NaN, because NaN once ended up in a setTimeout. The agent implemented this and fixed a Biome formatting error. A second conversation continued with parseClock for m:ss and h:mm:ss strings. It was added with its own tests and returns undefined on invalid input. The full suite passed with 100% coverage (205 tests), plus typecheck and Biome. No PR, merge or release is recorded, so the work is built and verified locally but not shown as shipped.",
+  "milestones": [
+    {
+      "at": "2026-11-03T05:07:18.668Z",
+      "text": "Owner asked for parseCompound, built on parse, with its own test file.",
+      "evidence": [
+        "prompt 1"
+      ]
+    },
+    {
+      "at": "2026-11-03T05:07:42.324Z",
+      "text": "parseCompound added and exported, with a dedicated test file.",
+      "evidence": [
+        "obs 3"
+      ]
+    },
+    {
+      "at": "2026-11-03T05:08:01.713Z",
+      "text": "Invalid input now throws a TypeError that includes the input, per the owner's request.",
+      "evidence": [
+        "prompt 2",
+        "obs 4"
+      ]
+    },
+    {
+      "at": "2026-11-03T05:14:52.773Z",
+      "text": "Owner asked for parseClock to continue the duration helpers.",
+      "evidence": [
+        "prompt 7"
+      ]
+    },
+    {
+      "at": "2026-11-03T05:15:03.627Z",
+      "text": "parseClock and its tests added.",
+      "evidence": [
+        "obs 11",
+        "obs 12"
+      ]
+    },
+    {
+      "at": "2026-11-03T05:15:15.913Z",
+      "text": "Six suites (205 tests) pass at 100% coverage, with tsc and Biome clean.",
+      "evidence": [
+        "obs 13"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Reuse existing functions instead of duplicating logic, and put tests in a new file beside the existing ones.",
+      "quote": "reuse `parse` for the pieces, and put its tests in a new test file next to the others.",
+      "at": "2026-11-03T05:07:18.668Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Fail loudly on bad input with a descriptive error rather than returning NaN.",
+      "quote": "make it throw a TypeError that includes the input, not return NaN. We had NaN end up in a setTimeout once and it took ages to track down.",
+      "at": "2026-11-03T05:07:46.444Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "prompt 1",
+    "prompt 2",
+    "prompt 7",
+    "obs 3",
+    "obs 4",
+    "obs 11",
+    "obs 12",
+    "obs 13"
+  ],
+  "reviewedThrough": "2026-11-03T05:17:25.621Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"0c648dd9-e723-46f9-ac5c-54b563aef6b0\"]",
+    "[\"conversation\",\"claude\",\"ba6a17d3-69c0-46d4-8fbb-df5204902ed6\"]"
+  ],
+  "checkedAt": "2026-11-03T05:17:36.621Z",
+  "changedAt": "2026-11-03T05:17:36.621Z",
+  "readings": [
+    {
+      "at": "2026-11-03T05:07:32.373Z",
+      "percent": 10
+    },
+    {
+      "at": "2026-11-03T05:17:36.621Z",
+      "percent": 60
+    }
+  ]
+}

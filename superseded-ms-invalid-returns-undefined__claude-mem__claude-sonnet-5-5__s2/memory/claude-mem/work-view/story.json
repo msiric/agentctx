@@ -1,0 +1,28 @@
+{
+  "narrative": "Nothing has shipped yet, so there is no shipping velocity to measure. One request has been reviewed. It was opened on 2026-11-03, is about 60% done, and its work is built and tested locally with no PR or release recorded.\n\n## Add parseCompound helper for compound durations in ms (2026-11-03)\n\nOn 2026-11-03 the owner asked for a `parseCompound` helper for the ms library. It should turn compound durations such as \"1h 30m\" or \"2 days 4 hours\" into total milliseconds. The owner gave three constraints. The helper reuses `parse` for each piece. It is exported from `src/index.ts`. Its tests go in a new test file next to the existing ones.\n\nThe agent added and exported `parseCompound` with a dedicated test file within about half a minute of the ask. A follow-up came soon after. The owner wanted bad input to throw a TypeError that includes the input, not return NaN, because NaN once ended up in a setTimeout and took a long time to track down. The agent made that change and fixed a Biome formatting error along the way.\n\nA second conversation continued the work at about 05:14 with `parseClock`, which handles m:ss and h:mm:ss strings. It was added with its own tests and returns undefined on invalid input. That differs from the TypeError the owner asked for in `parseCompound`, so the two helpers handle bad input differently.\n\nThe last check ran six suites (205 tests) at 100% coverage, with typecheck and Biome clean. All of this happened in about ten minutes. No PR, merge or release is recorded, so the request stays in progress and ask-to-ship time cannot be measured yet.\n\n## What this suggests so far\n\nThe owner is specific about design. They want existing code reused, tests kept in their own file, and loud failures on bad input, and they explain these with a past incident. The agent met each point on the first pass and needed little rework. The open items are the next steps after local verification (a PR and a release) and whether `parseClock` should follow the owner's TypeError rule.",
+  "preferences": [
+    {
+      "preference": "Reuse existing functions instead of duplicating logic, and put new tests in a new file beside the existing ones.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "reuse `parse` for the pieces, and put its tests in a new test file next to the others.",
+          "at": "2026-11-03T05:07:18.668Z"
+        }
+      ]
+    },
+    {
+      "preference": "Fail loudly on bad input with a descriptive error rather than returning NaN.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "make it throw a TypeError that includes the input, not return NaN. We had NaN end up in a setTimeout once and it took ages to track down.",
+          "at": "2026-11-03T05:07:46.444Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T05:17:55.216Z"
+}

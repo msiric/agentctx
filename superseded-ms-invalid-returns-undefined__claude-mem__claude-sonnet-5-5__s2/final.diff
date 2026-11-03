@@ -1,0 +1,218 @@
+diff --git a/README.md b/README.md
+index d752132..0e7d235 100644
+--- a/README.md
++++ b/README.md
+@@ -158,6 +158,19 @@ parse('1h'); // 3600000
+ format(2000); // "2s"
+ ```
+ 
++### Compound Durations
++
++Use `parseCompound` to sum several number-and-unit pieces. Pieces can be separated by whitespace, a comma, or nothing at all. Every piece needs a unit, and invalid input throws a `TypeError` (it never returns `NaN`).
++
++```ts
++import { parseCompound } from 'ms';
++
++parseCompound('1h 30m'); // 5400000
++parseCompound('1h, 30m'); // 5400000
++parseCompound('2 days 4 hours'); // 187200000
++parseCompound('1h 30'); // throws TypeError
++```
++
+ ### Enhanced Type Safety
+ 
+ If you want strict type checking for the input value, you can use `parseStrict`.
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..568e501 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -146,6 +146,68 @@ export function parse(str: string): number {
+   }
+ }
+ 
++/**
++ * Parse a compound duration such as `"1h 30m"`, `"1h, 30m"` or
++ * `"2 days 4 hours"` (pieces may be separated by whitespace and/or a single
++ * comma) and return the total in milliseconds. Each piece must have a unit and is parsed
++ * with {@link parse}.
++ *
++ * @param str - A compound duration string
++ * @returns The total in milliseconds (never `NaN`)
++ * @throws TypeError if `str` is not a string of 1 to 99 characters made up of
++ * valid number-and-unit pieces
++ */
++export function parseCompound(str: string): number {
++  if (typeof str !== 'string' || str.length === 0 || str.length > 100) {
++    throw new TypeError(
++      `Value provided to ms.parseCompound() must be a string with length between 1 and 99. value=${JSON.stringify(str)}`,
++    );
++  }
++  let total = NaN;
++  const piece = '-?\\d*\\.?\\d+ *[a-z]+';
++  if (
++    new RegExp(`^\\s*${piece}(?:(?:\\s*,\\s*|\\s*)${piece})*\\s*$`, 'i').test(
++      str,
++    )
++  ) {
++    total = 0;
++    for (const [match] of str.matchAll(new RegExp(piece, 'gi'))) {
++      total += parse(match);
++    }
++  }
++  if (Number.isNaN(total)) {
++    throw new TypeError(
++      `Value provided to ms.parseCompound() is not a valid compound duration. value=${JSON.stringify(str)}`,
++    );
++  }
++  return total;
++}
++
++const CLOCK_REGEX = /^(?:(\d+):([0-5]\d)|(\d+):([0-5]\d):([0-5]\d))$/;
++
++/**
++ * Parse a timer-style clock string and return the total in milliseconds.
++ * `"m:ss"` (e.g. `"1:30"`) and `"h:mm:ss"` (e.g. `"01:02:03"`) are supported.
++ * Seconds, and minutes in the `h:mm:ss` form, must be two digits from `00` to
++ * `59`. The leading hours/minutes field may have any number of digits.
++ *
++ * Unlike {@link parseCompound}, this does not throw: invalid input returns
++ * `undefined`.
++ *
++ * @param str - A clock string
++ * @returns The total in milliseconds, or `undefined` if `str` is not valid
++ */
++export function parseClock(str: string): number | undefined {
++  if (typeof str !== 'string') return undefined;
++  const match = CLOCK_REGEX.exec(str);
++  if (!match) return undefined;
++  const [h, m, s] =
++    match[1] !== undefined
++      ? [0, Number(match[1]), Number(match[2])]
++      : [Number(match[3]), Number(match[4]), Number(match[5])];
++  return ((h * 60 + m) * 60 + s) * 1000;
++}
++
+ /**
+  * Parse the given StringValue and return milliseconds.
+  *
+diff --git a/src/parse-clock.test.ts b/src/parse-clock.test.ts
+new file mode 100644
+index 0000000..2857e1e
+--- /dev/null
++++ b/src/parse-clock.test.ts
+@@ -0,0 +1,54 @@
++import { describe, expect, it } from '@jest/globals';
++import { parseClock } from './index';
++
++describe('parseClock(string)', () => {
++  it('should parse m:ss', () => {
++    expect(parseClock('1:30')).toBe(90000);
++    expect(parseClock('0:05')).toBe(5000);
++    expect(parseClock('00:00')).toBe(0);
++    expect(parseClock('59:59')).toBe(3599000);
++  });
++
++  it('should allow m to exceed 59 in m:ss', () => {
++    expect(parseClock('90:00')).toBe(5400000);
++  });
++
++  it('should parse h:mm:ss', () => {
++    expect(parseClock('01:02:03')).toBe(3723000);
++    expect(parseClock('1:02:03')).toBe(3723000);
++    expect(parseClock('0:00:00')).toBe(0);
++    expect(parseClock('100:00:01')).toBe(360001000);
++  });
++
++  it.each([
++    [''],
++    ['1'],
++    ['1:3'],
++    ['1:60'],
++    ['1:02:60'],
++    ['1:60:00'],
++    ['1:2:03'],
++    ['1:02:03:04'],
++    [':30'],
++    ['1:'],
++    ['1::30'],
++    ['-1:30'],
++    ['1:30.5'],
++    [' 1:30'],
++    ['1:30 '],
++    ['1:30\n'],
++    ['a:bc'],
++    ['1h30m'],
++  ])('should return undefined for %j', (input) => {
++    expect(parseClock(input)).toBeUndefined();
++  });
++
++  it('should return undefined for non-string values', () => {
++    // @ts-expect-error - testing runtime behavior
++    expect(parseClock(90)).toBeUndefined();
++    // @ts-expect-error - testing runtime behavior
++    expect(parseClock(null)).toBeUndefined();
++    // @ts-expect-error - testing runtime behavior
++    expect(parseClock(undefined)).toBeUndefined();
++  });
++});
+diff --git a/src/parse-compound.test.ts b/src/parse-compound.test.ts
+new file mode 100644
+index 0000000..d225594
+--- /dev/null
++++ b/src/parse-compound.test.ts
+@@ -0,0 +1,55 @@
++import { describe, expect, it } from '@jest/globals';
++import { parseCompound } from './index';
++
++describe('parseCompound(string)', () => {
++  it('should sum short units', () => {
++    expect(parseCompound('1h 30m')).toBe(5400000);
++  });
++
++  it('should sum long units with spaces', () => {
++    expect(parseCompound('2 days 4 hours')).toBe(2 * 86400000 + 4 * 3600000);
++  });
++
++  it('should handle a single piece', () => {
++    expect(parseCompound('5s')).toBe(5000);
++  });
++
++  it('should handle pieces without separating whitespace', () => {
++    expect(parseCompound('1h30m')).toBe(5400000);
++  });
++
++  it('should accept commas between parts', () => {
++    expect(parseCompound('1h, 30m')).toBe(5400000);
++    expect(parseCompound('1h,30m')).toBe(5400000);
++    expect(parseCompound('2 days , 4 hours,30 min')).toBe(
++      2 * 86400000 + 4 * 3600000 + 30 * 60000,
++    );
++  });
++
++  it('should handle decimals, case and surrounding whitespace', () => {
++    expect(parseCompound(' 1.5H 500ms ')).toBe(5400500);
++  });
++
++  it.each([
++    ['1h 30'],
++    ['100'],
++    ['1h 30foo'],
++    ['1h foo'],
++    ['1h,'],
++    [',1h'],
++    ['1h,, 30m'],
++    ['1h , , 30m'],
++    ['abc'],
++  ])('should throw a TypeError including the input for %j', (input) => {
++    expect(() => parseCompound(input)).toThrow(TypeError);
++    expect(() => parseCompound(input)).toThrow(JSON.stringify(input));
++  });
++
++  it('should throw a TypeError for empty, non-string or too long values', () => {
++    expect(() => parseCompound('')).toThrow(TypeError);
++    expect(() => parseCompound('')).toThrow('value=""');
++    // @ts-expect-error - testing runtime behavior
++    expect(() => parseCompound(5)).toThrow(TypeError);
++    expect(() => parseCompound('1h '.repeat(40))).toThrow(TypeError);
++  });
++});

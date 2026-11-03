@@ -1,0 +1,17 @@
+{
+  "narrative": "Shipping velocity: one request is on record, started 2026-11-03. It has reached about 70% within minutes of the first ask, but nothing has shipped. Memory shows no merge, release or confirmation, so there is no ask-to-ship time to report yet.\n\n## Make run_all sleep only between jobs (2026-11-03)\n\nThe owner opened with a small, specific ask. `Scheduler.run_all(delay_seconds=...)` slept after the last job as well, which wasted time. Memory records the diagnosis (observation 1): the sleep ran after every job, including the final one. About a minute later it records the code change in `schedule/__init__.py` (observation 2), so the sleep now happens only between jobs.\n\nThe request is in progress at 70%. Memory holds no PR, merge, release or owner confirmation, so the work counts as built but not shipped. There was no rework or stall. The whole record covers about ten minutes of activity.\n\nWhat this shows so far: the owner gives narrow, precisely stated asks, and the agent turns them into a fix quickly. The open gap is closing the loop, meaning review, merge and release. Until that is recorded, the velocity figure rests on a single unfinished request.",
+  "preferences": [
+    {
+      "preference": "Likes small, wasteful-behaviour fixes taken first and stated precisely.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Small one first: `run_all(delay_seconds=...)` also sleeps after the last job, which just wastes time.",
+          "at": "2026-11-03T02:09:54.627Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T02:10:29.824Z"
+}

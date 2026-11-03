@@ -1,0 +1,46 @@
+diff --git a/.claude/settings.local.json b/.claude/settings.local.json
+new file mode 100644
+index 0000000..16970d7
+--- /dev/null
++++ b/.claude/settings.local.json
+@@ -0,0 +1 @@
++{"basicMemory":{"primaryProject":"schedule","secondaryProjects":[],"captureFolder":"sessions","rememberFolder":"bm-remember","recallTimeframe":"3d","preCompactCapture":"extractive","sessionProfile":"coding","repository":"schedule","captureEvents":true,"placementConventions":"Suggested starting point (optional, emergent): sessions/ for coding checkpoints; decisions/ for decision notes; tasks/ for task notes; notes/ for research and design notes; bm-remember/ for quick captures. Notes work without folders.","teamProjects":{}},"outputStyle":"basic-memory"}
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..457779a 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -115,9 +115,11 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
++        jobs = self.jobs[:]
++        for i, job in enumerate(jobs):
+             self._run_job(job)
+-            time.sleep(delay_seconds)
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..02e19b1 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1278,6 +1278,16 @@ class SchedulerTests(TestCase):
+         schedule.run_all()
+         assert mock_job.call_count == 3
+ 
++    def test_run_all_delay_only_between_jobs(self):
++        mock_job = make_mock_job()
++        every().minute.do(mock_job)
++        every().hour.do(mock_job)
++        every().day.at("11:00").do(mock_job)
++        with mock.patch("schedule.time.sleep") as mock_sleep:
++            schedule.run_all(delay_seconds=5)
++        assert mock_job.call_count == 3
++        assert mock_sleep.call_count == 2
++
+     def test_run_all_with_decorator(self):
+         mock_job = make_mock_job()
+ 

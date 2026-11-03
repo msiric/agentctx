@@ -1,0 +1,1 @@
+- [Job error handling decision](job-error-handling-decision.md) — run all due jobs, then re-raise first exception; implemented on fix/job-errors (uncommitted)

@@ -1,0 +1,67 @@
+diff --git a/docs/usage.rst b/docs/usage.rst
+index 9d61f5c..a191241 100644
+--- a/docs/usage.rst
++++ b/docs/usage.rst
+@@ -636,7 +636,11 @@ To use the in-memory storage, use:
+     method. For example, you can set it to create prettified JSON files like
+     this:
+ 
+-    >>> db = TinyDB('db.json', sort_keys=True, indent=4, separators=(',', ': '))
++    >>> db = TinyDB('db.json', indent=4, separators=(',', ': '))
++
++    Keys are sorted by default (``sort_keys=True``). To keep insertion order,
++    pass ``sort_keys=False``. Note that sorting requires keys of a comparable
++    type: mixing e.g. ``int`` and ``str`` keys in one dict raises ``TypeError``.
+ 
+ .. note::
+     ``JSONStorage`` forwards ``**kwargs`` to ``json.dumps``. **Never** pass
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..4f76cb8 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,23 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_sort_keys_default(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    db = TinyDB(path)
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++    with open(path) as f:
++        content = f.read()
++    assert content.index('"a"') < content.index('"b"')
++
++
++def test_json_sort_keys_disabled(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    db = TinyDB(path, sort_keys=False)
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++    with open(path) as f:
++        content = f.read()
++    assert content.index('"b"') < content.index('"a"')
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..6a2b6fe 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -95,6 +95,9 @@ class JSONStorage(Storage):
+         members like ``cls`` or ``default`` will be called on every write
+         operation.
+ 
++        Keys are written sorted by default (``sort_keys=True``); pass
++        ``sort_keys=False`` to keep insertion order.
++
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
+@@ -103,6 +106,7 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
++        kwargs.setdefault('sort_keys', True)
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):

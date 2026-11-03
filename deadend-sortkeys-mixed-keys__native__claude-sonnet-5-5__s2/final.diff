@@ -1,0 +1,57 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..c9b0dd7 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,32 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_sort_keys_default(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file))
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    assert db_file.read() == '{"_default": {"1": {"a": 2, "b": 1}}}'
++
++
++def test_json_sort_keys_disabled(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file), sort_keys=False)
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    assert db_file.read() == '{"_default": {"1": {"b": 1, "a": 2}}}'
++
++
++def test_json_sort_keys_doc_order(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file))
++    db.insert_multiple({'n': i} for i in range(12))
++    db.close()
++
++    db = TinyDB(str(db_file))
++    assert [d['n'] for d in db.all()] == list(range(12))
++    db.close()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..d2cd152 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -97,12 +97,15 @@ class JSONStorage(Storage):
+ 
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
++        :param kwargs: passed to ``json.dumps``. ``sort_keys`` defaults to
++                       ``True``; pass ``sort_keys=False`` to disable it.
+         :type access_mode: str
+         """
+ 
+         super().__init__()
+ 
+         self._mode = access_mode
++        kwargs.setdefault('sort_keys', True)
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):

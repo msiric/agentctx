@@ -1,0 +1,1 @@
+- [Table-driven tests](test-style-table-driven.md) — one test.each table per function, in every project

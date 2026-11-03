@@ -1,0 +1,2 @@
+- [New helpers return undefined](new-helpers-return-undefined.md) — post-parseCompound helpers return undefined, not throw
+- [parseCompound is published](parse-compound-published.md) — shipped in 4.1.0-canary.1, keep compatible and throwing

@@ -1,0 +1,57 @@
+diff --git a/.claude/settings.local.json b/.claude/settings.local.json
+new file mode 100644
+index 0000000..ab2d680
+--- /dev/null
++++ b/.claude/settings.local.json
+@@ -0,0 +1 @@
++{"basicMemory":{"primaryProject":"main","secondaryProjects":[],"captureFolder":"sessions","rememberFolder":"bm-remember","recallTimeframe":"3d","preCompactCapture":"extractive","sessionProfile":"coding","repository":"tinydb","captureEvents":true,"placementConventions":"Starting point, not a scaffold: schemas/ for note schemas, sessions/ for coding checkpoints, decisions/ for decision notes, tasks/ for active work, bm-remember/ for quick captures. Structure may stay emergent.","teamProjects":{}},"outputStyle":"basic-memory"}
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..646d1b2 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -49,6 +49,24 @@ def test_json_kwargs(tmpdir):
+     db.close()
+ 
+ 
++def test_json_sort_keys_default(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file))
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    assert db_file.read() == '{"_default": {"1": {"a": 2, "b": 1}}}'
++
++
++def test_json_sort_keys_disabled(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file), sort_keys=False)
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    assert db_file.read() == '{"_default": {"1": {"b": 1, "a": 2}}}'
++
++
+ def test_json_readwrite(tmpdir):
+     """
+     Regression test for issue #1
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..af6fa6c 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -97,12 +97,16 @@ class JSONStorage(Storage):
+ 
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
++
++        Keys are written sorted by default; pass ``sort_keys=False`` to
++        preserve insertion order.
+         :type access_mode: str
+         """
+ 
+         super().__init__()
+ 
+         self._mode = access_mode
++        kwargs.setdefault('sort_keys', True)
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):

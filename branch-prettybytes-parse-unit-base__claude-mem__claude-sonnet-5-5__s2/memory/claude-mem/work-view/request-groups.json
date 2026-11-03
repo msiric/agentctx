@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-03T03:31:16.938Z",
+  "conversations": {
+    "[\"conversation\",\"claude\",\"92b7c58d-35f6-4814-abfb-1788764ad3d3\"]": "g_ee748f7b362b",
+    "[\"conversation\",\"claude\",\"b97e6c01-8aaf-407b-a844-7d440fca4c16\"]": "g_ee748f7b362b",
+    "[\"conversation\",\"claude\",\"866c2c51-1acd-42cd-bbf5-352fb8fd37c7\"]": "g_ee748f7b362b"
+  },
+  "groups": {
+    "g_ee748f7b362b": {
+      "title": "Add parseBytes to pretty-bytes for the storage web app",
+      "anchor": "[\"conversation\",\"claude\",\"92b7c58d-35f6-4814-abfb-1788764ad3d3\"]",
+      "projectRoot": "pretty-bytes",
+      "links": [
+        {
+          "kind": "agent-judgment",
+          "conversations": [
+            "[\"conversation\",\"claude\",\"92b7c58d-35f6-4814-abfb-1788764ad3d3\"]",
+            "[\"conversation\",\"claude\",\"b97e6c01-8aaf-407b-a844-7d440fca4c16\"]"
+          ],
+          "evidence": "Nov 3 ask: \"This branch is what the billing service pins. They want the same thing: a named export `parseBytes(string)` returning bytes\" repeats the open request's named export `parseBytes(string)` on the same branch, the same day."
+        },
+        {
+          "kind": "agent-judgment",
+          "conversations": [
+            "[\"conversation\",\"claude\",\"92b7c58d-35f6-4814-abfb-1788764ad3d3\"]",
+            "[\"conversation\",\"claude\",\"866c2c51-1acd-42cd-bbf5-352fb8fd37c7\"]"
+          ],
+          "evidence": "Nov 3 ask: \"Let's finish parseBytes: add kB/KB, MB, GB, TB and the rest of the units without the `i`\" finishes the open request's parseBytes work, which deferred the kB/MB units to later."
+        }
+      ],
+      "decidedAt": "2026-11-03T03:31:16.938Z",
+      "anchorAsk": {
+        "text": "This branch is what our storage web app pins. They need the reverse of prettyBytes: a named export `parseBytes(string)` that returns a number of bytes. Start with plain numbers (`'512'`, `'512 B'`) and the binary units (`KiB` … `YiB`), fractional values allowed (`'1.5 KiB'` → 1536), units case-sensitive like our output. Leave out kB/MB/GB and friends for now; I still have to check with the storage team how they want those read. Tests and types please.",
+        "source": "user-prompt",
+        "sourceId": 1,
+        "url": "/api/work-view/evidence/prompt/1",
+        "promptNumber": 1,
+        "atEpoch": 1793676069419
+      }
+    }
+  },
+  "ignored": {}
+}

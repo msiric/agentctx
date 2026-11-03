@@ -1,0 +1,90 @@
+{
+  "groupId": "g_42dadc189947",
+  "state": "in-progress",
+  "percent": 60,
+  "startedAt": "2026-11-03T02:25:51.678Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-03T02:34:38.738Z",
+  "summary": "ISO 8601 duration support for ms: formatISO is built and committed, and parseISO, its inverse, is now added. Both are exported from src/index.ts. No PR or release is recorded yet.",
+  "narrative": "The owner asked for ISO 8601 duration support in ms, starting with formatting. Days are the largest unit because months and years are ambiguous. formatISO was added with tests at 100% coverage and committed as bcd0d52. Its regex trailing-zero strip was replaced with a loop, because the owner said Leo from security wants no regular expressions in new parsing code on this branch after the ReDoS advisory. In a later conversation the owner asked for parseISO, the inverse of formatISO. The agent added it, handling days, hours, minutes and fractional seconds, and returning NaN for unsupported input. Memory shows no commit, PR, merge or release for parseISO yet.",
+  "milestones": [
+    {
+      "at": "2026-11-03T02:25:51.678Z",
+      "text": "Owner asked for formatISO with days as the largest unit, exported from src/index.ts and tested.",
+      "evidence": [
+        "prompt 1"
+      ]
+    },
+    {
+      "at": "2026-11-03T02:26:15.677Z",
+      "text": "formatISO added with tests passing at 100% coverage.",
+      "evidence": [
+        "observation 3"
+      ]
+    },
+    {
+      "at": "2026-11-03T02:26:32.385Z",
+      "text": "Regex trailing-zero strip replaced with a loop, per the no-regex rule for this branch; formatISO committed as bcd0d52.",
+      "evidence": [
+        "prompt 2",
+        "observation 4"
+      ]
+    },
+    {
+      "at": "2026-11-03T02:34:04.158Z",
+      "text": "Owner asked for parseISO as the inverse of formatISO.",
+      "evidence": [
+        "prompt 7"
+      ]
+    },
+    {
+      "at": "2026-11-03T02:34:33.701Z",
+      "text": "parseISO added, returning NaN for unsupported input.",
+      "evidence": [
+        "observation 14"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Avoid ambiguous units: days are the largest unit, with no months or years.",
+      "quote": "Days are the largest unit, no months or years since those are ambiguous.",
+      "at": "2026-11-03T02:25:51.678Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Export new APIs from src/index.ts and add tests.",
+      "quote": "Export it from src/index.ts and add tests.",
+      "at": "2026-11-03T02:25:51.678Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Write new parsing code on this branch by hand, with no regular expressions, because of security review.",
+      "quote": "he wants no regular expressions in any new parsing code on this branch. So when we do the parse side next, it has to be hand-written.",
+      "at": "2026-11-03T02:26:19.406Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "prompts 1, 2, 7",
+    "observations 1-4, 12-14"
+  ],
+  "reviewedThrough": "2026-11-03T02:36:00.573Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"02d23096-0212-4773-9b11-0597e252458f\"]",
+    "[\"conversation\",\"claude\",\"300884dd-7c1a-4948-8153-02424c524a1d\"]"
+  ],
+  "checkedAt": "2026-11-03T02:36:17.578Z",
+  "changedAt": "2026-11-03T02:36:17.578Z",
+  "readings": [
+    {
+      "at": "2026-11-03T02:26:09.516Z",
+      "percent": 15
+    },
+    {
+      "at": "2026-11-03T02:36:17.578Z",
+      "percent": 60
+    }
+  ]
+}

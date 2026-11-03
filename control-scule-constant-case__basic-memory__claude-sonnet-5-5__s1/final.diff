@@ -1,0 +1,102 @@
+diff --git a/.claude/settings.local.json b/.claude/settings.local.json
+new file mode 100644
+index 0000000..fd076b9
+--- /dev/null
++++ b/.claude/settings.local.json
+@@ -0,0 +1 @@
++{"basicMemory":{"primaryProject":"main","secondaryProjects":[],"captureFolder":"sessions","rememberFolder":"bm-remember","recallTimeframe":"3d","preCompactCapture":"extractive","sessionProfile":"coding","repository":"scule","captureEvents":true,"placementConventions":"Starting point, not a scaffold: sessions/ for checkpoints, decisions/ for decision notes, tasks/ for tasks, notes/ for research and reference, schemas/ for schemas. Folders appear as notes land.","teamProjects":{}},"outputStyle":"basic-memory"}
+diff --git a/README.md b/README.md
+index 0e4d7d7..4fd4aa3 100644
+--- a/README.md
++++ b/README.md
+@@ -69,6 +69,15 @@ snakeCase("foo-barBaz");
+ // foo_bar_baz
+ ```
+ 
++### `constantCase`
++
++Splits string and joins by CONSTANT_CASE (a.k.a. SCREAMING_SNAKE_CASE) convention:
++
++```ts
++constantCase("fooBar");
++// FOO_BAR
++```
++
+ ### `flatCase`
+ 
+ Splits string and joins by flatcase convention:
+diff --git a/src/index.ts b/src/index.ts
+index f1983fd..b80bba0 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -7,6 +7,7 @@ import type {
+   CaseOptions,
+   TrainCase,
+   FlatCase,
++  ConstantCase,
+ } from "./types";
+ 
+ const NUMBER_CHAR_RE = /\d/;
+@@ -146,6 +147,14 @@ export function snakeCase<T extends string | readonly string[]>(str?: T) {
+   return kebabCase(str || "", "_") as SnakeCase<T>;
+ }
+ 
++export function constantCase(): "";
++export function constantCase<T extends string | readonly string[]>(
++  str: T,
++): ConstantCase<T>;
++export function constantCase<T extends string | readonly string[]>(str?: T) {
++  return kebabCase(str || "", "_").toUpperCase() as ConstantCase<T>;
++}
++
+ export function flatCase(): "";
+ export function flatCase<T extends string | readonly string[]>(
+   str: T,
+diff --git a/src/types.ts b/src/types.ts
+index 9e7f1dd..3cbe69a 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -145,6 +145,10 @@ export type SnakeCase<T extends string | readonly string[]> = JoinByCase<
+   "_"
+ >;
+ 
++export type ConstantCase<T extends string | readonly string[]> = Uppercase<
++  SnakeCase<T>
++>;
++
+ export type TrainCase<
+   T,
+   Normalize extends boolean | undefined = false,
+diff --git a/test/scule.test.ts b/test/scule.test.ts
+index bd5ec3b..39df689 100644
+--- a/test/scule.test.ts
++++ b/test/scule.test.ts
+@@ -9,6 +9,7 @@ import {
+   snakeCase,
+   trainCase,
+   flatCase,
++  constantCase,
+   titleCase,
+ } from "../src";
+ 
+@@ -158,3 +159,20 @@ describe("flatCase", () => {
+     expect(flatCase(input)).toMatchObject(expected);
+   });
+ });
++
++describe("constantCase", () => {
++  test.each([
++    ["", ""],
++    ["foo", "FOO"],
++    ["fooBar", "FOO_BAR"],
++    ["foo-bar_baz", "FOO_BAR_BAZ"],
++    ["FooBarBaz", "FOO_BAR_BAZ"],
++    ["FOO_BAR", "FOO_BAR"],
++  ])("%s => %s", (input, expected) => {
++    expect(constantCase(input)).toBe(expected);
++  });
++
++  test("array input", () => {
++    expect(constantCase(["foo", "Bar"])).toBe("FOO_BAR");
++  });
++});

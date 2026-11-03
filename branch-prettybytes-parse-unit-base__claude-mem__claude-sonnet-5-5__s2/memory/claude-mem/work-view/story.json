@@ -1,0 +1,39 @@
+{
+  "narrative": "Shipping velocity: nothing has shipped yet. One request is in view, opened on 2026-11-03 and now about 60% done after three conversations in roughly ten minutes. It has two local commits and no merge or release, so there is no ask-to-ship time to measure.\n\n## Add parseBytes to pretty-bytes for the storage web app (2026-11-03)\n\nThe owner asked for a named parseBytes(string) export in pretty-bytes, the reverse of prettyBytes. It is for the branch their storage web app pins. It should accept plain numbers ('512', '512 B') and the binary units KiB through YiB. Fractional values are allowed and units are case-sensitive. The owner asked for tests and types with it. They kept the scope narrow on purpose: kB, MB and GB were left out until they had checked with the storage team how those should be read.\n\nThe agent built it, fixed xo lint and doc-example test failures, and got ava passing with 55 tests. It committed the binary-unit version as 71491a6 (03:22 UTC, observations #5-#8) after the owner said \"Commit what you have.\" The owner also said the storage team wants units without the i (kB, MB and so on) read as 1024, Windows Explorer style, to be added later.\n\nAt 03:25 UTC a second conversation, on the branch the billing service pins, asked for the same export. It required strict SI, so 1 MB is 1,000,000 bytes. The agent added SI units as powers of 1000 and committed 585ae6a, with 58 tests passing (#13-#15).\n\nA third conversation asked to finish kB/KB, MB, GB and the rest and to document them in the readme. The agent extended the unit table to SI (1000-based, KB as an alias for kB), updated the docs, fixed two lint errors and got 58 tests passing (#18-#20). No commit is recorded for this work.\n\nWhere it stands: the request is in progress at 60%. The 1000-based reading now in the code conflicts with the storage branch's 1024 requirement, and the two branches need different readings of the same units. That conflict is open, and nothing is merged or released.\n\nWhat this shows so far: the owner states requirements precisely, expects tests and types to ship with a feature, defers open questions instead of having them guessed, and asks for commits at step boundaries. Parallel conversations on different branches can pull one export in opposite directions, so the unit semantics need settling before release.",
+  "preferences": [
+    {
+      "preference": "Wants tests and types delivered with new features.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Tests and types please.",
+          "at": "2026-11-03T03:21:09.419Z"
+        }
+      ]
+    },
+    {
+      "preference": "Wants scope kept narrow, with open questions deferred rather than guessed.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Leave out kB/MB/GB and friends for now; I still have to check with the storage team how they want those read.",
+          "at": "2026-11-03T03:21:09.419Z"
+        }
+      ]
+    },
+    {
+      "preference": "Wants work committed once a step is done.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Commit what you have.",
+          "at": "2026-11-03T03:22:00.273Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T03:31:56.447Z"
+}

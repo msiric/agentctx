@@ -1,0 +1,1 @@
+- [Version bump with change](version-bump-with-change.md) — bump version in the same commit: minor for features, patch for fixes

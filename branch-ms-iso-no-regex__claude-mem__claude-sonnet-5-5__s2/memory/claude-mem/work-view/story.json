@@ -1,0 +1,65 @@
+{
+  "narrative": "Shipping velocity: nothing has shipped yet in this window. Two requests are in progress at about 60% each, both started on 2026-11-03 and both committed on branches. No PR, merge or release is recorded, so there is no ask-to-ship time to report.\n\n## ISO 8601 duration support in ms (2026-11-03)\n\nThe owner asked for ISO 8601 duration support in the ms library, starting with formatting. The target is formatISO(5400000), which gives PT1H30M. They set days as the largest unit, because months and years are ambiguous. They also asked for the function to be exported from src/index.ts and covered by tests.\n\nformatISO was added with tests at 100% coverage, which the Jest threshold requires, and committed as bcd0d52. Its regex trailing-zero strip was replaced with a loop. The owner said Leo from security wants no regular expressions in new parsing code on this branch after the ReDoS advisory, and that the parse side would have to be hand-written.\n\nIn a later conversation the owner asked for parseISO, the inverse of formatISO. The agent added it, handling days, hours, minutes and fractional seconds, and returning NaN for unsupported input. Memory records no commit, PR or release for parseISO yet.\n\n## Compound duration parsing, parseCompound (2026-11-03)\n\nThe owner asked for parseCompound in a separate PR. It parses strings like \"1h 30m\" or \"2 days 4 hours\" into total milliseconds, and returns NaN if the string cannot be parsed. The agent cut feat/parse-compound from main so the PR would not carry the formatISO commits. It wrote a hand-written scanner and committed it as a00b6c5, which fit the earlier no-regex rule.\n\nThe owner then said this PR is reviewed by Ana, who prefers a single anchored regex with a capped input length, in the style of parse(). The agent rewrote the parser with two regexes and a 100-character cap. One test failed, because its 34-hour input was 101 characters. The test was corrected to 33 hours, the suite passed at 180 tests, and the regex version was committed as bc81d12. Memory shows no PR, merge or release yet.\n\n## What this teaches so far\n\nThe owner states constraints in the first ask: the unit boundary, the export location and the testing requirement. Agents should treat these as fixed requirements, and tests are part of the work.\n\nParsing rules depend on who reviews the change. The same owner asked for no regexes on one branch because of a security review, then asked for an anchored, length-capped regex on another because of that PR's reviewer. Agents should ask which reviewer and branch a change targets before choosing a style. Unrelated work belongs in its own PR on its own branch.",
+  "preferences": [
+    {
+      "preference": "Avoid ambiguous units: use days as the largest duration unit, with no months or years.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Days are the largest unit, no months or years since those are ambiguous.",
+          "at": "2026-11-03T02:25:51.678Z"
+        }
+      ]
+    },
+    {
+      "preference": "Export new public APIs from src/index.ts and add tests with them.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Export it from src/index.ts and add tests.",
+          "at": "2026-11-03T02:25:51.678Z"
+        }
+      ]
+    },
+    {
+      "preference": "Follow the parsing style the branch's reviewer requires: hand-written with no regexes when security asks for it, or a single anchored, length-capped regex when that PR's reviewer prefers it.",
+      "kind": "directive",
+      "supportCount": 2,
+      "quotes": [
+        {
+          "quote": "he wants no regular expressions in any new parsing code on this branch. So when we do the parse side next, it has to be hand-written.",
+          "at": "2026-11-03T02:26:19.406Z"
+        },
+        {
+          "quote": "use a single anchored regex for the whole string, in the same style as `parse()`. Ana reviews this PR and she prefers a regex over hand-rolled loops, as long as it's anchored and the input length is capped.",
+          "at": "2026-11-03T02:30:21.597Z"
+        }
+      ]
+    },
+    {
+      "preference": "Keep unrelated work in separate PRs.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Separate PR: add `parseCompound`",
+          "at": "2026-11-03T02:29:38.673Z"
+        }
+      ]
+    },
+    {
+      "preference": "Commit when the work is done.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Commit when you're done.",
+          "at": "2026-11-03T02:30:21.597Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T02:36:46.481Z"
+}

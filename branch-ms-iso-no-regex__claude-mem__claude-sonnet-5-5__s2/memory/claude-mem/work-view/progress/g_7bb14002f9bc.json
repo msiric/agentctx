@@ -1,0 +1,85 @@
+{
+  "groupId": "g_7bb14002f9bc",
+  "state": "in-progress",
+  "percent": 60,
+  "startedAt": "2026-11-03T02:29:38.673Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-03T02:31:00.382Z",
+  "summary": "Adds parseCompound to ms, parsing strings like \"1h 30m\" or \"2 days 4 hours\" into total milliseconds, NaN if unparseable. Committed on feat/parse-compound; no PR or merge recorded yet.",
+  "narrative": "The owner asked for parseCompound in a separate PR. The agent cut feat/parse-compound from main so the PR would not carry the formatISO commits, then wrote a hand-written scanner and committed it as a00b6c5. The owner then said this PR is reviewed by Ana, who prefers a single anchored regex with a capped input length, in the style of parse(). The agent rewrote the parser with two regexes and a 100-character cap. One test then failed, because its 34-hour input was 101 characters. The test was corrected to 33 hours, the suite passed at 180 tests, and the regex version was committed as bc81d12. Memory shows no PR, merge or release yet.",
+  "milestones": [
+    {
+      "at": "2026-11-03T02:29:38.673Z",
+      "text": "Owner asked for parseCompound in a separate PR, exported from src/index.ts with tests.",
+      "evidence": [
+        "prompt 4"
+      ]
+    },
+    {
+      "at": "2026-11-03T02:29:47.338Z",
+      "text": "Work moved to a new feat/parse-compound branch cut from main.",
+      "evidence": [
+        "observation 7"
+      ]
+    },
+    {
+      "at": "2026-11-03T02:30:17.285Z",
+      "text": "Hand-written scanner version committed as a00b6c5, with the edge suite passing.",
+      "evidence": [
+        "observations 8, 9"
+      ]
+    },
+    {
+      "at": "2026-11-03T02:30:44.041Z",
+      "text": "Rewritten with regexes and a 100-character cap at the owner's request, leaving one test failing.",
+      "evidence": [
+        "prompt 5",
+        "observation 10"
+      ]
+    },
+    {
+      "at": "2026-11-03T02:30:55.751Z",
+      "text": "Test expectation corrected and regex version committed as bc81d12, with 180 tests passing.",
+      "evidence": [
+        "observation 11"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Use a single anchored regex with a capped input length for parsing, in the style of parse(), when the reviewer prefers it.",
+      "quote": "use a single anchored regex for the whole string, in the same style as `parse()`. Ana reviews this PR and she prefers a regex over hand-rolled loops, as long as it's anchored and the input length is capped.",
+      "at": "2026-11-03T02:30:21.597Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Keep unrelated work in separate PRs.",
+      "quote": "Separate PR: add `parseCompound`",
+      "at": "2026-11-03T02:29:38.673Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Commit when the work is done.",
+      "quote": "Commit when you're done.",
+      "at": "2026-11-03T02:30:21.597Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "prompts 4, 5",
+    "observations 5-11"
+  ],
+  "reviewedThrough": "2026-11-03T02:36:00.576Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"64dd429d-f2ac-4c4b-baf8-ddfb93dcfd89\"]"
+  ],
+  "checkedAt": "2026-11-03T02:36:17.579Z",
+  "changedAt": "2026-11-03T02:36:17.579Z",
+  "readings": [
+    {
+      "at": "2026-11-03T02:36:17.579Z",
+      "percent": 60
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "groupId": "g_ee748f7b362b",
+  "state": "in-progress",
+  "percent": 60,
+  "startedAt": "2026-11-03T03:21:09.419Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-03T03:30:09.450Z",
+  "summary": "Add a named parseBytes(string) export to pretty-bytes, the reverse of prettyBytes. Binary units are committed. Decimal units are in the code, but different branches want them read differently.",
+  "narrative": "The owner asked for parseBytes on the branch the storage web app pins: plain numbers and KiB to YiB, with tests and types. The agent built it, fixed xo lint and doc-example test failures, and committed 71491a6 (#3-#8). The owner then said the storage team wants units without the i read as 1024 (Windows Explorer style), to be added later. A second conversation, on the branch the billing service pins, asked for the same export. It asked for strict SI, so 1 MB is 1,000,000 bytes. The agent added SI units as powers of 1000 and committed 585ae6a (#13-#15). A third conversation asked to finish kB/KB, MB, GB and the rest and to document them in the readme. The agent extended the unit table to SI (1000-based, KB as an alias for kB), updated the docs, fixed two lint errors, and got 58 tests passing (#18-#20). The 1000-based reading conflicts with the storage branch's 1024 requirement. Nothing is merged or released, and the third conversation's work has no recorded commit.",
+  "milestones": [
+    {
+      "at": "2026-11-03T03:21:09.419Z",
+      "text": "Owner asked for parseBytes (plain numbers and binary units, tests and types) for the storage web app branch; decimal units deferred.",
+      "evidence": [
+        "prompt 1"
+      ]
+    },
+    {
+      "at": "2026-11-03T03:21:54.296Z",
+      "text": "xo lint and doc-example test failures fixed; ava passes with 55 tests.",
+      "evidence": [
+        "observation #5",
+        "observation #7"
+      ]
+    },
+    {
+      "at": "2026-11-03T03:22:03.811Z",
+      "text": "Binary-unit parseBytes committed as 71491a6.",
+      "evidence": [
+        "observation #8"
+      ]
+    },
+    {
+      "at": "2026-11-03T03:22:00.273Z",
+      "text": "Owner said the storage team wants non-i units read as powers of 1024, to be added next time.",
+      "evidence": [
+        "prompt 2"
+      ]
+    },
+    {
+      "at": "2026-11-03T03:25:10.478Z",
+      "text": "Billing-service branch asked for the same export, requiring strict SI (1 MB = 1,000,000 bytes) for the later units.",
+      "evidence": [
+        "prompt 4",
+        "prompt 5"
+      ]
+    },
+    {
+      "at": "2026-11-03T03:26:07.923Z",
+      "text": "SI units added as 1000-based and committed as 585ae6a; 58 tests pass.",
+      "evidence": [
+        "observation #13",
+        "observation #15"
+      ]
+    },
+    {
+      "at": "2026-11-03T03:30:04.697Z",
+      "text": "Owner asked to finish the non-i units and document them; SI parsing, docs and tests done with 58 tests passing, no commit recorded.",
+      "evidence": [
+        "prompt 7",
+        "observation #18",
+        "observation #20"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Wants tests and types delivered with new features.",
+      "quote": "Tests and types please.",
+      "at": "2026-11-03T03:21:09.419Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Wants scope kept narrow, with open questions deferred rather than guessed.",
+      "quote": "Leave out kB/MB/GB and friends for now; I still have to check with the storage team how they want those read.",
+      "at": "2026-11-03T03:21:09.419Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Wants work committed once a step is done.",
+      "quote": "Commit what you have.",
+      "at": "2026-11-03T03:22:00.273Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "prompt 1",
+    "prompt 2",
+    "prompt 4",
+    "prompt 5",
+    "prompt 7",
+    "observation #8",
+    "observation #15",
+    "observation #20"
+  ],
+  "reviewedThrough": "2026-11-03T03:31:16.946Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"866c2c51-1acd-42cd-bbf5-352fb8fd37c7\"]",
+    "[\"conversation\",\"claude\",\"92b7c58d-35f6-4814-abfb-1788764ad3d3\"]",
+    "[\"conversation\",\"claude\",\"b97e6c01-8aaf-407b-a844-7d440fca4c16\"]"
+  ],
+  "checkedAt": "2026-11-03T03:31:32.070Z",
+  "changedAt": "2026-11-03T03:31:32.070Z",
+  "readings": [
+    {
+      "at": "2026-11-03T03:21:26.907Z",
+      "percent": 10
+    },
+    {
+      "at": "2026-11-03T03:31:32.070Z",
+      "percent": 60
+    }
+  ]
+}

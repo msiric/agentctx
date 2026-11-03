@@ -1,0 +1,65 @@
+{
+  "narrative": "Shipping velocity: nothing is confirmed shipped yet. Two requests started on 2026-11-03 and both moved quickly. The `unit` option went from ask to a local commit in about a minute, and the `significantDigits` option reached a passing suite within minutes. Memory records no merged PR or release for either, so ask-to-ship time can't be measured.\n\n## 2026-11-03: a `unit` option for prettyBytes\n\nThe owner asked for a `unit` option on prettyBytes that forces the output unit, with examples such as `{unit: 'MB'}` giving `0.00134 MB`. The unit has to belong to the system chosen by `bits` and `binary`. A unit outside that system must throw a TypeError. The readme, types and tests were part of the request.\n\nThe agent mapped the unit tables and added the option. Lint failed on complexity and an ava assertion, so the validation was consolidated into `forcedExponentOf`. The suite then passed, and after the owner said \"Good, commit it.\" the work was committed as 32c1a03.\n\nIn a second conversation the owner reported a regression. A stale saved `unit: 'KB'` preference had crashed their storage dashboard's whole file table after the `unit` release. The owner set a policy: new options must ignore bad values and format as if the option wasn't passed. `unit` keeps its throw until the next major. A bits-mode `Mbit` readme example and test were added and committed as 654378b. The regression has no recorded fix, and memory shows no PR or release, so the request stands at about 85%.\n\n## 2026-11-03: a `significantDigits` option for prettyBytes\n\nThe owner asked for a `significantDigits` option that changes the default 3-digit rounding. It applies only when the fraction-digit options aren't set. The agent added a `significantDigitsOf` helper in the no-locale-options branch, and invalid values fall back to 3. This follows the policy of ignoring bad values. It documented the option in the readme and types and added three test blocks. After one locale expectation was adjusted and a type-level test added, npm test passed at 53 tests. Five modified files were uncommitted at the last activity, and no PR or release is recorded. The request is at about 80%.\n\n## What this shows so far\n\nThe owner writes tight, specific asks. They state the expected output, the error behavior and the deliverables in the first message. They want readme, types and tests with every option, and they commit once the result looks right. A shipped bug taught a firm rule: new options degrade gracefully instead of throwing. Shipped behavior is left alone until the next major. The lesson for agents is to consider how a new option will handle stale or bad input from real callers before it ships.",
+  "preferences": [
+    {
+      "preference": "Deliver readme, types and tests together with every new feature or option.",
+      "kind": "directive",
+      "supportCount": 2,
+      "quotes": [
+        {
+          "quote": "Readme, types and tests too.",
+          "at": "2026-11-03T05:58:36.638Z"
+        },
+        {
+          "quote": "Readme, types and tests as usual.",
+          "at": "2026-11-03T06:05:55.273Z"
+        }
+      ]
+    },
+    {
+      "preference": "New options must never throw on bad values; ignore them and format as if the option wasn't passed.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "new options must never throw on a bad value: ignore it and format as if the option wasn't passed.",
+          "at": "2026-11-03T06:02:28.891Z"
+        }
+      ]
+    },
+    {
+      "preference": "Leave already-shipped behavior alone until the next major, even when it caused a bug.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "`unit` has already shipped with the throw, so leave it alone until the next major.",
+          "at": "2026-11-03T06:02:28.891Z"
+        }
+      ]
+    },
+    {
+      "preference": "Commit changes once the owner approves the result.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Good, commit it.",
+          "at": "2026-11-03T05:59:21.179Z"
+        }
+      ]
+    },
+    {
+      "preference": "Validate options following existing error conventions, such as a TypeError, unless told otherwise.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "A unit that isn't in the active system should throw a TypeError, same as the other option checks.",
+          "at": "2026-11-03T05:58:36.638Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T06:09:35.248Z"
+}
