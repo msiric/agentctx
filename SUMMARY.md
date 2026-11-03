@@ -11,6 +11,8 @@
 | oracle-note (control) | claude-sonnet-5-5 | 2 | 6 | 100% (100%-100%) | 138726 | 16116 | - |
 | resume | claude-sonnet-5-5 | 9 | 9 | 67% (33%-89%) | 139391 | 23050 | 0 |
 | trailkeep | claude-sonnet-5-5 | 9 | 9 | 22% (0%-56%) | 124394 | 16288 | 2 |
+| trailkeep@capture | claude-sonnet-5-5 | 11 | 33 | 91% (73%-100%) | 140380 | 16655 | 1 |
+| trailkeep@capture (control) | claude-sonnet-5-5 | 1 | 3 | 100% (100%-100%) | 104994 | 16424 | - |
 
 Paired difference in pass rate vs `none` (same trap and seed, non-control traps):
 
@@ -24,3 +26,4 @@ Paired difference in pass rate vs `none` (same trap and seed, non-control traps)
 | oracle-note | claude-sonnet-5-5 | 72 | +71% (+54% to +86%) |
 | resume | claude-sonnet-5-5 | 9 | +67% (+33% to +89%) |
 | trailkeep | claude-sonnet-5-5 | 9 | +22% (+0% to +56%) |
+| trailkeep@capture | claude-sonnet-5-5 | 33 | +88% (+70% to +100%) |

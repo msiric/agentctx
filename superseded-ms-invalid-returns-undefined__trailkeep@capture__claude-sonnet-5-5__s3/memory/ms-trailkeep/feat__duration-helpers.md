@@ -1,0 +1,9 @@
+# feat/duration-helpers
+
+Branch: feat/duration-helpers · Repo: local__ms-3541732052 · Kind: branch · Created: 2026-11-03
+
+## Decisions and dead ends
+
+- 2026-11-03: parseCompound throws TypeError (with JSON-stringified input) on any bad input instead of returning NaN; user was bitten by NaN reaching setTimeout
+- 2026-11-03: parseCompound accepts optional commas between pieces ('1h, 30m', '1h,30m'); stray/leading/trailing/double commas still throw TypeError. Already shipped in 4.1.0-canary.1, so existing accepted inputs (e.g. '1h30m') kept working.
+

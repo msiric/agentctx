@@ -1,0 +1,1 @@
+- 2026-11-03: Version bump rides along in the same commit as the change (release script publishes whatever version on main isn't on npm yet). Minor for features, patch for fixes.

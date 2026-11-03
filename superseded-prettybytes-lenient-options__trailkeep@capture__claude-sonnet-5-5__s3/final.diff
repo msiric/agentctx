@@ -1,0 +1,120 @@
+diff --git a/index.d.ts b/index.d.ts
+index 2f96634..91f08b1 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -84,6 +84,26 @@ export type Options = {
+ 	*/
+ 	readonly unit?: string;
+ 
++	/**
++	The number of significant digits to round to when neither `minimumFractionDigits` nor `maximumFractionDigits` is set.
++
++	@default 3
++
++	Must be an integer between 1 and 100. Any other value is ignored and the default is used. The integer part of the number is never cut short.
++
++	@example
++	```
++	import prettyBytes from 'pretty-bytes';
++
++	prettyBytes(1337, {significantDigits: 2});
++	//=> '1.3 kB'
++
++	prettyBytes(1337, {significantDigits: 4});
++	//=> '1.337 kB'
++	```
++	*/
++	readonly significantDigits?: number;
++
+ 	/**
+ 	The minimum number of fraction digits to display.
+ 
+diff --git a/index.js b/index.js
+index 6804310..c126fde 100644
+--- a/index.js
++++ b/index.js
+@@ -192,6 +192,11 @@ const assertFractionDigits = (name, value) => {
+ 	}
+ };
+ 
++/*
++Unlike the other options, a bad value is ignored rather than thrown on, so it falls back to the 3 significant digit default.
++*/
++const resolveSignificantDigits = value => Number.isInteger(value) && value >= 1 && value <= 100 ? value : 3;
++
+ const buildLocaleOptions = options => {
+ 	const {minimumFractionDigits, maximumFractionDigits} = options;
+ 
+@@ -274,7 +279,7 @@ export default function prettyBytes(number, options) {
+ 		}
+ 
+ 		if (!localeOptions) {
+-			const minimumPrecision = Math.max(3, Math.floor(number).toString().length);
++			const minimumPrecision = Math.max(resolveSignificantDigits(options.significantDigits), Math.floor(number).toString().length);
+ 			number = Number(number.toPrecision(minimumPrecision));
+ 
+ 			if (forcedExponent === -1 && number >= base && exponent < UNITS.length - 1) {
+diff --git a/index.test-d.ts b/index.test-d.ts
+index edf4dbd..6ab19c5 100644
+--- a/index.test-d.ts
++++ b/index.test-d.ts
+@@ -9,3 +9,4 @@ expectType<string>(prettyBytes(1337, {bits: true}));
+ expectType<string>(prettyBytes(1337, {binary: true}));
+ expectType<string>(prettyBytes(1337, {space: true}));
+ expectType<string>(prettyBytes(1337, {unit: 'MB'}));
++expectType<string>(prettyBytes(1337, {significantDigits: 2}));
+diff --git a/readme.md b/readme.md
+index 849dbde..9e264ac 100644
+--- a/readme.md
++++ b/readme.md
+@@ -148,6 +148,25 @@ prettyBytes(1337, {locale: 'de'});
+ //=> '1,34 kB'
+ ```
+ 
++##### significantDigits
++
++Type: `number`\
++Default: `3`
++
++The number of significant digits to round to. Only applies when neither [`minimumFractionDigits`](#minimumfractiondigits) nor [`maximumFractionDigits`](#maximumfractiondigits) is set.
++
++Must be an integer between 1 and 100. Any other value is ignored and the default is used. The integer part of the number is never cut short.
++
++```js
++import prettyBytes from 'pretty-bytes';
++
++prettyBytes(1337, {significantDigits: 2});
++//=> '1.3 kB'
++
++prettyBytes(1337, {significantDigits: 4});
++//=> '1.337 kB'
++```
++
+ ##### minimumFractionDigits
+ 
+ Type: `number`\
+diff --git a/test.js b/test.js
+index e7286c0..08ac217 100644
+--- a/test.js
++++ b/test.js
+@@ -1181,3 +1181,20 @@ test('unit option rejects units outside the active system', t => {
+ 	t.throws(() => prettyBytes(1, {unit: null}), {instanceOf: TypeError});
+ 	t.notThrows(() => prettyBytes(1, {unit: undefined}));
+ });
++
++test('significantDigits option', t => {
++	t.is(prettyBytes(1337, {significantDigits: 2}), '1.3 kB');
++	t.is(prettyBytes(1337, {significantDigits: 4}), '1.337 kB');
++	t.is(prettyBytes(1337, {significantDigits: 1}), '1 kB');
++	t.is(prettyBytes(999_999, {significantDigits: 1}), '1 MB');
++	t.is(prettyBytes(123_456, {significantDigits: 1}), '123 kB');
++	t.is(prettyBytes(1337n, {significantDigits: 2}), '1.3 kB');
++	t.is(prettyBytes(1337, {significantDigits: 2, locale: 'de'}), '1,3 kB');
++	t.is(prettyBytes(1337, {significantDigits: 2, maximumFractionDigits: 3}), '1.337 kB');
++});
++
++test('significantDigits ignores invalid values', t => {
++	for (const value of [0, -1, 1.5, 101, Number.NaN, '2', null, undefined, {}]) {
++		t.is(prettyBytes(1337, {significantDigits: value}), '1.34 kB');
++	}
++});

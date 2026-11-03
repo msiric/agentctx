@@ -1,0 +1,279 @@
+diff --git a/src/format-iso.test.ts b/src/format-iso.test.ts
+new file mode 100644
+index 0000000..84bf5b5
+--- /dev/null
++++ b/src/format-iso.test.ts
+@@ -0,0 +1,45 @@
++import { describe, expect, it } from '@jest/globals';
++import { formatISO } from './index';
++
++describe('formatISO(number)', () => {
++  it('should format hours and minutes', () => {
++    expect(formatISO(5400000)).toBe('PT1H30M');
++  });
++
++  it('should use days as the largest unit', () => {
++    expect(formatISO(90061000)).toBe('P1DT1H1M1S');
++    expect(formatISO(86400000 * 400)).toBe('P400D');
++  });
++
++  it('should omit the time designator when there is no time part', () => {
++    expect(formatISO(86400000)).toBe('P1D');
++  });
++
++  it('should format zero', () => {
++    expect(formatISO(0)).toBe('PT0S');
++    expect(formatISO(0.4)).toBe('PT0S');
++  });
++
++  it('should format seconds and fractional seconds', () => {
++    expect(formatISO(1000)).toBe('PT1S');
++    expect(formatISO(1500)).toBe('PT1.5S');
++    expect(formatISO(500)).toBe('PT0.5S');
++    expect(formatISO(1)).toBe('PT0.001S');
++    expect(formatISO(61050)).toBe('PT1M1.05S');
++  });
++
++  it('should support negative values', () => {
++    expect(formatISO(-5400000)).toBe('-PT1H30M');
++  });
++
++  it('should round sub-millisecond values', () => {
++    expect(formatISO(1000.6)).toBe('PT1.001S');
++  });
++
++  it('should throw on non-finite or non-number values', () => {
++    expect(() => formatISO(NaN)).toThrow();
++    expect(() => formatISO(Infinity)).toThrow();
++    // @ts-expect-error testing invalid input
++    expect(() => formatISO('1h')).toThrow();
++  });
++});
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..c6a21c7 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -242,3 +242,149 @@ function plural(
+   const isPlural = msAbs >= n * 1.5;
+   return `${Math.round(ms / n)} ${name}${isPlural ? 's' : ''}` as StringValue;
+ }
++
++/**
++ * Format the given milliseconds as an ISO 8601 duration, e.g. `PT1H30M`.
++ *
++ * Days are the largest unit used, since months and years are ambiguous.
++ * Sub-millisecond precision is rounded away, and negative values get a
++ * leading `-`.
++ *
++ * @param ms - milliseconds
++ * @returns The ISO 8601 duration string
++ * @throws Error if `ms` is not a finite number
++ */
++export function formatISO(ms: number): string {
++  if (typeof ms !== 'number' || !Number.isFinite(ms)) {
++    throw new Error('Value provided to ms.formatISO() must be of type number.');
++  }
++
++  const total = Math.round(Math.abs(ms));
++  if (total === 0) {
++    return 'PT0S';
++  }
++
++  const days = Math.floor(total / d);
++  const hours = Math.floor((total % d) / h);
++  const minutes = Math.floor((total % h) / m);
++  const secs = Math.floor((total % m) / s);
++  const millis = total % s;
++
++  let seconds = secs ? `${secs}` : '';
++  if (millis) {
++    let frac = String(millis).padStart(3, '0');
++    while (frac.endsWith('0')) {
++      frac = frac.slice(0, -1);
++    }
++    seconds = `${secs}.${frac}`;
++  }
++
++  const time =
++    (hours ? `${hours}H` : '') +
++    (minutes ? `${minutes}M` : '') +
++    (seconds ? `${seconds}S` : '');
++
++  return `${ms < 0 ? '-' : ''}P${days ? `${days}D` : ''}${time ? `T${time}` : ''}`;
++}
++
++/**
++ * Parse an ISO 8601 duration, e.g. `PT1H30M`, and return milliseconds. This
++ * is the inverse of `formatISO`.
++ *
++ * Supports weeks, days, hours, minutes and seconds (with an optional decimal
++ * fraction), and a leading `-` for negative durations. Years and months are
++ * ambiguous and not supported.
++ *
++ * @param str - An ISO 8601 duration string
++ * @returns The parsed value in milliseconds, or `NaN` if the string can't be
++ * parsed
++ * @throws Error if `str` is not a string with length between 1 and 99
++ */
++export function parseISO(str: string): number {
++  if (typeof str !== 'string' || str.length === 0 || str.length > 100) {
++    throw new Error(
++      `Value provided to ms.parseISO() must be a string with length between 1 and 99. value=${JSON.stringify(str)}`,
++    );
++  }
++
++  let i = 0;
++  let sign = 1;
++  if (str[i] === '-') {
++    sign = -1;
++    i++;
++  }
++  if (str[i] !== 'P') {
++    return NaN;
++  }
++  i++;
++
++  let total = 0;
++  let inTime = false;
++  let count = 0;
++  // Index into the designator order for the current section, to enforce
++  // ordering and prevent duplicates.
++  let lastRank = -1;
++  const dateUnits: Record<string, [number, number]> = {
++    W: [0, w],
++    D: [1, d],
++  };
++  const timeUnits: Record<string, [number, number]> = {
++    H: [0, h],
++    M: [1, m],
++    S: [2, s],
++  };
++
++  while (i < str.length) {
++    if (str[i] === 'T') {
++      if (inTime) {
++        return NaN;
++      }
++      inTime = true;
++      lastRank = -1;
++      i++;
++      // A trailing `T` with nothing after it is invalid.
++      if (i >= str.length) {
++        return NaN;
++      }
++      continue;
++    }
++
++    // Scan a number: digits with an optional single `.` or `,` fraction.
++    const start = i;
++    let digits = 0;
++    let sepAt = -1;
++    while (i < str.length) {
++      const c = str.charCodeAt(i);
++      if (c >= 48 && c <= 57) {
++        digits++;
++      } else if ((str[i] === '.' || str[i] === ',') && sepAt === -1) {
++        sepAt = i;
++      } else {
++        break;
++      }
++      i++;
++    }
++    // Require digits both before and after the separator, if present.
++    if (
++      digits === 0 ||
++      (sepAt !== -1 && (sepAt === start || sepAt === i - 1))
++    ) {
++      return NaN;
++    }
++    const n = parseFloat(str.slice(start, i).replace(',', '.'));
++
++    const unit = (inTime ? timeUnits : dateUnits)[str[i] ?? ''];
++    if (!unit || unit[0] <= lastRank) {
++      return NaN;
++    }
++    lastRank = unit[0];
++    total += n * unit[1];
++    count++;
++    i++;
++  }
++
++  if (count === 0) {
++    return NaN;
++  }
++  return sign * Math.round(total);
++}
+diff --git a/src/parse-iso.test.ts b/src/parse-iso.test.ts
+new file mode 100644
+index 0000000..bf9e9cd
+--- /dev/null
++++ b/src/parse-iso.test.ts
+@@ -0,0 +1,68 @@
++import { describe, expect, it } from '@jest/globals';
++import { formatISO, parseISO } from './index';
++
++describe('parseISO(string)', () => {
++  it('should parse hours and minutes', () => {
++    expect(parseISO('PT1H30M')).toBe(5400000);
++  });
++
++  it('should parse days, weeks and combinations', () => {
++    expect(parseISO('P1D')).toBe(86400000);
++    expect(parseISO('P2W')).toBe(86400000 * 14);
++    expect(parseISO('P1DT1H1M1S')).toBe(90061000);
++  });
++
++  it('should parse zero', () => {
++    expect(parseISO('PT0S')).toBe(0);
++  });
++
++  it('should parse fractional seconds', () => {
++    expect(parseISO('PT1.5S')).toBe(1500);
++    expect(parseISO('PT0,25S')).toBe(250);
++    expect(parseISO('PT1.001S')).toBe(1001);
++  });
++
++  it('should parse negative durations', () => {
++    expect(parseISO('-PT1H30M')).toBe(-5400000);
++  });
++
++  it('should be the inverse of formatISO', () => {
++    for (const v of [0, 1, 999, 1000, 61001, 5400000, 90061001, -5400000]) {
++      expect(parseISO(formatISO(v))).toBe(v);
++    }
++  });
++
++  it('should return NaN for invalid input', () => {
++    for (const v of [
++      'P',
++      'PT',
++      'P1DT',
++      'PT1H30',
++      '1H',
++      'T1H',
++      'PT1M1H',
++      'PT1H1H',
++      'P1D1D',
++      'PTH',
++      'PT.5S',
++      'PT5.S',
++      'PT1.2.3S',
++      'P1Y',
++      'P1M',
++      'PT1X',
++      'PT1HT1M',
++      'P1H',
++      'pt1h',
++      '--PT1H',
++    ]) {
++      expect(parseISO(v)).toBeNaN();
++    }
++  });
++
++  it('should throw for non-strings and bad lengths', () => {
++    expect(() => parseISO('')).toThrow();
++    expect(() => parseISO('P'.repeat(101))).toThrow();
++    // @ts-expect-error testing runtime behavior
++    expect(() => parseISO(5)).toThrow();
++  });
++});

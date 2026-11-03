@@ -1,0 +1,38 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..e4e3e7e 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -97,8 +97,18 @@ class Scheduler:
+         between but only once.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        first_error: Optional[BaseException] = None
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception as e:
++                logger.exception("Job %s raised an exception", job)
++                if first_error is None:
++                    first_error = e
++        if first_error is not None:
++            # Re-raise only after every other due job has run, so one
++            # failing job can't starve the rest, but errors still surface.
++            raise first_error
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +125,11 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
++        jobs = self.jobs[:]
++        for i, job in enumerate(jobs):
+             self._run_job(job)
+-            time.sleep(delay_seconds)
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """

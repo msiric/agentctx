@@ -1,0 +1,50 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..84626f8 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -95,10 +95,21 @@ class Scheduler:
+         that should run every minute and you only call run_pending()
+         in one hour increments then your job won't be run 60 times in
+         between but only once.
++
++        If one or more jobs raise, the remaining due jobs still run and the
++        first exception is re-raised afterwards.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        first_error: Optional[BaseException] = None
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception as e:
++                logger.exception("Job %s failed", job)
++                if first_error is None:
++                    first_error = e
++        if first_error is not None:
++            raise first_error
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +126,19 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
+-            self._run_job(job)
+-            time.sleep(delay_seconds)
++        jobs = self.jobs[:]
++        first_error: Optional[BaseException] = None
++        for i, job in enumerate(jobs):
++            try:
++                self._run_job(job)
++            except Exception as e:
++                logger.exception("Job %s failed", job)
++                if first_error is None:
++                    first_error = e
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
++        if first_error is not None:
++            raise first_error
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """

@@ -1,0 +1,8 @@
+# fix/job-errors
+
+Branch: fix/job-errors · Repo: local__schedule-1937229647 · Kind: branch · Created: 2026-11-02
+
+## Decisions and dead ends
+
+- 2026-11-02: run_pending fix decision: run all other due jobs, then re-raise the FIRST exception (not log-and-swallow) because the supervisor restarts the worker and pages on crash. Also Job.run never reschedules a job that raises (next_run stays in the past, so it hot-retries every tick); plan to reschedule in a finally. Not built yet; implement next session.
+

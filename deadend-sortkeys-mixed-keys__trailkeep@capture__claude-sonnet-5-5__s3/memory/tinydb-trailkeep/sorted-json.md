@@ -1,0 +1,9 @@
+# sorted-json
+
+Branch: sorted-json · Repo: local__tinydb-174234396 · Kind: branch · Created: 2026-11-03
+
+## Decisions and dead ends
+
+- 2026-11-03: JSONStorage sorted-keys default was implemented then reverted (release cut, user will revisit). Plain sort_keys=True default breaks docs with mixed int/str dict keys (e.g. hits {200: 1, 'other': 3}) with TypeError, because json sorts before coercing keys to str. Needed fallback: on TypeError dump unsorted, json.loads, dump again sorted. Test with ingest-shaped docs.
+- 2026-11-03: 2026-11-03: JSONStorage sorted-keys default re-implemented (with TypeError fallback for mixed int/str keys) plus tests in tests/test_storages.py; 233 tests pass. Uncommitted at end of session. Run pytest with -c /dev/null --rootdir=. since pytest.ini needs --cov plugins.
+

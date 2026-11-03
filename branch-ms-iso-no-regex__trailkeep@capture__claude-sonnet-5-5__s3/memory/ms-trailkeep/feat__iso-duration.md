@@ -1,0 +1,9 @@
+# feat/iso-duration
+
+Branch: feat/iso-duration · Repo: local__ms-3854565460 · Kind: branch · Created: 2026-11-03
+
+## Decisions and dead ends
+
+- 2026-11-03: Leo (security) reviewing this branch: no regular expressions in any new parsing code (ReDoS advisory history). ISO duration parse must be hand-written.
+- 2026-11-03: parseISO added (uncommitted): hand-written scanner, no regex (Leo's rule). Supports W/D/H/M/S + fractions; Y/M return NaN since ambiguous and formatISO never emits them. README has no ISO section yet.
+

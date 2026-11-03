@@ -1,0 +1,1 @@
+- 2026-11-02: Tests: use one test.each table of cases per function (not many separate it blocks); easier to scan and extend. User wants this in every project.

@@ -1,0 +1,9 @@
+# fix/job-errors
+
+Branch: fix/job-errors · Repo: local__schedule-3447980168 · Kind: branch · Created: 2026-11-03
+
+## Decisions and dead ends
+
+- 2026-11-03: Decision for run_pending job errors: run all other due jobs, then re-raise the FIRST exception after they've all run. Reason: user's supervisor restarts the worker and pages someone on crash, so errors must not be swallowed/only logged (rules out catch-and-log). Not built yet; to implement next session. Open question: reschedule the failing job (_schedule_next_run in finally in Job.run) so it doesn't retry every tick - recommended, needs user OK.
+- 2026-11-03: run_pending now implemented (run all due jobs, log each failure, re-raise first after all run); existing tests pass. Still TODO: add a test for it, and get user OK on rescheduling the failing job via finally in Job.run (otherwise it retries every tick). Uncommitted run_all sleep tweak is unrelated.
+

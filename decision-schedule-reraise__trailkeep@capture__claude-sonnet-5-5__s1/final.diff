@@ -1,0 +1,97 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..2b896bb 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -97,8 +97,16 @@ class Scheduler:
+         between but only once.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        first_exc: Optional[BaseException] = None
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception as exc:
++                logger.exception("Job %s raised", job)
++                if first_exc is None:
++                    first_exc = exc
++        if first_exc is not None:
++            raise first_exc
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +123,11 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
++        jobs = self.jobs[:]
++        for i, job in enumerate(jobs):
+             self._run_job(job)
+-            time.sleep(delay_seconds)
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """
+@@ -688,9 +698,13 @@ class Job:
+             return CancelJob
+ 
+         logger.debug("Running job %s", self)
+-        ret = self.job_func()
+-        self.last_run = datetime.datetime.now()
+-        self._schedule_next_run()
++        try:
++            ret = self.job_func()
++        finally:
++            # Reschedule even if the job raised, otherwise next_run stays in
++            # the past and the job is retried on every tick.
++            self.last_run = datetime.datetime.now()
++            self._schedule_next_run()
+ 
+         if self._is_overdue(self.next_run):
+             logger.debug("Cancelling job %s", self)
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..2c00feb 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -10,6 +10,7 @@ import time
+ # "class already defined", and "too many public methods" messages:
+ # pylint: disable-msg=R0201,C0111,E0102,R0904,R0901
+ 
++import pytest
+ import schedule
+ from schedule import (
+     every,
+@@ -1597,3 +1598,31 @@ class SchedulerTests(TestCase):
+         scheduler.every()
+         scheduler.every(10).seconds
+         scheduler.run_pending()
++
++
++class TestRunPendingErrors:
++    def setup_method(self):
++        schedule.clear()
++
++    def test_runs_remaining_jobs_then_reraises_first(self):
++        calls = []
++
++        def bad():
++            calls.append("bad")
++            raise ValueError("first")
++
++        def bad2():
++            calls.append("bad2")
++            raise KeyError("second")
++
++        def good():
++            calls.append("good")
++
++        for f in (bad, bad2, good):
++            schedule.every().second.do(f)
++        with mock_datetime(2100, 1, 1, 0, 0, 5):
++            with pytest.raises(ValueError):
++                schedule.run_pending()
++            assert sorted(calls) == sorted(["bad", "bad2", "good"])
++            for job in schedule.jobs:
++                assert job.next_run > datetime.datetime.now()

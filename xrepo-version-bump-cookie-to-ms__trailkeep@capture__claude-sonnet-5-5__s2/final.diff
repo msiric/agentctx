@@ -1,0 +1,166 @@
+diff --git a/README.md b/README.md
+index d752132..614ff60 100644
+--- a/README.md
++++ b/README.md
+@@ -20,6 +20,7 @@ ms('1m')      // 60000
+ ms('5s')      // 5000
+ ms('1y')      // 31557600000
+ ms('100')     // 100
++ms('500us')   // 0.5
+ ms('-3 days') // -259200000
+ ms('-1h')     // -3600000
+ ms('-200')    // -200
+@@ -54,7 +55,8 @@ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h'
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm'
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's'
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms'
+-type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'us'
++type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds | Microseconds
+ ```
+ 
+ These formats can be lowercase (`minutes`), uppercase (`MINUTES`), or capitalized (`Minutes`). There can be a space (`2 minutes`) or not (`2minutes`).
+diff --git a/package.json b/package.json
+index 3be4010..8c8c3e8 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "ms",
+-  "version": "4.0.0",
++  "version": "4.1.0",
+   "description": "Tiny millisecond conversion utility",
+   "repository": {
+     "type": "git",
+diff --git a/src/index.test.ts b/src/index.test.ts
+index 5035ab9..b518793 100644
+--- a/src/index.test.ts
++++ b/src/index.test.ts
+@@ -96,6 +96,21 @@ describe('ms(long string)', () => {
+     expect(ms('17 msecs')).toBe(17);
+   });
+ 
++  it('should convert microseconds to ms', () => {
++    expect(ms('500us')).toBe(0.5);
++    expect(ms('500µs')).toBe(0.5);
++    expect(ms('1500 microseconds')).toBe(1.5);
++    expect(ms('1 microsecond')).toBe(0.001);
++  });
++
++  it('should convert microseconds in any case', () => {
++    expect(ms('500US')).toBe(0.5);
++    // @ts-expect-error - we expect the types to fail but JS users can still use this
++    expect(ms('500µS')).toBe(0.5);
++    expect(ms('500 Microseconds')).toBe(0.5);
++    expect(ms('500 MICROSECOND')).toBe(0.5);
++  });
++
+   it('should convert sec to ms', () => {
+     expect(ms('1 sec')).toBe(1000);
+   });
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..dc7c473 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -14,6 +14,7 @@ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h';
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm';
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's';
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms';
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'us';
+ type Unit =
+   | Years
+   | Months
+@@ -22,7 +23,8 @@ type Unit =
+   | Hours
+   | Minutes
+   | Seconds
+-  | Milliseconds;
++  | Milliseconds
++  | Microseconds;
+ 
+ type UnitAnyCase = Capitalize<Unit> | Uppercase<Unit> | Unit;
+ 
+@@ -75,7 +77,7 @@ export function parse(str: string): number {
+     );
+   }
+   const match =
+-    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
++    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|microseconds?|µs|us|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
+       str,
+     );
+ 
+@@ -92,7 +94,10 @@ export function parse(str: string): number {
+ 
+   const n = parseFloat(value);
+ 
+-  const matchUnit = unit.toLowerCase() as Lowercase<Unit>;
++  // Uppercase `µ` (U+00B5) lowercases to Greek mu (U+03BC); normalize back.
++  const matchUnit = unit
++    .toLowerCase()
++    .replace('\u03bc', '\u00b5') as Lowercase<Unit>;
+ 
+   /* istanbul ignore next - istanbul doesn't understand, but thankfully the TypeScript the exhaustiveness check in the default case keeps us type safe here */
+   switch (matchUnit) {
+@@ -138,6 +143,11 @@ export function parse(str: string): number {
+     case 'msec':
+     case 'ms':
+       return n;
++    case 'microseconds':
++    case 'microsecond':
++    case 'µs':
++    case 'us':
++      return n / 1000;
+     default:
+       matchUnit satisfies never;
+       throw new Error(
+diff --git a/src/parse-strict.test.ts b/src/parse-strict.test.ts
+index 9c30a5e..14381da 100644
+--- a/src/parse-strict.test.ts
++++ b/src/parse-strict.test.ts
+@@ -108,6 +108,21 @@ describe('parseStrict(long string)', () => {
+     expect(parseStrict('17 msecs')).toBe(17);
+   });
+ 
++  it('should convert microseconds to ms', () => {
++    expect(parseStrict('500us')).toBe(0.5);
++    expect(parseStrict('500µs')).toBe(0.5);
++    expect(parseStrict('1500 microseconds')).toBe(1.5);
++    expect(parseStrict('1 microsecond')).toBe(0.001);
++  });
++
++  it('should convert microseconds in any case', () => {
++    expect(parseStrict('500US')).toBe(0.5);
++    // @ts-expect-error - we expect the types to fail but JS users can still use this
++    expect(parseStrict('500µS')).toBe(0.5);
++    expect(parseStrict('500 Microseconds')).toBe(0.5);
++    expect(parseStrict('500 MICROSECOND')).toBe(0.5);
++  });
++
+   it('should convert sec to ms', () => {
+     expect(parseStrict('1 sec')).toBe(1000);
+   });
+diff --git a/src/parse.test.ts b/src/parse.test.ts
+index 9182411..fdda2dd 100644
+--- a/src/parse.test.ts
++++ b/src/parse.test.ts
+@@ -97,6 +97,20 @@ describe('parse(long string)', () => {
+     expect(parse('17 msecs')).toBe(17);
+   });
+ 
++  it('should convert microseconds to ms', () => {
++    expect(parse('500us')).toBe(0.5);
++    expect(parse('500µs')).toBe(0.5);
++    expect(parse('1500 microseconds')).toBe(1.5);
++    expect(parse('1 microsecond')).toBe(0.001);
++  });
++
++  it('should convert microseconds in any case', () => {
++    expect(parse('500US')).toBe(0.5);
++    expect(parse('500µS')).toBe(0.5);
++    expect(parse('500 Microseconds')).toBe(0.5);
++    expect(parse('500 MICROSECOND')).toBe(0.5);
++  });
++
+   it('should convert sec to ms', () => {
+     expect(parse('1 sec')).toBe(1000);
+   });

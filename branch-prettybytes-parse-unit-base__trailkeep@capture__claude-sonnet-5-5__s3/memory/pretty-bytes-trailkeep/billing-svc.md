@@ -1,0 +1,8 @@
+# billing-svc
+
+Branch: billing-svc · Repo: local__pretty-bytes-1995248842 · Kind: branch · Created: 2026-11-03
+
+## Decisions and dead ends
+
+- 2026-11-03: billing-svc decision: when decimal units (kB, MB, GB...) are added to parseBytes on this branch, they are strict SI powers of 1000 (1 MB = 1,000,000 bytes), matching prettyBytes output. This intentionally differs from storage-app, which reads KB/MB/GB as 1024. Until then they still throw.
+

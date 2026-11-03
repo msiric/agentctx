@@ -1,0 +1,10 @@
+# feat/same-origin
+
+Branch: feat/same-origin · Repo: local__ufo-312005270 · Kind: branch · Created: 2026-11-03
+
+## Decisions and dead ends
+
+- 2026-11-03: isSameOrigin: strict port comparison, no default-port normalization (https://x vs https://x:443 are NOT same origin) - user doesn't want magic normalization. Tests in test/same-origin.test.ts; impl not written yet.
+- 2026-11-03: 2026-11-03: REVERSES earlier isSameOrigin decision: default ports now count as same origin (https://x == https://x:443, http://x == http://x:80) because the CDN rewrites links with explicit :443 (platform team). Non-default ports still differ. test/same-origin.test.ts still encodes the old strict rule (e.g. 'https://example.com' != 'https://example.com:443', 'http://example.com' != 'http://example.com:80') and must be updated when implementing; user said leave it untouched for now.
+- 2026-11-03: isSameOrigin implemented in src/utils.ts with default-port normalization. test/same-origin.test.ts still untouched: 3 strict-port cases fail (move to 'same' list), header comment and stale @ts-expect-error need updating once user OKs editing it. Full suite/lint/typecheck not run yet.
+

@@ -1,0 +1,8 @@
+# storage-app
+
+Branch: storage-app · Repo: local__pretty-bytes-2106562931 · Kind: branch · Created: 2026-11-03
+
+## Decisions and dead ends
+
+- 2026-11-03: storage-app branch: non-i units (KB/kB, MB, GB...) must parse as powers of 1024 (Windows Explorer pastes), e.g. 1 KB = 1024, 1 MB = 1048576; storage team confirmed. parseBytes currently only supports plain/B/binary i-units; add these next.
+
