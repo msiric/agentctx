@@ -1,0 +1,1 @@
+- [New helpers return undefined](helpers-return-undefined.md) — post-parseCompound helpers return undefined on bad input; parseCompound keeps throwing

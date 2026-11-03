@@ -1,0 +1,1 @@
+- [New options never throw](new-options-never-throw.md) — bad option values must be ignored, not thrown; `unit` is the legacy exception until next major

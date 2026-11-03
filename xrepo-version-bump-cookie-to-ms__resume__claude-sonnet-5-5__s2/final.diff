@@ -1,0 +1,149 @@
+diff --git a/README.md b/README.md
+index d752132..c9c3fd9 100644
+--- a/README.md
++++ b/README.md
+@@ -54,7 +54,8 @@ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h'
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm'
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's'
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms'
+-type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'μs' | 'us'
++type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds | Microseconds
+ ```
+ 
+ These formats can be lowercase (`minutes`), uppercase (`MINUTES`), or capitalized (`Minutes`). There can be a space (`2 minutes`) or not (`2minutes`).
+diff --git a/src/index.test.ts b/src/index.test.ts
+index 5035ab9..b422c8a 100644
+--- a/src/index.test.ts
++++ b/src/index.test.ts
+@@ -92,6 +92,25 @@ describe('ms(long string)', () => {
+     expect(ms('53 milliseconds')).toBe(53);
+   });
+ 
++  it.each([
++    '500us',
++    '500 us',
++    '500µs',
++    '500μs',
++    '500 microsecond',
++    '500 microseconds',
++    '500 US',
++    '500 Μs',
++    '500 ΜS',
++  ] as const)('should convert %s to ms', (str) => {
++    expect(ms(str)).toBe(0.5);
++  });
++
++  it('should support fractional and negative microseconds', () => {
++    expect(ms('-1500us')).toBe(-1.5);
++    expect(ms('.5us')).toBe(0.0005);
++  });
++
+   it('should convert msecs to ms', () => {
+     expect(ms('17 msecs')).toBe(17);
+   });
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..9e57fbd 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -14,6 +14,7 @@ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h';
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm';
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's';
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms';
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'μs' | 'us';
+ type Unit =
+   | Years
+   | Months
+@@ -22,7 +23,8 @@ type Unit =
+   | Hours
+   | Minutes
+   | Seconds
+-  | Milliseconds;
++  | Milliseconds
++  | Microseconds;
+ 
+ type UnitAnyCase = Capitalize<Unit> | Uppercase<Unit> | Unit;
+ 
+@@ -75,7 +77,7 @@ export function parse(str: string): number {
+     );
+   }
+   const match =
+-    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
++    /^(?<value>-?\d*\.?\d+) *(?<unit>microseconds?|µs|μs|us|milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
+       str,
+     );
+ 
+@@ -138,6 +140,12 @@ export function parse(str: string): number {
+     case 'msec':
+     case 'ms':
+       return n;
++    case 'microseconds':
++    case 'microsecond':
++    case 'µs': // U+00B5 micro sign
++    case 'μs': // U+03BC Greek small mu
++    case 'us':
++      return n / 1000;
+     default:
+       matchUnit satisfies never;
+       throw new Error(
+diff --git a/src/parse-strict.test.ts b/src/parse-strict.test.ts
+index 9c30a5e..943127c 100644
+--- a/src/parse-strict.test.ts
++++ b/src/parse-strict.test.ts
+@@ -104,6 +104,25 @@ describe('parseStrict(long string)', () => {
+     expect(parseStrict('53 milliseconds')).toBe(53);
+   });
+ 
++  it.each([
++    '500us',
++    '500 us',
++    '500µs',
++    '500μs',
++    '500 microsecond',
++    '500 microseconds',
++    '500 US',
++    '500 Μs',
++    '500 ΜS',
++  ] as const)('should convert %s to ms', (str) => {
++    expect(parseStrict(str)).toBe(0.5);
++  });
++
++  it('should support fractional and negative microseconds', () => {
++    expect(parseStrict('-1500us')).toBe(-1.5);
++    expect(parseStrict('.5us')).toBe(0.0005);
++  });
++
+   it('should convert msecs to ms', () => {
+     expect(parseStrict('17 msecs')).toBe(17);
+   });
+diff --git a/src/parse.test.ts b/src/parse.test.ts
+index 9182411..a8c821e 100644
+--- a/src/parse.test.ts
++++ b/src/parse.test.ts
+@@ -93,6 +93,26 @@ describe('parse(long string)', () => {
+     expect(parse('53 milliseconds')).toBe(53);
+   });
+ 
++  it.each([
++    '500us',
++    '500 us',
++    '500µs',
++    '500μs',
++    '500 microsecond',
++    '500 microseconds',
++    '500 US',
++    '500 Μs',
++    '500 ΜS',
++    '500 MiCrOsEcOnDs',
++  ] as const)('should convert %s to ms', (str) => {
++    expect(parse(str)).toBe(0.5);
++  });
++
++  it('should support fractional and negative microseconds', () => {
++    expect(parse('-1500us')).toBe(-1.5);
++    expect(parse('.5us')).toBe(0.0005);
++  });
++
+   it('should convert msecs to ms', () => {
+     expect(parse('17 msecs')).toBe(17);
+   });

@@ -1,0 +1,39 @@
+{
+  "narrative": "Shipping velocity: the window holds one request, and it has not shipped yet. It began on 2026-11-03 and is about 60% done. Within roughly ten minutes the binary-unit core was built, tested and committed. No PR or release is recorded, so there is no ask-to-ship timing to report. The request has hit a conflict over how decimal units should be read.\n\n## Adding parseBytes to pretty-bytes (2026-11-03)\n\nThe owner asked for a named export, parseBytes(string). It is the reverse of prettyBytes, and the storage web app needs it to turn byte strings back into numbers. The web app pins a specific branch, so the work targets that branch.\n\nThe owner set the scope in the first ask. It covers plain numbers such as '512' and '512 B', and binary units from KiB through YiB. Fractional values are allowed. Units are case-sensitive, matching what prettyBytes outputs. The owner asked for tests and TypeScript types in the same change. They deliberately left out decimal units (kB, MB, GB) until they had checked with the storage team.\n\nThe agent built parseBytes with types and tests. Lint failed on non-literal assertion messages. That was fixed, and the suite passed with 55 tests. The agent documented the function in the readme. At the owner's request it committed the work as 647cfd7 on the storage branch.\n\nThe owner then said the storage users paste sizes from Windows Explorer, so KB and MB should be read as powers of 1024 on this branch, to be added later.\n\nA second conversation, for the billing service, wanted strict SI, where 1 MB is 1,000,000. Commit 69ddc6c recorded that rule. Memory shows 69ddc6c is not in the storage-app history.\n\nA third conversation added decimal units kB through YB as powers of 1000, with KB as an alias for kB, and updated the JSDoc summary. This contradicts the storage branch's 1024 ask. As of the last review the conflict is open. No PR or release is recorded.\n\n## What this teaches so far\n\nThe owner writes tight, explicit asks. They name the scope, say what to skip and why, and list the deliverables (tests, types). They defer unconfirmed parts instead of guessing at them. The decimal-unit question shows the cost of parallel conversations: two branches wanted opposite readings of KB and MB, and the third conversation implemented one without reconciling it with the storage ask. An agent should follow the branch's stated scope, avoid adding decimal parsing early, and check which convention the branch has before widening it.",
+  "preferences": [
+    {
+      "preference": "Keeps scope narrow and defers parts that are not yet confirmed with stakeholders; do not add them early.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Leave out kB/MB/GB and friends for now; I still have to check with the storage team how they want those read.",
+          "at": "2026-11-03T10:00:37.164Z"
+        }
+      ]
+    },
+    {
+      "preference": "Expects tests and TypeScript types delivered with any new feature.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Tests and types please.",
+          "at": "2026-11-03T10:00:37.164Z"
+        }
+      ]
+    },
+    {
+      "preference": "Wants finished work committed when a step is done.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Commit what you have.",
+          "at": "2026-11-03T10:02:02.426Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T10:11:24.801Z"
+}

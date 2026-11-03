@@ -1,0 +1,72 @@
+{
+  "groupId": "g_2c225448801b",
+  "state": "in-progress",
+  "percent": 65,
+  "startedAt": "2026-11-03T09:14:15.075Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-03T09:15:28.745Z",
+  "summary": "Adds parseCompound to ms: strings like \"1h 30m\" or \"2 days 4 hours\" return total milliseconds, or NaN if unparseable. It is exported with tests and committed on feat/parse-compound.",
+  "narrative": "The owner asked for parseCompound in a separate PR. The agent found that parse() accepts only a single value and unit, and moved the work to a fresh feat/parse-compound branch cut from main. It added the feature and committed a31a649 with typecheck, lint and tests passing. The owner then asked for a single anchored regex in the style of parse(), since the reviewer Ana prefers that with a length cap. The agent restructured validation to check the whole string against one anchored pattern, then sum terms, and committed 2d6ed2c. Memory shows no PR merge or release yet.",
+  "milestones": [
+    {
+      "at": "2026-11-03T09:14:15.075Z",
+      "text": "Owner asks for parseCompound in a separate PR, exported from src/index.ts with tests",
+      "evidence": [
+        "prompt 4"
+      ]
+    },
+    {
+      "at": "2026-11-03T09:14:34.763Z",
+      "text": "Work moved to a fresh feat/parse-compound branch cut from main",
+      "evidence": [
+        "observation 7"
+      ]
+    },
+    {
+      "at": "2026-11-03T09:14:55.401Z",
+      "text": "parseCompound implemented with passing checks and committed as a31a649",
+      "evidence": [
+        "observations 9, 10"
+      ]
+    },
+    {
+      "at": "2026-11-03T09:15:24.134Z",
+      "text": "Owner asks for a single anchored regex; validation refactor committed as 2d6ed2c",
+      "evidence": [
+        "prompt 5",
+        "observations 11, 12"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Wants a single anchored regex, matching parse(), when the reviewer prefers it",
+      "quote": "use a single anchored regex for the whole string, in the same style as `parse()`. Ana reviews this PR and she prefers a regex over hand-rolled loops",
+      "at": "2026-11-03T09:15:00.039Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Wants separate features delivered as separate PRs",
+      "quote": "Separate PR: add `parseCompound` for strings like \"1h 30m\" or \"2 days 4 hours\"",
+      "at": "2026-11-03T09:14:15.075Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "observations 5-12",
+    "prompts 4, 5"
+  ],
+  "reviewedThrough": "2026-11-03T09:20:27.859Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"6f9c3f06-a084-468c-9231-c11a190c80c4\"]"
+  ],
+  "checkedAt": "2026-11-03T09:20:46.505Z",
+  "changedAt": "2026-11-03T09:20:46.505Z",
+  "readings": [
+    {
+      "at": "2026-11-03T09:20:46.505Z",
+      "percent": 65
+    }
+  ]
+}

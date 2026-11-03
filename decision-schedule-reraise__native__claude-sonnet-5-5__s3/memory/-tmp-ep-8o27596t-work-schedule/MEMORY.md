@@ -1,0 +1,1 @@
+- [Job error handling decision](job-error-handling-decision.md) — run all due jobs, then re-raise first exception; built in run_pending, run_all undecided

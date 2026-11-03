@@ -1,0 +1,169 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..3a3d2e4 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,67 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_write_crash_safe(tmpdir, monkeypatch):
++    """A crash mid-write must leave the old state readable."""
++    path = str(tmpdir.join('test.db'))
++    db = TinyDB(path)
++    db.insert({'a': 1})
++
++    def crash(fd):
++        raise KeyboardInterrupt('simulated kill during write')
++
++    monkeypatch.setattr(os, 'fsync', crash)
++    with pytest.raises(KeyboardInterrupt):
++        db.insert({'b': 2})
++    monkeypatch.undo()
++
++    # No temp files left behind, old state intact on disk
++    assert os.listdir(str(tmpdir)) == ['test.db']
++    with TinyDB(path) as db2:
++        assert db2.all() == [{'a': 1}]
++
++
++def test_json_write_partial_temp_file_ignored(tmpdir, monkeypatch):
++    """Simulate a hard kill after a partial temp write (no cleanup runs)."""
++    path = str(tmpdir.join('test.db'))
++    with TinyDB(path) as db:
++        db.insert({'a': 1})
++
++    def killed_replace(src, dst):
++        with open(src, 'r+') as f:
++            f.truncate(5)  # partial data in temp file only
++        raise SystemExit
++
++    monkeypatch.setattr(os, 'replace', killed_replace)
++    db = TinyDB(path)
++    with pytest.raises(SystemExit):
++        db.insert({'b': 2})
++    monkeypatch.undo()
++
++    with TinyDB(path) as db2:
++        assert db2.all() == [{'a': 1}]
++
++
++def test_json_write_then_read_and_continue(tmpdir):
++    path = str(tmpdir.join('test.db'))
++    with TinyDB(path) as db:
++        for i in range(3):
++            db.insert({'i': i})
++        assert len(db) == 3
++    with TinyDB(path) as db:
++        assert len(db.all()) == 3
++        db.truncate()
++    with TinyDB(path) as db:
++        assert db.all() == []
++
++
++def test_json_write_preserves_permissions(tmpdir):
++    path = str(tmpdir.join('test.db'))
++    with TinyDB(path) as db:
++        db.insert({'a': 1})
++    os.chmod(path, 0o640)
++    with TinyDB(path) as db:
++        db.insert({'b': 2})
++    assert os.stat(path).st_mode & 0o777 == 0o640
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..cd4e90e 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -6,6 +6,7 @@ implementations.
+ import io
+ import json
+ import os
++import tempfile
+ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+@@ -103,6 +104,8 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
++        self._path = path
++        self._encoding = encoding
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+@@ -140,25 +143,61 @@ class JSONStorage(Storage):
+             return json.load(self._handle)
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
+-        # Move the cursor to the beginning of the file just in case
+-        self._handle.seek(0)
+-
+         # Serialize the database state using the user-provided arguments
+         serialized = json.dumps(data, **self.kwargs)
+ 
+-        # Write the serialized data to the file
+-        try:
+-            self._handle.write(serialized)
+-        except io.UnsupportedOperation:
++        if not any(c in self._mode for c in ('+', 'w', 'a')):
+             raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
+ 
+-        # Ensure the file has been written
+-        self._handle.flush()
+-        os.fsync(self._handle.fileno())
+-
+-        # Remove data that is behind the new cursor in case the file has
+-        # gotten shorter
+-        self._handle.truncate()
++        # Crash safety: write the new state to a temporary file in the same
++        # directory, flush it to disk and atomically swap it in. If the
++        # process dies at any point, the target file contains either the
++        # complete old or the complete new state, never a partial write.
++        directory = os.path.dirname(os.path.abspath(self._path))
++        fd, tmp_path = tempfile.mkstemp(
++            dir=directory, prefix=os.path.basename(self._path) + '.', suffix='.tmp'
++        )
++        try:
++            with open(fd, 'wb' if 'b' in self._mode else 'w',
++                      **({} if 'b' in self._mode else {'encoding': self._encoding})) as tmp:
++                if 'b' in self._mode:
++                    tmp.write(serialized.encode(self._encoding or 'utf-8'))
++                else:
++                    tmp.write(serialized)
++                tmp.flush()
++                os.fsync(tmp.fileno())
++
++            # Preserve permissions of the existing file
++            try:
++                os.chmod(tmp_path, os.stat(self._path).st_mode & 0o7777)
++            except OSError:
++                pass
++
++            os.replace(tmp_path, self._path)
++        except BaseException:
++            try:
++                os.unlink(tmp_path)
++            except OSError:
++                pass
++            raise
++
++        # Persist the rename itself (not supported on all platforms)
++        try:
++            dir_fd = os.open(directory, os.O_RDONLY)
++        except OSError:
++            pass
++        else:
++            try:
++                os.fsync(dir_fd)
++            except OSError:
++                pass
++            finally:
++                os.close(dir_fd)
++
++        # The old handle points at the replaced inode; reopen on the new file
++        self._handle.close()
++        self._handle = open(self._path, mode='rb+' if 'b' in self._mode else 'r+',
++                            encoding=None if 'b' in self._mode else self._encoding)
+ 
+ 
+ class MemoryStorage(Storage):

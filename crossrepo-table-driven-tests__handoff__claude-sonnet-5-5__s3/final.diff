@@ -1,0 +1,105 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..db4d0e8
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,8 @@
++# HANDOFF
++
++## State
++Added microsecond units (`us`, `µs`, `microsecond(s)`) to `parse` in src/index.ts, types, README type list, and tests in src/parse.test.ts.
++
++## Decisions
++- Regex accepts both U+00B5 (µ) and U+03BC (μ); the latter is normalized to U+00B5 so the switch has one case. Uppercase Greek Mu (U+039C) lowercases to U+03BC, hence the normalization.
++- `format` is unchanged (still outputs ms for sub-second values); not requested.
+diff --git a/README.md b/README.md
+index d752132..16d418c 100644
+--- a/README.md
++++ b/README.md
+@@ -54,7 +54,8 @@ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h'
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm'
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's'
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms'
+-type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'us'
++type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds | Microseconds
+ ```
+ 
+ These formats can be lowercase (`minutes`), uppercase (`MINUTES`), or capitalized (`Minutes`). There can be a space (`2 minutes`) or not (`2minutes`).
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..0259816 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -14,6 +14,7 @@ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h';
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm';
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's';
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms';
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'us';
+ type Unit =
+   | Years
+   | Months
+@@ -22,7 +23,8 @@ type Unit =
+   | Hours
+   | Minutes
+   | Seconds
+-  | Milliseconds;
++  | Milliseconds
++  | Microseconds;
+ 
+ type UnitAnyCase = Capitalize<Unit> | Uppercase<Unit> | Unit;
+ 
+@@ -75,7 +77,7 @@ export function parse(str: string): number {
+     );
+   }
+   const match =
+-    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
++    /^(?<value>-?\d*\.?\d+) *(?<unit>microseconds?|[µμ]s|us|milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
+       str,
+     );
+ 
+@@ -92,7 +94,10 @@ export function parse(str: string): number {
+ 
+   const n = parseFloat(value);
+ 
+-  const matchUnit = unit.toLowerCase() as Lowercase<Unit>;
++  // Normalize the Greek letter mu (U+03BC) to the micro sign (U+00B5)
++  const matchUnit = unit
++    .toLowerCase()
++    .replace('\u03bc', '\u00b5') as Lowercase<Unit>;
+ 
+   /* istanbul ignore next - istanbul doesn't understand, but thankfully the TypeScript the exhaustiveness check in the default case keeps us type safe here */
+   switch (matchUnit) {
+@@ -138,6 +143,11 @@ export function parse(str: string): number {
+     case 'msec':
+     case 'ms':
+       return n;
++    case 'microseconds':
++    case 'microsecond':
++    case 'µs':
++    case 'us':
++      return n / 1000;
+     default:
+       matchUnit satisfies never;
+       throw new Error(
+diff --git a/src/parse.test.ts b/src/parse.test.ts
+index 9182411..cbd8455 100644
+--- a/src/parse.test.ts
++++ b/src/parse.test.ts
+@@ -93,6 +93,17 @@ describe('parse(long string)', () => {
+     expect(parse('53 milliseconds')).toBe(53);
+   });
+ 
++  it('should convert microseconds to ms', () => {
++    expect(parse('500us')).toBe(0.5);
++    expect(parse('500µs')).toBe(0.5);
++    expect(parse('500\u03bcs')).toBe(0.5);
++    expect(parse('1500 microseconds')).toBe(1.5);
++    expect(parse('1 microsecond')).toBe(0.001);
++    expect(parse('500US')).toBe(0.5);
++    expect(parse('500Microseconds')).toBe(0.5);
++    expect(parse('-500us')).toBe(-0.5);
++  });
++
+   it('should convert msecs to ms', () => {
+     expect(parse('17 msecs')).toBe(17);
+   });

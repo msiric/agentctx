@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-03T09:20:27.847Z",
+  "conversations": {
+    "[\"conversation\",\"claude\",\"2dec8e72-5445-4a00-a510-25912403ad81\"]": "g_a21b63cc8dc8",
+    "[\"conversation\",\"claude\",\"a87e3f3f-0ba6-4777-bf1d-14e299ac6583\"]": "g_a21b63cc8dc8",
+    "[\"conversation\",\"claude\",\"6f9c3f06-a084-468c-9231-c11a190c80c4\"]": "g_2c225448801b"
+  },
+  "groups": {
+    "g_a21b63cc8dc8": {
+      "title": "Add ISO 8601 duration formatting to ms",
+      "anchor": "[\"conversation\",\"claude\",\"2dec8e72-5445-4a00-a510-25912403ad81\"]",
+      "projectRoot": "ms",
+      "links": [
+        {
+          "kind": "agent-judgment",
+          "conversations": [
+            "[\"conversation\",\"claude\",\"2dec8e72-5445-4a00-a510-25912403ad81\"]",
+            "[\"conversation\",\"claude\",\"a87e3f3f-0ba6-4777-bf1d-14e299ac6583\"]"
+          ],
+          "evidence": "Opening ask \"Let's continue with the ISO durations. Parsing is next: parseISO(\"PT1H30M\") should return 5400000, i.e. the inverse of formatISO\" continues the formatISO work in the anchor request, and both asks name the same ISO 8601 duration feature in src/index.ts."
+        }
+      ],
+      "decidedAt": "2026-11-03T09:20:27.847Z",
+      "anchorAsk": {
+        "text": "I want ISO 8601 duration support in ms, starting with formatting: `formatISO(5400000)` should give \"PT1H30M\" and `formatISO(90061000)` \"P1DT1H1M1S\". Days are the largest unit, no months or years since those are ambiguous. Export it from src/index.ts and add tests.",
+        "source": "user-prompt",
+        "sourceId": 1,
+        "url": "/api/work-view/evidence/prompt/1",
+        "promptNumber": 1,
+        "atEpoch": 1793697015506
+      }
+    },
+    "g_2c225448801b": {
+      "title": "Add compound duration string parsing to ms",
+      "anchor": "[\"conversation\",\"claude\",\"6f9c3f06-a084-468c-9231-c11a190c80c4\"]",
+      "projectRoot": "ms",
+      "links": [],
+      "decidedAt": "2026-11-03T09:20:27.847Z",
+      "anchorAsk": {
+        "text": "Separate PR: add `parseCompound` for strings like \"1h 30m\" or \"2 days 4 hours\", returning the total in ms, NaN if it can't be parsed. Export it from src/index.ts with tests.",
+        "source": "user-prompt",
+        "sourceId": 4,
+        "url": "/api/work-view/evidence/prompt/4",
+        "promptNumber": 1,
+        "atEpoch": 1793697255075
+      }
+    }
+  },
+  "ignored": {}
+}

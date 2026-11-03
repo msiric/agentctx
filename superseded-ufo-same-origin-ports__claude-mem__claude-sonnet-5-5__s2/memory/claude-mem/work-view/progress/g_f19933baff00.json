@@ -1,0 +1,80 @@
+{
+  "groupId": "g_f19933baff00",
+  "state": "in-progress",
+  "percent": 25,
+  "startedAt": "2026-11-03T07:01:32.421Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-03T07:02:16.750Z",
+  "summary": "Add an isSameOrigin(a, b) helper to ufo, with the semantics agreed first through tests in test/same-origin.test.ts. The tests are drafted with strict port comparison. The helper is not implemented yet.",
+  "narrative": "On 2026-11-03 the owner asked for an isSameOrigin(a, b) helper in ufo. They wanted the tests written first, in test/same-origin.test.ts, to agree the semantics, and said not to implement it yet. The agent read the isSamePath tests and the origin handling in src/url.ts (obs 2). It then drafted the test spec, leaving open questions as test.todo entries (obs 3). The owner replied that it looked reasonable but wanted ports kept strict: https://example.com and https://example.com:443 must not match, with a case for exactly that. The agent changed the spec to compare ports literally (obs 4). Implementation was deferred to a later session. A different conversation recorded after this (prompt 5, 07:05) has the owner reversing the port rule, so that default ports match. That change is not yet reflected in the tests, so the semantics are still unsettled.",
+  "milestones": [
+    {
+      "at": "2026-11-03T07:01:32.421Z",
+      "text": "Owner asked for tests-first isSameOrigin(a, b) in test/same-origin.test.ts, with no implementation yet.",
+      "evidence": [
+        "prompt 1"
+      ]
+    },
+    {
+      "at": "2026-11-03T07:01:54.505Z",
+      "text": "Drafted the isSameOrigin test spec, with open questions left as test.todo.",
+      "evidence": [
+        "obs 3"
+      ]
+    },
+    {
+      "at": "2026-11-03T07:02:10.559Z",
+      "text": "Spec changed to compare ports literally after the owner's correction. Default-port normalization dropped.",
+      "evidence": [
+        "obs 4",
+        "prompt 2"
+      ]
+    },
+    {
+      "at": "2026-11-03T07:05:58.759Z",
+      "text": "Owner, in another conversation, said default ports should now count as the same origin. The tests do not yet reflect this.",
+      "evidence": [
+        "prompt 5"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Agree on semantics through tests before any implementation is written.",
+      "quote": "Before any implementation, write the test cases in a new test/same-origin.test.ts so we can agree on the semantics. Don't implement it yet.",
+      "at": "2026-11-03T07:01:32.421Z"
+    },
+    {
+      "kind": "correction",
+      "preference": "Prefer explicit, strict behavior over implicit normalization.",
+      "quote": "keep it strict. `https://example.com` and `https://example.com:443` should NOT count as the same origin, I don't want magic port normalization in there.",
+      "at": "2026-11-03T07:02:03.266Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "obs 2",
+    "obs 3",
+    "obs 4",
+    "prompt 1",
+    "prompt 2",
+    "prompt 5"
+  ],
+  "reviewedThrough": "2026-11-03T07:11:37.004Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"3ee38c76-52c8-478d-a9df-17deb4362e15\"]"
+  ],
+  "checkedAt": "2026-11-03T07:11:59.892Z",
+  "changedAt": "2026-11-03T07:11:59.892Z",
+  "readings": [
+    {
+      "at": "2026-11-03T07:01:49.460Z",
+      "percent": 10
+    },
+    {
+      "at": "2026-11-03T07:11:59.892Z",
+      "percent": 25
+    }
+  ]
+}

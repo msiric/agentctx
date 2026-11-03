@@ -1,0 +1,112 @@
+{
+  "groupId": "g_2a86ba6c5ebc",
+  "state": "in-progress",
+  "percent": 60,
+  "startedAt": "2026-11-03T10:00:37.164Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-03T10:09:56.717Z",
+  "summary": "Add a named parseBytes(string) export to pretty-bytes, the reverse of prettyBytes. Binary units are built, tested and committed. Decimal units are added but conflict with the storage branch's 1024-based request.",
+  "narrative": "The owner asked for parseBytes on the branch the storage web app pins, with binary units only. The agent built it with types and tests. Lint failed on non-literal assertion messages; that was fixed and 55 tests passed. The agent documented it in the readme and committed it as 647cfd7. The owner then said storage users paste sizes from Windows Explorer, so KB/MB should be 1024-based on that branch. A second conversation for the billing service wanted strict SI (1 MB = 1,000,000), and commit 69ddc6c recorded that rule. Memory shows 69ddc6c is not in the storage-app history. The third conversation added decimal units as powers of 1000, with KB as an alias for kB. This contradicts the storage branch's 1024 rule. No PR or release is recorded.",
+  "milestones": [
+    {
+      "at": "2026-11-03T10:00:37.164Z",
+      "text": "Owner asked for parseBytes(string) with binary units, tests and types; decimal units deferred pending storage team input.",
+      "evidence": [
+        "prompt 1"
+      ]
+    },
+    {
+      "at": "2026-11-03T10:01:17.297Z",
+      "text": "parseBytes added with types and tests; lint failure on assertion messages fixed, suite passes (55 passing).",
+      "evidence": [
+        "obs 4",
+        "obs 5",
+        "obs 6"
+      ]
+    },
+    {
+      "at": "2026-11-03T10:02:07.403Z",
+      "text": "Readme section added and work committed as 647cfd7 on the storage branch.",
+      "evidence": [
+        "obs 7",
+        "obs 8"
+      ]
+    },
+    {
+      "at": "2026-11-03T10:02:02.426Z",
+      "text": "Owner said storage wants KB/MB as powers of 1024 on this branch, to be added later.",
+      "evidence": [
+        "prompt 2"
+      ]
+    },
+    {
+      "at": "2026-11-03T10:05:52.653Z",
+      "text": "Billing branch work recorded a strict-SI rule for future decimal units (commit 69ddc6c).",
+      "evidence": [
+        "prompt 5",
+        "obs 11",
+        "obs 12"
+      ]
+    },
+    {
+      "at": "2026-11-03T10:09:36.845Z",
+      "text": "Decimal units kB to YB added as powers of 1000, with KB as an alias, contradicting the storage branch's 1024 ask; JSDoc summary updated.",
+      "evidence": [
+        "prompt 7",
+        "obs 17",
+        "obs 18",
+        "obs 20"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Wants scope kept narrow, with unconfirmed parts deferred until the owner has checked with stakeholders.",
+      "quote": "Leave out kB/MB/GB and friends for now; I still have to check with the storage team how they want those read.",
+      "at": "2026-11-03T10:00:37.164Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Expects tests and TypeScript types delivered with new features.",
+      "quote": "Tests and types please.",
+      "at": "2026-11-03T10:00:37.164Z"
+    },
+    {
+      "kind": "directive",
+      "preference": "Wants finished work committed when a step is done.",
+      "quote": "Commit what you have.",
+      "at": "2026-11-03T10:02:02.426Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "prompt 1",
+    "prompt 2",
+    "prompt 5",
+    "prompt 7",
+    "obs 4",
+    "obs 8",
+    "obs 11",
+    "obs 14",
+    "obs 17"
+  ],
+  "reviewedThrough": "2026-11-03T10:10:44.357Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"69965ae0-b119-458d-9d9a-22faeba7993e\"]",
+    "[\"conversation\",\"claude\",\"99c0a5f8-32da-4098-86dc-fbb004f48fda\"]",
+    "[\"conversation\",\"claude\",\"f0a5ee2c-9660-4f08-a0ac-60b584d129e3\"]"
+  ],
+  "checkedAt": "2026-11-03T10:10:59.823Z",
+  "changedAt": "2026-11-03T10:10:59.823Z",
+  "readings": [
+    {
+      "at": "2026-11-03T10:00:54.440Z",
+      "percent": 10
+    },
+    {
+      "at": "2026-11-03T10:10:59.823Z",
+      "percent": 60
+    }
+  ]
+}

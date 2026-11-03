@@ -1,0 +1,50 @@
+{
+  "narrative": "Shipping velocity: nothing has shipped yet. Two requests are on record, both started on 2026-11-03. One is at about 25% (tests drafted) and one at about 70% (fix and tests in place, no merge recorded), so there is no ask-to-ship time to measure.\n\n## 2026-11-03: isSameOrigin helper for ufo\n\nThe owner asked for an `isSameOrigin(a, b)` helper in ufo. They set the order of work. First, write the test cases in a new `test/same-origin.test.ts` so the semantics can be agreed. Second, do not implement the helper yet.\n\nThe agent read the isSamePath tests and the origin handling in `src/url.ts` (obs 2). It then drafted the spec, leaving open questions as `test.todo` entries (obs 3). The owner replied that the draft looked reasonable but wanted ports kept strict: `https://example.com` and `https://example.com:443` must not match, with a case for exactly that. The agent changed the spec to compare ports literally (obs 4).\n\nThe semantics are not settled. At 07:05 the owner said, in another conversation, that default ports should now count as the same origin. The tests do not yet reflect this. The implementation is deferred, and the request sits at about 25%.\n\n## 2026-11-03: joinURL query and hash ordering fix\n\nThe owner reported that `joinURL(\"/api?v=2\", \"users\")` returned `\"/api?v=2/users\"` instead of `\"/api/users?v=2\"`, with the same defect for a `#hash`. They asked for a fix with tests. The agent traced the cause to string concatenation without parsing (obs 5) and checked the existing helpers (obs 6).\n\nIt patched `joinURL` to split off the base query and fragment before appending segments, and added regression tests. Those tests showed `joinRelativeURL` has the same defect (obs 7). The agent moved the query and hash cases into a joinURL-only loop so `joinRelativeURL` no longer inherits them. A full run showed 46 failing tests, mostly the unimplemented isSameOrigin tests (obs 8).\n\nThe owner said they were pushing the branch for the joinURL fix and told the agent not to touch the same-origin tests. No PR, merge or release is recorded. The `joinRelativeURL` defect is still open. The request sits at about 70%.\n\n## What this shows so far\n\nThe owner wants behavior pinned down by tests and agreed before code is written. They like strict, explicit behavior over implicit normalization. They also keep unrelated work out of a branch they are about to push. The two requests overlap in the shared test suite, so the unimplemented isSameOrigin tests fail in full runs of the joinURL branch. The open items are the port semantics, the `joinRelativeURL` defect, and a merge for the joinURL fix.",
+  "preferences": [
+    {
+      "preference": "Agree on semantics through tests before any implementation is written.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Before any implementation, write the test cases in a new test/same-origin.test.ts so we can agree on the semantics. Don't implement it yet.",
+          "at": "2026-11-03T07:01:32.421Z"
+        }
+      ]
+    },
+    {
+      "preference": "Prefer explicit, strict behavior over implicit normalization.",
+      "kind": "correction",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "keep it strict. `https://example.com` and `https://example.com:443` should NOT count as the same origin, I don't want magic port normalization in there.",
+          "at": "2026-11-03T07:02:03.266Z"
+        }
+      ]
+    },
+    {
+      "preference": "Keep unrelated work out of a branch being pushed; leave other tests untouched until that feature is implemented.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Don't touch the same-origin tests right now, I'm pushing this branch for the joinURL fix; we'll sort them out when we implement it.",
+          "at": "2026-11-03T07:05:58.759Z"
+        }
+      ]
+    },
+    {
+      "preference": "Bug fixes should come with tests.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Can you fix that, with tests?",
+          "at": "2026-11-03T07:05:21.700Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T07:12:25.806Z"
+}

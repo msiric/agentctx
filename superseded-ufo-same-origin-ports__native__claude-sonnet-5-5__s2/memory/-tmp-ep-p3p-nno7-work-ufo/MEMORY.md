@@ -1,0 +1,1 @@
+- [isSameOrigin default ports](same-origin-default-ports.md) — :443/:80 must match portless URL; CDN adds explicit ports

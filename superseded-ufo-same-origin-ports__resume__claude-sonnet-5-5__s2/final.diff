@@ -1,0 +1,211 @@
+diff --git a/src/utils.ts b/src/utils.ts
+index ea98aba..bad7867 100644
+--- a/src/utils.ts
++++ b/src/utils.ts
+@@ -433,7 +433,11 @@ export function joinURL(base: string, ...input: string[]): string {
+     if (url) {
+       // TODO: Handle .. when joining
+       const _segment = segment.replace(JOIN_LEADING_SLASH_RE, "");
+-      url = withTrailingSlash(url) + _segment;
++      // Keep the base's query/fragment at the end of the URL
++      const suffixIndex = url.search(/[#?]/);
++      const path = suffixIndex === -1 ? url : url.slice(0, suffixIndex);
++      const suffix = suffixIndex === -1 ? "" : url.slice(suffixIndex);
++      url = withTrailingSlash(path) + _segment + suffix;
+     } else {
+       url = segment;
+     }
+@@ -773,3 +777,49 @@ export function withoutHost(input: string) {
+   const parsed = parseURL(input);
+   return (parsed.pathname || "/") + parsed.search + parsed.hash;
+ }
++
++/**
++ * Checks if two URLs have the same origin (protocol, hostname and port).
++ *
++ * Path, query, hash and credentials are ignored. Default ports are normalized
++ * (`https://a.com:443` equals `https://a.com`). Relative URLs have no origin
++ * of their own: two relative URLs are considered the same, but a relative URL
++ * never matches an absolute (or protocol-relative) one. Opaque origins
++ * (`data:`, `javascript:`, `mailto:`...) never match.
++ *
++ * @example
++ *
++ * ```js
++ * isSameOrigin("https://a.com/x", "https://a.com:443/y"); // true
++ * isSameOrigin("https://a.com", "http://a.com"); // false
++ * ```
++ *
++ * @group utils
++ */
++export function isSameOrigin(a: string, b: string): boolean {
++  const oa = _originOf(a);
++  const ob = _originOf(b);
++  if (oa === undefined || ob === undefined) {
++    return false;
++  }
++  return oa === ob;
++}
++
++// Returns "" for relative, a string origin, or undefined for opaque/invalid.
++function _originOf(input = ""): string | undefined {
++  const str = String(input).trim();
++  const isProtocolRelative = /^[/\\]{2}/.test(str);
++  if (!isProtocolRelative && !hasProtocol(str)) {
++    return "";
++  }
++  try {
++    const url = new URL(isProtocolRelative ? "http:" + str : str);
++    if (url.origin === "null") {
++      return undefined;
++    }
++    // Protocol-relative: protocol is unknown, so compare host and port only
++    return isProtocolRelative ? "//" + url.host : url.origin;
++  } catch {
++    return undefined;
++  }
++}
+diff --git a/test/join.test.ts b/test/join.test.ts
+index 39bdb2e..23dab2a 100644
+--- a/test/join.test.ts
++++ b/test/join.test.ts
+@@ -27,6 +27,19 @@ const joinURLTests = [
+ ] as const;
+ 
+ describe("joinURL", () => {
++  const queryAndHashTests = [
++    { input: ["/api?v=2", "users"], out: "/api/users?v=2" },
++    { input: ["/api/?v=2", "/users"], out: "/api/users?v=2" },
++    { input: ["/api#top", "users"], out: "/api/users#top" },
++    { input: ["/api?v=2#top", "users", "1"], out: "/api/users/1?v=2#top" },
++    { input: ["https://x.com?v=2", "users"], out: "https://x.com/users?v=2" },
++  ];
++  for (const t of queryAndHashTests) {
++    test(`joinURL(${t.input.map((i) => JSON.stringify(i)).join(", ")}) === ${JSON.stringify(t.out)}`, () => {
++      expect(joinURL(...t.input)).toBe(t.out);
++    });
++  }
++
+   for (const t of joinURLTests) {
+     test(`joinURL(${t.input.map((i) => JSON.stringify(i)).join(", ")}) === ${JSON.stringify(t.out)}`, () => {
+       expect(joinURL(...(t.input as any[]))).toBe(t.out);
+diff --git a/test/same-origin.test.ts b/test/same-origin.test.ts
+new file mode 100644
+index 0000000..e22e69d
+--- /dev/null
++++ b/test/same-origin.test.ts
+@@ -0,0 +1,114 @@
++import { describe, expect, test } from "vitest";
++import { isSameOrigin } from "../src";
++
++// Origin = protocol + hostname + port (path, query, hash, credentials ignored).
++// Default ports (:443 for https, :80 for http) are equivalent to no port.
++describe("isSameOrigin", () => {
++  const sameOrigin = [
++    // Identical
++    ["https://example.com", "https://example.com"],
++    // Path, query, hash are ignored
++    ["https://example.com", "https://example.com/"],
++    ["https://example.com/foo", "https://example.com/bar"],
++    ["https://example.com/?a=1", "https://example.com/?b=2"],
++    ["https://example.com/#a", "https://example.com/#b"],
++    // Credentials are not part of the origin
++    ["https://user:pass@example.com/", "https://example.com/"],
++    // Protocol and host are case-insensitive
++    ["HTTPS://EXAMPLE.COM/", "https://example.com/"],
++    // Default ports are normalized (CDN rewrites links with explicit ports)
++    ["https://example.com:443/", "https://example.com/"],
++    ["http://example.com:80/", "http://example.com/"],
++    // Explicit non-default ports match each other
++    ["http://localhost:3000/a", "http://localhost:3000/b"],
++    // IDN / punycode hosts are equivalent
++    ["https://тест.com/", "https://xn--e1aybc.com/"],
++  ];
++
++  const differentOrigin = [
++    // Protocol
++    ["http://example.com", "https://example.com"],
++    // Host
++    ["https://example.com", "https://example.org"],
++    // Subdomains are different origins
++    ["https://example.com", "https://www.example.com"],
++    ["https://a.example.com", "https://b.example.com"],
++    // Port
++    ["https://example.com:8080/", "https://example.com/"],
++    ["http://localhost:3000/", "http://localhost:4000/"],
++    // A default port of another protocol is not a default here
++    ["http://example.com:443/", "http://example.com/"],
++    ["https://example.com:80/", "https://example.com/"],
++    // Lookalike hosts (userinfo trick)
++    ["https://example.com@evil.com/", "https://example.com/"],
++    ["https://example.com.evil.com/", "https://example.com/"],
++  ];
++
++  for (const [a, b] of sameOrigin) {
++    test(`${a} == ${b}`, () => {
++      expect(isSameOrigin(a, b)).toBe(true);
++      expect(isSameOrigin(b, a)).toBe(true);
++    });
++  }
++
++  for (const [a, b] of differentOrigin) {
++    test(`${a} != ${b}`, () => {
++      expect(isSameOrigin(a, b)).toBe(false);
++      expect(isSameOrigin(b, a)).toBe(false);
++    });
++  }
++
++  // --- Relative / protocol-relative inputs (OPEN QUESTIONS, proposed answers) ---
++
++  describe("relative inputs", () => {
++    // A relative URL has no origin of its own, so it is never "same" as an
++    // absolute one; two relative URLs share the (unknown) base origin.
++    test("relative vs absolute is false", () => {
++      expect(isSameOrigin("/foo", "https://example.com/foo")).toBe(false);
++      expect(isSameOrigin("https://example.com/foo", "/foo")).toBe(false);
++    });
++
++    test("relative vs relative is true", () => {
++      expect(isSameOrigin("/foo", "/bar")).toBe(true);
++      expect(isSameOrigin("foo", "./bar?x=1")).toBe(true);
++    });
++
++    test("protocol-relative compares host and port only", () => {
++      expect(isSameOrigin("//example.com/a", "//example.com/b")).toBe(true);
++      expect(isSameOrigin("//example.com/a", "//example.org/a")).toBe(false);
++    });
++
++    test("protocol-relative vs absolute is false (protocol unknown)", () => {
++      expect(isSameOrigin("//example.com/", "https://example.com/")).toBe(
++        false,
++      );
++    });
++  });
++
++  // --- Opaque / non-hierarchical origins ---
++
++  describe("opaque origins", () => {
++    test("never same origin, even with themselves", () => {
++      expect(isSameOrigin("data:text/plain,hi", "data:text/plain,hi")).toBe(
++        false,
++      );
++      expect(isSameOrigin("javascript:alert(1)", "javascript:alert(1)")).toBe(
++        false,
++      );
++      expect(isSameOrigin("mailto:a@b.com", "mailto:a@b.com")).toBe(false);
++    });
++  });
++
++  // --- Empty / invalid inputs ---
++
++  describe("empty and invalid inputs", () => {
++    test("empty strings are both relative, so same", () => {
++      expect(isSameOrigin("", "")).toBe(true);
++    });
++
++    test("undefined/empty vs absolute is false", () => {
++      expect(isSameOrigin("", "https://example.com")).toBe(false);
++      expect(isSameOrigin(undefined as any, "https://example.com")).toBe(false);
++    });
++  });
++});

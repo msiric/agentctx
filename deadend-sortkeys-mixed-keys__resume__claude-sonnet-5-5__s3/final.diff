@@ -1,0 +1,111 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..d1d1a74 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,54 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def _keys_in_order(path, *keys):
++    with open(path) as f:
++        content = f.read()
++    positions = [content.index('"{}"'.format(k)) for k in keys]
++    return positions == sorted(positions)
++
++
++def test_json_sort_keys_default(tmpdir):
++    path = str(tmpdir.join('db.json'))
++
++    with TinyDB(path) as db:
++        db.insert({'b': 1, 'a': {'z': 1, 'y': 2}})
++
++    assert _keys_in_order(path, 'a', 'y', 'z', 'b')
++
++
++def test_json_sort_keys_stable_across_insertion_order(tmpdir):
++    p1 = str(tmpdir.join('1.json'))
++    p2 = str(tmpdir.join('2.json'))
++
++    with TinyDB(p1) as db:
++        db.insert({'a': 1, 'b': 2, 'c': {'x': 1, 'y': 2}})
++    with TinyDB(p2) as db:
++        db.insert({'c': {'y': 2, 'x': 1}, 'b': 2, 'a': 1})
++
++    with open(p1) as f1, open(p2) as f2:
++        assert f1.read() == f2.read()
++
++
++def test_json_sort_keys_opt_out(tmpdir):
++    path = str(tmpdir.join('db.json'))
++
++    with TinyDB(path, sort_keys=False) as db:
++        db.insert({'b': 1, 'a': 2})
++
++    assert _keys_in_order(path, 'b', 'a')
++
++
++def test_json_sort_keys_mixed_key_types(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    doc = {'endpoint': '/api/orders', 'hits': {200: 1520, 404: 12, 'other': 3}}
++
++    with TinyDB(path) as db:
++        db.insert(doc)
++        db.insert({'hits': {'other': 1, 500: 2}})
++
++    assert _keys_in_order(path, '200', '404', 'other')
++    with TinyDB(path) as db:
++        assert db.all()[0]['hits'] == {'200': 1520, '404': 12, 'other': 3}
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..22db28a 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -33,6 +33,21 @@ def touch(path: str, create_dirs: bool):
+         pass
+ 
+ 
++def _sort_keys(obj: Any) -> Any:
++    """
++    Recursively rebuild dicts with their keys in a stable order.
++
++    ``json.dumps(sort_keys=True)`` fails on dicts that mix key types (e.g.
++    ``{200: 1, "other": 2}``), so we order by the string form of each key
++    instead, which is what ends up in the JSON output anyway.
++    """
++    if isinstance(obj, dict):
++        return {k: _sort_keys(obj[k]) for k in sorted(obj, key=str)}
++    if isinstance(obj, (list, tuple)):
++        return [_sort_keys(v) for v in obj]
++    return obj
++
++
+ class Storage(ABC):
+     """
+     The abstract base class for all Storages.
+@@ -98,11 +113,16 @@ class JSONStorage(Storage):
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
++        :param kwargs: Passed to :func:`json.dumps`. ``sort_keys`` defaults to
++                       ``True``; pass ``sort_keys=False`` to keep insertion
++                       order.
+         """
+ 
+         super().__init__()
+ 
+         self._mode = access_mode
++        # Keys are sorted by default for stable, diff-friendly output
++        self._sort_keys = kwargs.pop('sort_keys', True)
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+@@ -144,6 +164,8 @@ class JSONStorage(Storage):
+         self._handle.seek(0)
+ 
+         # Serialize the database state using the user-provided arguments
++        if self._sort_keys:
++            data = _sort_keys(data)
+         serialized = json.dumps(data, **self.kwargs)
+ 
+         # Write the serialized data to the file

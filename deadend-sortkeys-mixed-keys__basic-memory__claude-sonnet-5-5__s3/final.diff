@@ -1,0 +1,60 @@
+diff --git a/.claude/settings.local.json b/.claude/settings.local.json
+new file mode 100644
+index 0000000..8766f5e
+--- /dev/null
++++ b/.claude/settings.local.json
+@@ -0,0 +1 @@
++{"basicMemory":{"primaryProject":"tinydb","secondaryProjects":[],"captureFolder":"sessions","rememberFolder":"bm-remember","recallTimeframe":"3d","preCompactCapture":"extractive","sessionProfile":"coding","repository":"tinydb","captureEvents":true,"placementConventions":"Starting point, not a scaffold; folders appear as notes land.\n- decisions/ for type: decision notes\n- tasks/ for active work (type: task)\n- sessions/ for coding checkpoints\n- notes/ for architecture, research and misc knowledge\n- bm-remember/ for quick captures","teamProjects":{}},"outputStyle":"basic-memory"}
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..ef0ee46 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -49,6 +49,26 @@ def test_json_kwargs(tmpdir):
+     db.close()
+ 
+ 
++def test_json_sort_keys_default(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file))
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    content = db_file.read()
++    assert content.index('"a"') < content.index('"b"')
++
++
++def test_json_sort_keys_disabled(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file), sort_keys=False)
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    content = db_file.read()
++    assert content.index('"b"') < content.index('"a"')
++
++
+ def test_json_readwrite(tmpdir):
+     """
+     Regression test for issue #1
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..a8ac077 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -95,6 +95,9 @@ class JSONStorage(Storage):
+         members like ``cls`` or ``default`` will be called on every write
+         operation.
+ 
++        **Note:** Keys are written sorted by default. Pass ``sort_keys=False``
++        to preserve insertion order.
++
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
+@@ -103,6 +106,7 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
++        kwargs.setdefault('sort_keys', True)
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):

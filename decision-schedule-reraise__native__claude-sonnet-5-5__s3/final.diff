@@ -1,0 +1,91 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..7a235b9 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -97,8 +97,16 @@ class Scheduler:
+         between but only once.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        first_error: Optional[BaseException] = None
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception as e:
++                logger.exception("Job %s raised an exception", job)
++                if first_error is None:
++                    first_error = e
++        if first_error is not None:
++            raise first_error
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +123,11 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
++        jobs = self.jobs[:]
++        for i, job in enumerate(jobs):
+             self._run_job(job)
+-            time.sleep(delay_seconds)
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """
+@@ -688,9 +698,12 @@ class Job:
+             return CancelJob
+ 
+         logger.debug("Running job %s", self)
+-        ret = self.job_func()
+-        self.last_run = datetime.datetime.now()
+-        self._schedule_next_run()
++        try:
++            ret = self.job_func()
++        finally:
++            # Reschedule even if the job failed, so it doesn't retry every tick
++            self.last_run = datetime.datetime.now()
++            self._schedule_next_run()
+ 
+         if self._is_overdue(self.next_run):
+             logger.debug("Cancelling job %s", self)
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..24e846b 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -11,6 +11,7 @@ import time
+ # pylint: disable-msg=R0201,C0111,E0102,R0904,R0901
+ 
+ import schedule
++import pytest
+ from schedule import (
+     every,
+     repeat,
+@@ -1597,3 +1598,26 @@ class SchedulerTests(TestCase):
+         scheduler.every()
+         scheduler.every(10).seconds
+         scheduler.run_pending()
++
++
++class TestFailingJobs:
++    def test_run_pending_runs_all_then_reraises_first(self):
++        s = schedule.Scheduler()
++        ran = []
++
++        def bad():
++            ran.append("bad")
++            raise ValueError("boom")
++
++        def good():
++            ran.append("good")
++
++        with mock_datetime(2020, 1, 1, 0, 0, 0):
++            s.every(1).seconds.do(bad)
++            s.every(1).seconds.do(good)
++        with mock_datetime(2020, 1, 1, 0, 0, 5):
++            with pytest.raises(ValueError):
++                s.run_pending()
++            assert sorted(ran) == ["bad", "good"]
++            # failing job was rescheduled, not stuck in the past
++            assert all(j.next_run > datetime.datetime.now() for j in s.jobs)

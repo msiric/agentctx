@@ -1,0 +1,112 @@
+diff --git a/docs/changelog.rst b/docs/changelog.rst
+index 92c07e1..ab5985a 100644
+--- a/docs/changelog.rst
++++ b/docs/changelog.rst
+@@ -19,6 +19,13 @@ see `semver.org <http://semver.org/>`_
+           syntax (``Query()['some']['nested']['field']``) that will
+           not break even when new methods are added to the ``Query`` API.
+ 
++Unreleased
++^^^^^^^^^^
++
++- ``JSONStorage`` now writes keys sorted by default to keep files diff-friendly.
++  Pass ``sort_keys=False`` to keep insertion order. Dicts with mixed key types
++  (e.g. ``int`` and ``str``) are sorted by their string form.
++
+ v4.9.0 (2026-08-06)
+ ^^^^^^^^^^^^^^^^^^^
+ 
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..6269a26 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,35 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_sorts_keys_by_default(tmpdir):
++    path = str(tmpdir.join('db.json'))
++
++    with TinyDB(path) as db:
++        db.insert({'b': 1, 'a': 2})
++
++    with open(path) as f:
++        assert f.read() == '{"_default": {"1": {"a": 2, "b": 1}}}'
++
++
++def test_json_sort_keys_can_be_disabled(tmpdir):
++    path = str(tmpdir.join('db.json'))
++
++    with TinyDB(path, sort_keys=False) as db:
++        db.insert({'b': 1, 'a': 2})
++
++    with open(path) as f:
++        assert f.read() == '{"_default": {"1": {"b": 1, "a": 2}}}'
++
++
++def test_json_sort_keys_mixed_key_types(tmpdir):
++    path = str(tmpdir.join('db.json'))
++
++    with TinyDB(path) as db:
++        db.insert({'codes': {500: 'x', 'name': 'y', 200: 'z'}})
++
++    with open(path) as f:
++        assert f.read() == (
++            '{"_default": {"1": {"codes": {"200": "z", "500": "x", "name": "y"}}}}'
++        )
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..c6a1735 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -76,6 +76,14 @@ class Storage(ABC):
+         pass
+ 
+ 
++def _sort_keys_as_str(obj):
++    if isinstance(obj, dict):
++        return {k: _sort_keys_as_str(obj[k]) for k in sorted(obj, key=str)}
++    if isinstance(obj, (list, tuple)):
++        return [_sort_keys_as_str(v) for v in obj]
++    return obj
++
++
+ class JSONStorage(Storage):
+     """
+     Store the data in a JSON file.
+@@ -98,11 +106,17 @@ class JSONStorage(Storage):
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
++
++        Keys are written sorted by default; pass ``sort_keys=False`` to
++        disable this.
+         """
+ 
+         super().__init__()
+ 
+         self._mode = access_mode
++        # Sort keys by default for stable, diff-friendly files. Pass
++        # ``sort_keys=False`` to keep insertion order.
++        kwargs.setdefault('sort_keys', True)
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+@@ -144,7 +158,15 @@ class JSONStorage(Storage):
+         self._handle.seek(0)
+ 
+         # Serialize the database state using the user-provided arguments
+-        serialized = json.dumps(data, **self.kwargs)
++        try:
++            serialized = json.dumps(data, **self.kwargs)
++        except TypeError:
++            if not self.kwargs.get('sort_keys'):
++                raise
++            # Keys of mixed types (e.g. int and str) can't be compared by
++            # ``json``, so sort them by their string form instead.
++            kwargs = {**self.kwargs, 'sort_keys': False}
++            serialized = json.dumps(_sort_keys_as_str(data), **kwargs)
+ 
+         # Write the serialized data to the file
+         try:

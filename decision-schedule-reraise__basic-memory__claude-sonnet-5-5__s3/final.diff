@@ -1,0 +1,25 @@
+diff --git a/.claude/settings.local.json b/.claude/settings.local.json
+new file mode 100644
+index 0000000..774170b
+--- /dev/null
++++ b/.claude/settings.local.json
+@@ -0,0 +1 @@
++{"basicMemory":{"primaryProject":"schedule","secondaryProjects":[],"captureFolder":"sessions","rememberFolder":"bm-remember","recallTimeframe":"3d","preCompactCapture":"extractive","sessionProfile":"coding","repository":"schedule","captureEvents":true,"placementConventions":"Light, optional structure (notes work fine without it): sessions/ for coding checkpoints; decisions/ for decision notes; tasks/ for task notes; bm-remember/ for quick captures; notes/ for everything else. Structure stays emergent; no empty scaffolding.","teamProjects":{}},"outputStyle":"basic-memory"}
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..457779a 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -115,9 +115,11 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
++        jobs = self.jobs[:]
++        for i, job in enumerate(jobs):
+             self._run_job(job)
+-            time.sleep(delay_seconds)
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """

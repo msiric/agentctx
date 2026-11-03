@@ -1,0 +1,91 @@
+diff --git a/README.md b/README.md
+index d752132..c9c3fd9 100644
+--- a/README.md
++++ b/README.md
+@@ -54,7 +54,8 @@ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h'
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm'
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's'
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms'
+-type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'μs' | 'us'
++type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds | Microseconds
+ ```
+ 
+ These formats can be lowercase (`minutes`), uppercase (`MINUTES`), or capitalized (`Minutes`). There can be a space (`2 minutes`) or not (`2minutes`).
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..a5af5a3 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -13,6 +13,7 @@ type Days = 'days' | 'day' | 'd';
+ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h';
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm';
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's';
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'μs' | 'us';
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms';
+ type Unit =
+   | Years
+@@ -22,7 +23,8 @@ type Unit =
+   | Hours
+   | Minutes
+   | Seconds
+-  | Milliseconds;
++  | Milliseconds
++  | Microseconds;
+ 
+ type UnitAnyCase = Capitalize<Unit> | Uppercase<Unit> | Unit;
+ 
+@@ -75,7 +77,7 @@ export function parse(str: string): number {
+     );
+   }
+   const match =
+-    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
++    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|microseconds?|µs|μs|us|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
+       str,
+     );
+ 
+@@ -138,6 +140,12 @@ export function parse(str: string): number {
+     case 'msec':
+     case 'ms':
+       return n;
++    case 'microseconds':
++    case 'microsecond':
++    case 'µs': // U+00B5 micro sign
++    case 'μs': // U+03BC Greek small mu
++    case 'us':
++      return n / 1000;
+     default:
+       matchUnit satisfies never;
+       throw new Error(
+diff --git a/src/parse.test.ts b/src/parse.test.ts
+index 9182411..c33906e 100644
+--- a/src/parse.test.ts
++++ b/src/parse.test.ts
+@@ -1,4 +1,4 @@
+-import { describe, expect, it } from '@jest/globals';
++import { describe, expect, it, test } from '@jest/globals';
+ import { parse } from './index';
+ 
+ describe('parse(string)', () => {
+@@ -206,3 +206,22 @@ describe('parse(invalid inputs)', () => {
+     }).toThrow();
+   });
+ });
++
++describe('parse(string) microseconds', () => {
++  test.each([
++    ['500us', 0.5],
++    ['500 us', 0.5],
++    ['500µs', 0.5], // U+00B5 micro sign
++    ['500μs', 0.5], // U+03BC Greek small mu
++    ['500Μs', 0.5], // U+039C Greek capital mu
++    ['1 microsecond', 0.001],
++    ['1500 microseconds', 1.5],
++    ['2 MICROSECONDS', 0.002],
++    ['2 Microseconds', 0.002],
++    ['500US', 0.5],
++    ['-500us', -0.5],
++    ['1.5us', 0.0015],
++  ])('%s => %s', (input, expected) => {
++    expect(parse(input)).toBeCloseTo(expected, 10);
++  });
++});

@@ -1,0 +1,78 @@
+{
+  "groupId": "g_a21b63cc8dc8",
+  "state": "in-progress",
+  "percent": 60,
+  "startedAt": "2026-11-03T09:10:15.506Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-03T09:19:08.285Z",
+  "summary": "Adds ISO 8601 durations to ms: formatISO (5400000 gives \"PT1H30M\") and its inverse parseISO, both exported from src/index.ts. Both are built and committed locally; no PR merge or release is recorded.",
+  "narrative": "The owner asked for formatISO with days as the largest unit, because months and years are ambiguous. The agent explored src/index.ts and found Jest enforces 100% coverage. It added formatISO with tests, then the owner said the PR is under security review and wants no regular expressions in new parsing code. The agent replaced a regex that stripped trailing zeros with an explicit loop and committed 4dd911d. A second conversation continued with parseISO as the inverse of formatISO, covering weeks, days, time parts, fractions and signs. Memory shows no merge, release or owner confirmation yet.",
+  "milestones": [
+    {
+      "at": "2026-11-03T09:10:15.506Z",
+      "text": "Owner asks for formatISO with days as the largest unit, exported from src/index.ts, with tests",
+      "evidence": [
+        "prompt 1"
+      ]
+    },
+    {
+      "at": "2026-11-03T09:10:42.728Z",
+      "text": "formatISO added and exported, tests passing with full coverage",
+      "evidence": [
+        "observation 3"
+      ]
+    },
+    {
+      "at": "2026-11-03T09:11:08.195Z",
+      "text": "Owner asks for no regexes in new parsing code; the regex was replaced with a loop and committed as 4dd911d",
+      "evidence": [
+        "prompt 2",
+        "observation 4"
+      ]
+    },
+    {
+      "at": "2026-11-03T09:18:32.301Z",
+      "text": "Owner asks for parseISO as the inverse of formatISO, in a new conversation",
+      "evidence": [
+        "prompt 7"
+      ]
+    },
+    {
+      "at": "2026-11-03T09:18:59.223Z",
+      "text": "parseISO added, handling weeks, days, time parts, fractional seconds and signs",
+      "evidence": [
+        "observation 15"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Wants hand-written parsing with no regular expressions when a security reviewer requires it",
+      "quote": "he wants no regular expressions in any new parsing code on this branch. So when we do the parse side next, it has to be hand-written.",
+      "at": "2026-11-03T09:10:46.547Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "observations 1-4, 13-15",
+    "prompts 1, 2, 7"
+  ],
+  "reviewedThrough": "2026-11-03T09:20:27.857Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"2dec8e72-5445-4a00-a510-25912403ad81\"]",
+    "[\"conversation\",\"claude\",\"a87e3f3f-0ba6-4777-bf1d-14e299ac6583\"]"
+  ],
+  "checkedAt": "2026-11-03T09:20:46.504Z",
+  "changedAt": "2026-11-03T09:20:46.504Z",
+  "readings": [
+    {
+      "at": "2026-11-03T09:10:52.438Z",
+      "percent": 15
+    },
+    {
+      "at": "2026-11-03T09:20:46.504Z",
+      "percent": 60
+    }
+  ]
+}

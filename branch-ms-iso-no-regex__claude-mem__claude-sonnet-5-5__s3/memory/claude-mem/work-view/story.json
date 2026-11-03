@@ -1,0 +1,39 @@
+{
+  "narrative": "Shipping velocity: nothing has shipped yet. Two requests are open, at 60% and 65%, and both reached committed local code within minutes of the ask. No PR merge or release is recorded, so there is no ask-to-ship time to report.\n\n## Add ISO 8601 duration formatting to ms (Nov 3, 2026)\n\nThe owner asked for `formatISO` in the `ms` library. It turns `5400000` into `\"PT1H30M\"`, with days as the largest unit because months and years are ambiguous. It is exported from `src/index.ts` and covered by tests.\n\nThe agent found that `format()` only produces human-readable output, so ISO needed a new code path. It also found that Jest enforces 100% coverage. It added `formatISO` with tests at full coverage.\n\nThe owner then said the PR is under security review and wanted no regular expressions in new parsing code. The agent replaced a regex that stripped trailing zeros with an explicit loop and committed 4dd911d.\n\nA second conversation continued the work with `parseISO`, the inverse of `formatISO`. It handles weeks, days, time parts, fractional seconds and signs, and is hand-written to respect the no-regex rule. Both functions are committed locally. Memory shows no merge, release or owner confirmation, so the request sits at 60%.\n\n## Add compound duration string parsing to ms (Nov 3, 2026)\n\nThe owner asked for `parseCompound` in a separate PR. It parses strings like `\"1h 30m\"` or `\"2 days 4 hours\"` into total milliseconds, or NaN if they cannot be parsed. `parse()` accepts only a single value and unit. The agent moved the work to a fresh `feat/parse-compound` branch cut from main and committed a31a649 with typecheck, lint and tests passing.\n\nThe owner then asked for a single anchored regex in the style of `parse()`, because the reviewer Ana prefers that. The agent restructured validation to check the whole string against one anchored pattern and then sum the terms, committing 2d6ed2c. No merge or release is recorded, so the request sits at 65%.\n\n## What this teaches so far\n\n- Reviewer preferences shape the implementation, and they can conflict. The security reviewer on the ISO work wanted no regexes. Ana on the compound work wanted one anchored regex. The agent followed each PR's own reviewer.\n- The owner keeps separate features in separate PRs and branches.\n- Rework so far has been one refactor per request after review feedback, each committed within minutes.\n- Neither request has reached review completion, so ask-to-ship time and stalls cannot be judged yet.",
+  "preferences": [
+    {
+      "preference": "Wants hand-written parsing with no regular expressions when a security reviewer requires it",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "he wants no regular expressions in any new parsing code on this branch. So when we do the parse side next, it has to be hand-written.",
+          "at": "2026-11-03T09:10:46.547Z"
+        }
+      ]
+    },
+    {
+      "preference": "Wants a single anchored regex, matching parse(), when the reviewer prefers it",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "use a single anchored regex for the whole string, in the same style as `parse()`. Ana reviews this PR and she prefers a regex over hand-rolled loops",
+          "at": "2026-11-03T09:15:00.039Z"
+        }
+      ]
+    },
+    {
+      "preference": "Wants separate features delivered as separate PRs",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Separate PR: add `parseCompound` for strings like \"1h 30m\" or \"2 days 4 hours\"",
+          "at": "2026-11-03T09:14:15.075Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T09:21:17.801Z"
+}

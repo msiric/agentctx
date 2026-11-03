@@ -1,0 +1,1 @@
+- [Version bump with change](version-bump-with-change.md) — bump version in the same commit (minor=feature, patch=fix), all packages
