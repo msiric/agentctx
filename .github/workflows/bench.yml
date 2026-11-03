@@ -19,6 +19,10 @@ on:
         description: "Claude Code npm version (recorded with every result)"
         required: true
         default: latest
+      pinned:
+        description: "use the frozen versions in bench/PINS.env (held-out run)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -54,12 +58,23 @@ jobs:
 
       - name: Install agent CLIs
         run: |
-          npm install -g "@anthropic-ai/claude-code@${{ inputs.claude_code_version }}"
+          if [ "${{ inputs.pinned }}" = true ]; then
+            . bench/PINS.env
+            cc=$CLAUDE_CODE_VERSION; bm="basic-memory==$BASIC_MEMORY_VERSION"; hs="hindsight-api==$HINDSIGHT_API_VERSION"
+            git clone -q https://github.com/thedotmack/claude-mem "$RUNNER_TEMP/claude-mem"
+            git -C "$RUNNER_TEMP/claude-mem" -c advice.detachedHead=false checkout -q "$CLAUDE_MEM_REF"
+            git clone -q https://github.com/basicmachines-co/basic-memory "$RUNNER_TEMP/basic-memory"
+            git -C "$RUNNER_TEMP/basic-memory" -c advice.detachedHead=false checkout -q "$BASIC_MEMORY_PLUGIN_REF"
+            { echo "CLAUDE_MEM_DIR=$RUNNER_TEMP/claude-mem"; echo "BM_SOURCE=$RUNNER_TEMP/basic-memory"; } >> "$GITHUB_ENV"
+          else
+            cc=${{ inputs.claude_code_version }}; bm=basic-memory; hs=hindsight-api
+          fi
+          npm install -g "@anthropic-ai/claude-code@$cc"
           npm install -g pnpm
           npm install -g bun
-          pip install -q basic-memory uv
+          pip install -q "$bm" uv
           basic-memory --version || true
-          if grep -q '"hindsight"' "bench/plans/${{ inputs.plan }}.json"; then pip install -q hindsight-api && pip show hindsight-api | head -2; fi
+          if grep -q '"hindsight"' "bench/plans/${{ inputs.plan }}.json"; then pip install -q "$hs" && pip show hindsight-api | head -2; fi
           claude --version
 
       - name: Load earlier results

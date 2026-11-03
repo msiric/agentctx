@@ -9,7 +9,8 @@ case $1 in
   install)
     command -v basic-memory >/dev/null || { echo "basic-memory not installed" >&2; exit 1; }
     claude mcp add -s user basic-memory basic-memory mcp >/dev/null
-    bm install claude-code --yes > "$EPISODE/bm-install.log" 2>&1
+    # pinned runs install the plugin from a checkout at a fixed commit (bench/PINS.env)
+    bm install claude-code --yes ${BM_SOURCE:+--source "$BM_SOURCE"} > "$EPISODE/bm-install.log" 2>&1
     claude plugin list 2>/dev/null | grep -q 'basic-memory@basicmachines-co' ||
       { echo "basic-memory plugin did not install" >&2; cat "$EPISODE/bm-install.log" >&2; exit 1; }
     basic-memory --version > "$EPISODE/basic-memory.version" 2>&1 || true ;;

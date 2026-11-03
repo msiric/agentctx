@@ -95,3 +95,24 @@ were capture misses (`results/dev-notes.md`). Its remaining dev seeds were
 dropped to save subscription usage; the cells already run are kept. The
 changed version runs as `trailkeep@capture`. Dev results are exploratory
 either way; the held-out run is unaffected.
+
+## 2026-11-03: held-out run setup
+
+- **trailkeep under test:** 0.4.0 (published to npm with provenance), the
+  dev arm `trailkeep@capture` plus a version bump. In the held-out plan it is
+  the arm `trailkeep`.
+- **Frozen versions:** `bench/PINS.env`. claude-mem and the Basic Memory
+  plugin install from checkouts at a fixed tag/commit instead of their
+  default branches. During the dev matrix claude-mem moved from 15.8.3 to
+  15.9.0 and Claude Code from 2.1.316 to 2.1.317; the held-out run uses the
+  newer of each. claude-mem's launcher may still fetch from npm at first run;
+  its version is recorded per cell.
+- **Gate cells not reused:** the held-out traps' `none` and `oracle-note`
+  cells from the headroom gate ran under an earlier Claude Code and harness.
+  They move to `gate/` on the results branch and the held-out run re-runs
+  both arms, so every held-out cell shares one set of versions.
+- **Filler sizing:** the plan said filler matches "trailkeep's mean
+  injection on that trap". trailkeep has no cells on held-out traps until
+  this run, so filler runs as part 2 (`heldout-filler`), sized per trap from
+  part 1's trailkeep cells (mean first-request tokens minus `none`'s, × 4
+  characters). Nothing else in the plan changes.

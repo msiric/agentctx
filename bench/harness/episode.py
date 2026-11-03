@@ -18,7 +18,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BENCH = os.path.dirname(HERE)
 ROOT = os.path.dirname(BENCH)  # the trailkeep checkout under test
 CLOSING = "That's all for today, thanks."
-PASS_ENV = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "OPENAI_API_KEY", "GEMINI_API_KEY")
+PASS_ENV = ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "OPENAI_API_KEY", "GEMINI_API_KEY",
+            "CLAUDE_MEM_DIR", "BM_SOURCE")  # the last two: pinned plugin checkouts
 LIMIT_MARKERS = ("usage limit", "rate limit", "rate_limit", "overloaded", "limit reached", "credit balance")
 
 

@@ -20,7 +20,8 @@ json.dump({"claudeAiOauth": {"accessToken": os.environ["CLAUDE_CODE_OAUTH_TOKEN"
                              "expiresAt": 4102444800000, "scopes": ["user:inference"]}}, open(p, "w"))
 os.chmod(p, 0o600)
 PY
-    claude plugin marketplace add thedotmack/claude-mem >/dev/null
+    # pinned runs install from a checkout at a fixed tag (bench/PINS.env)
+    claude plugin marketplace add "${CLAUDE_MEM_DIR:-thedotmack/claude-mem}" >/dev/null
     claude plugin install claude-mem@thedotmack --scope user >/dev/null
     claude plugin list 2>/dev/null | grep -i -A2 claude-mem > "$EPISODE/claude-mem.version" || true ;;
   after_session)
