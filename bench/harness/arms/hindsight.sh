@@ -9,7 +9,12 @@ case $1 in
   install)
     command -v hindsight-api >/dev/null || { echo "hindsight-api not installed" >&2; exit 1; }
     [ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] || { echo "CLAUDE_CODE_OAUTH_TOKEN not set" >&2; exit 1; }
+    # The provider's documented default model (claude-sonnet-4-5-20250929) is no
+    # longer served, so name the current Sonnet explicitly (bench/PINS.env).
+    HINDSIGHT_LLM_MODEL=claude-sonnet-5-5
+    [ -f "$BENCH/PINS.env" ] && . "$BENCH/PINS.env"
     HINDSIGHT_API_LLM_PROVIDER=claude-code HINDSIGHT_API_LLM_API_KEY="$CLAUDE_CODE_OAUTH_TOKEN" \
+      HINDSIGHT_API_LLM_MODEL="$HINDSIGHT_LLM_MODEL" \
       nohup hindsight-api > "$EPISODE/hindsight-server.log" 2>&1 &
     echo $! > "$EPISODE/hindsight.pid"
     i=0; until curl -s --max-time 2 -o /dev/null http://127.0.0.1:8888/ 2>/dev/null; do
@@ -26,7 +31,13 @@ case $1 in
       sleep 5; i=$((i + 1))
       n=$(grep -o 'global: pending=[0-9]*' "$EPISODE/hindsight-server.log" 2>/dev/null | tail -1 | sed 's/.*=//')
       [ "${n:-1}" = 0 ] && [ $i -ge 4 ] && break
-    done ;;
+    done
+    # Fail loudly if its LLM can't be used: otherwise it silently stores nothing.
+    if grep -qE "issue with the selected model|Not logged in|RESOURCE_EXHAUSTED" "$EPISODE/hindsight-server.log"; then
+      echo "hindsight: its LLM calls are failing:" >&2
+      grep -E "issue with the selected model|Not logged in|RESOURCE_EXHAUSTED" "$EPISODE/hindsight-server.log" | tail -2 >&2
+      exit 1
+    fi ;;
   snapshot)
     mkdir -p "$SNAPSHOT"
     cp "$EPISODE"/hindsight*.log "$EPISODE/hindsight.version" "$SNAPSHOT/" 2>/dev/null
