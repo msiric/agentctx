@@ -116,3 +116,21 @@ either way; the held-out run is unaffected.
   this run, so filler runs as part 2 (`heldout-filler`), sized per trap from
   part 1's trailkeep cells (mean first-request tokens minus `none`'s, × 4
   characters). Nothing else in the plan changes.
+
+## 2026-11-03: Hindsight stored nothing in the dev matrix or the first held-out batch
+
+A validity check during the held-out run found that Hindsight's memory
+extraction failed in every cell: its `claude-code` provider defaults to
+`claude-sonnet-4-5-20250929`, which is no longer served ("There's an issue
+with the selected model"). Retention failed silently, so Hindsight ran with
+an empty memory. The earlier smoke pass came from the agent saving a plan
+through Hindsight's own MCP tool, which needs no LLM, so the check missed it.
+
+- **Dev:** Hindsight's dev results (3%) are invalid and are reported as such.
+- **Held-out:** its 10 cells so far are removed and re-run.
+- **Fix:** the arm sets `HINDSIGHT_API_LLM_MODEL=claude-sonnet-5-5` (the
+  current Sonnet, the provider's default tier), recorded in `PINS.env`, and
+  fails the episode if Hindsight's LLM calls error, so this can't pass
+  silently again. A one-episode smoke check confirms storage before the
+  held-out run continues. No other arm is affected; pass rates were not
+  looked at.
