@@ -1,0 +1,1 @@
+- [No positional booleans](no-positional-booleans.md) — use options objects, never bare boolean params

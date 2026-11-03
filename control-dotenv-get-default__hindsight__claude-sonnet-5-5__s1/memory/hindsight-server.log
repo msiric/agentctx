@@ -1,0 +1,1395 @@
+
+  [38;2;9;127;184m▄[0m[48;2;8;130;178m[38;2;5;133;186m▄[0m       [48;2;10;143;160m[38;2;10;143;165m▄[0m[38;2;7;140;156m▄[0m
+ [38;2;8;125;192m▄[0m [38;2;3;132;191m▀[0m[38;2;2;133;192m▄[0m [38;2;3;132;180m▄[0m[38;2;1;137;184m▄[0m[38;2;3;133;174m▄[0m [38;2;3;142;176m▄[0m[38;2;4;142;169m▀[0m [38;2;10;144;164m▄[0m
+[38;2;6;121;195m▀[0m[38;2;5;128;203m▀[0m[48;2;5;124;195m[38;2;3;125;200m▄[0m[38;2;2;126;196m▄[0m[48;2;3;128;188m[38;2;1;131;196m▄[0m[48;2;0;152;219m[38;2;2;131;191m▄[0m[38;2;1;141;196m▀[0m[38;2;1;135;183m▀[0m[38;2;1;148;198m▀[0m[48;2;1;156;202m[38;2;2;135;180m▄[0m[48;2;4;134;169m[38;2;1;137;177m▄[0m[38;2;3;138;173m▄[0m[48;2;6;137;165m[38;2;2;140;170m▄[0m[38;2;7;144;169m▀[0m[38;2;7;139;158m▀[0m
+   [48;2;2;128;202m[38;2;2;124;201m▄[0m[48;2;1;130;201m[38;2;0;135;212m▄[0m[38;2;2;128;196m▄[0m [48;2;2;142;204m[38;2;7;138;199m▄[0m [38;2;1;135;186m▄[0m[48;2;1;142;186m[38;2;2;144;194m▄[0m[48;2;3;138;176m[38;2;2;134;176m▄[0m
+ [48;2;8;118;200m[38;2;8;121;209m▄[0m[38;2;3;121;203m▀[0m [38;2;3;122;192m▀[0m[38;2;1;138;216m▀[0m[48;2;0;138;210m[38;2;3;128;198m▄[0m[48;2;0;126;188m[38;2;2;131;198m▄[0m[48;2;0;142;205m[38;2;3;132;193m▄[0m[38;2;1;140;196m▀[0m  [38;2;4;134;175m▀[0m[48;2;13;135;167m[38;2;8;136;174m▄[0m 
+
+  [38;2;0;116;217mH[38;2;0;116;215mi[38;2;0;117;213mn[38;2;0;118;211md[38;2;0;119;209ms[38;2;0;120;207mi[38;2;0;121;205mg[38;2;0;122;203mh[38;2;0;123;201mt[38;2;0;123;199m: [38;2;0;125;195mA[38;2;0;126;193mg[38;2;0;127;191me[38;2;0;128;189mn[38;2;0;129;187mt [38;2;0;131;183mM[38;2;0;131;181me[38;2;0;132;179mm[38;2;0;133;177mo[38;2;0;134;175mr[38;2;0;135;173my [38;2;0;137;169mT[38;2;0;138;167mh[38;2;0;138;165ma[38;2;0;139;163mt [38;2;0;141;159mL[38;2;0;142;157me[38;2;0;143;155ma[38;2;0;144;153mr[38;2;0;145;151mn[38;2;0;146;150ms[0m
+
+2026-11-03 18:55:36,191 - INFO - hindsight_api.config - Database: pg0 (schema: public)
+2026-11-03 18:55:36,191 - INFO - hindsight_api.config - LLM: provider=claude-code, model=claude-sonnet-4-5-20250929
+2026-11-03 18:55:36,191 - INFO - hindsight_api.config - Embeddings: provider=local
+2026-11-03 18:55:36,191 - INFO - hindsight_api.config - Reranker: provider=local
+2026-11-03 18:55:36,191 - INFO - hindsight_api.config - Native threads: 4 per pool (available CPUs=4, cgroup CPU quota=none found)
+2026-11-03 18:55:36,191 - INFO - hindsight_api.config - Graph retriever: link_expansion
+2026-11-03 18:55:37,995 - INFO - hindsight_api.engine.providers.claude_code_llm - Claude Code: Using Claude Agent SDK (authentication via CLAUDE_CODE_OAUTH_TOKEN from config)
+2026-11-03 18:55:37,995 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code provider runs automated model calls on your Claude subscription, which may conflict with Anthropic's terms. Read the notice before using it beyond personal local development, and prefer the 'anthropic' provider with an API key for servers: https://hindsight.vectorize.io/developer/models#claude-code-setup-claude-promax
+2026-11-03 18:55:37,995 - INFO - hindsight_api.engine.providers.claude_code_llm - Claude Code: Using Claude Agent SDK (authentication via CLAUDE_CODE_OAUTH_TOKEN from config)
+2026-11-03 18:55:37,995 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code provider runs automated model calls on your Claude subscription, which may conflict with Anthropic's terms. Read the notice before using it beyond personal local development, and prefer the 'anthropic' provider with an API key for servers: https://hindsight.vectorize.io/developer/models#claude-code-setup-claude-promax
+2026-11-03 18:55:37,995 - INFO - hindsight_api.engine.providers.claude_code_llm - Claude Code: Using Claude Agent SDK (authentication via CLAUDE_CODE_OAUTH_TOKEN from config)
+2026-11-03 18:55:37,995 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code provider runs automated model calls on your Claude subscription, which may conflict with Anthropic's terms. Read the notice before using it beyond personal local development, and prefer the 'anthropic' provider with an API key for servers: https://hindsight.vectorize.io/developer/models#claude-code-setup-claude-promax
+2026-11-03 18:55:37,995 - INFO - hindsight_api.engine.providers.claude_code_llm - Claude Code: Using Claude Agent SDK (authentication via CLAUDE_CODE_OAUTH_TOKEN from config)
+2026-11-03 18:55:37,995 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code provider runs automated model calls on your Claude subscription, which may conflict with Anthropic's terms. Read the notice before using it beyond personal local development, and prefer the 'anthropic' provider with an API key for servers: https://hindsight.vectorize.io/developer/models#claude-code-setup-claude-promax
+2026-11-03 18:55:37,995 - INFO - hindsight_api.engine.providers.claude_code_llm - Claude Code: Using Claude Agent SDK (authentication via CLAUDE_CODE_OAUTH_TOKEN from config)
+2026-11-03 18:55:37,995 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code provider runs automated model calls on your Claude subscription, which may conflict with Anthropic's terms. Read the notice before using it beyond personal local development, and prefer the 'anthropic' provider with an API key for servers: https://hindsight.vectorize.io/developer/models#claude-code-setup-claude-promax
+2026-11-03 18:55:38,454 - INFO - hindsight_api.api.mcp - MCP servers created (stateless_http=False)
+2026-11-03 18:55:38,541 - INFO - hindsight_api.api - HTTP REST API enabled
+2026-11-03 18:55:38,541 - INFO - hindsight_api.api - MCP server enabled at /mcp/
+uvloop available, will use for event loop
+[38;2;0;116;217mStarting Hindsight API...[0m
+  [38;2;128;128;128mVersion:[0m [38;2;0;119;210mv1.1.0[0m
+  [38;2;128;128;128mURL:[0m [38;2;0;122;203mhttp://0.0.0.0:8888[0m
+  [38;2;128;128;128mDatabase:[0m [38;2;0;128;190mpg0[0m
+  [38;2;128;128;128mLLM:[0m [38;2;0;134;176mclaude-code / claude-sonnet-4-5-20250929[0m
+  [38;2;128;128;128mEmbeddings:[0m [38;2;0;140;163mlocal[0m
+  [38;2;128;128;128mReranker:[0m [38;2;0;146;150mlocal[0m
+  [38;2;128;128;128mExtensions:[0m [38;2;0;128;190mpgvector (vector) / native (text)[0m
+  [38;2;128;128;128mMCP:[0m [38;2;0;146;150menabled at /mcp[0m
+
+INFO:     Started server process [89921]
+INFO:     Waiting for application startup.
+2026-11-03 18:55:38,566 - INFO - mcp.server.streamable_http_manager - StreamableHTTP session manager started
+2026-11-03 18:55:38,566 - INFO - mcp.server.streamable_http_manager - StreamableHTTP session manager started
+2026-11-03 18:55:38,566 - INFO - hindsight_api.api - MCP lifespans started (multi-bank and single-bank)
+2026-11-03 18:55:38,567 - INFO - root - Metrics initialized - available at /metrics endpoint
+2026-11-03 18:55:38,641 - INFO - hindsight_api.pg0 - Starting embedded PostgreSQL (name=hindsight, port=auto)...
+2026-11-03 18:55:39,654 - INFO - hindsight_api.pg0 - PostgreSQL started: postgresql://hindsight:hindsight@127.0.0.1:5432/hindsight
+2026-11-03 18:55:39,655 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 1 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:55:39,655 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code connection verification failed: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:55:39,655 - WARNING - hindsight_api.engine.memory_engine - LLM connection verification failed for 'default' config: Failed to verify Claude Code connection: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.. Server will start but LLM-dependent operations may fail until the provider is available.
+2026-11-03 18:55:44,507 - INFO - hindsight_api.engine.embeddings - Embeddings: initializing local provider with model BAAI/bge-small-en-v1.5
+2026-11-03 18:55:44,507 - INFO - hindsight_api.engine.cross_encoder - Reranker: initializing local provider with model cross-encoder/ms-marco-MiniLM-L-6-v2
+2026-11-03 18:55:44,531 - INFO - hindsight_api.engine.cross_encoder - Reranker: applied transformers 5.x compatibility patch for XLM-RoBERTa
+Fetching 12 files:   0%|          | 0/12 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-11-03 18:55:44,828 - WARNING - huggingface_hub.utils._http - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s][AFetching 12 files:   8%|▊         | 1/12 [00:00<00:01,  9.58it/s]
+Fetching 8 files:  12%|█▎        | 1/8 [00:00<00:00,  8.77it/s][AFetching 12 files:  83%|████████▎ | 10/12 [00:00<00:00, 50.67it/s]Fetching 12 files: 100%|██████████| 12/12 [00:03<00:00,  3.18it/s]
+2026-11-03 18:55:48,598 - INFO - sentence_transformers.base.model - Loading SentenceTransformer model from BAAI/bge-small-en-v1.5.
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 11843.95it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 107.66it/s]
+2026-11-03 18:55:49,187 - INFO - hindsight_api.engine.embeddings - Embeddings: local provider initialized (dim: 384, device: cpu)
+
+Fetching 8 files: 100%|██████████| 8/8 [00:05<00:00,  1.55it/s][AFetching 8 files: 100%|██████████| 8/8 [00:05<00:00,  1.60it/s]
+2026-11-03 18:55:50,058 - INFO - sentence_transformers.base.model - No modules.json found for cross-encoder/ms-marco-MiniLM-L-6-v2, initializing a new CrossEncoder model.
+Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|██████████| 105/105 [00:00<00:00, 11933.39it/s]
+2026-11-03 18:55:50,988 - WARNING - hindsight_api.engine.local_device - Reranker[cross-encoder/ms-marco-MiniLM-L-6-v2]: copied 105/107 misaligned tensor(s) out of memory-mapped storage. The model file's data section is not naturally aligned; without this copy the CPU matmul would return corrupt scores.
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 157.02it/s]
+2026-11-03 18:55:50,995 - INFO - hindsight_api.engine.cross_encoder - Reranker: local provider initialized (device: cpu, max_concurrent=4)
+2026-11-03 18:55:50,996 - INFO - hindsight_api.engine.memory_engine - Running database migrations...
+2026-11-03 18:55:50,996 - INFO - hindsight_api.engine.memory_engine - Running migrations on 1 schema(s)...
+2026-11-03 18:55:51,051 - INFO - alembic.runtime.plugins - setup plugin alembic.autogenerate.schemas
+2026-11-03 18:55:51,051 - INFO - alembic.runtime.plugins - setup plugin alembic.autogenerate.tables
+2026-11-03 18:55:51,051 - INFO - alembic.runtime.plugins - setup plugin alembic.autogenerate.types
+2026-11-03 18:55:51,051 - INFO - alembic.runtime.plugins - setup plugin alembic.autogenerate.constraints
+2026-11-03 18:55:51,051 - INFO - alembic.runtime.plugins - setup plugin alembic.autogenerate.defaults
+2026-11-03 18:55:51,051 - INFO - alembic.runtime.plugins - setup plugin alembic.autogenerate.comments
+2026-11-03 18:55:51,051 - INFO - alembic.runtime.plugins - setup plugin alembic.ext.checkconstraint_byname
+2026-11-03 18:55:51,075 - INFO - hindsight_api.migrations - pgvector extension not found, attempting to install...
+2026-11-03 18:55:51,084 - INFO - hindsight_api.migrations - pgvector extension installed in public schema
+2026-11-03 18:55:51,085 - INFO - hindsight_api.migrations - Running database migrations to head for schema 'public'...
+2026-11-03 18:55:51,085 - INFO - hindsight_api.migrations - Database URL: postgresql://***:***@127.0.0.1:5432/hindsight
+2026-11-03 18:55:51,085 - INFO - hindsight_api.migrations - Script location: /opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/alembic
+2026-11-03 18:55:51,092 - INFO - alembic.runtime.migration - Context impl PostgresqlImpl.
+2026-11-03 18:55:51,092 - INFO - alembic.runtime.migration - Will assume transactional DDL.
+2026-11-03 18:55:51,114 - INFO - alembic.runtime.migration - Running upgrade  -> 5a366d414dce, initial_schema
+2026-11-03 18:55:51,140 - INFO - alembic.runtime.migration - Running upgrade 5a366d414dce -> b7c4d8e9f1a2, add_chunks_table
+2026-11-03 18:55:51,144 - INFO - alembic.runtime.migration - Running upgrade b7c4d8e9f1a2 -> c8e5f2a3b4d1, add_retain_params_to_documents
+2026-11-03 18:55:51,145 - INFO - alembic.runtime.migration - Running upgrade c8e5f2a3b4d1 -> d9f6a3b4c5e2, Rename fact_type 'bank' to 'experience'
+2026-11-03 18:55:51,146 - INFO - alembic.runtime.migration - Running upgrade d9f6a3b4c5e2 -> rename_personality, rename_personality_to_disposition
+2026-11-03 18:55:51,149 - INFO - alembic.runtime.migration - Running upgrade rename_personality -> e0a1b2c3d4e5, disposition_to_3_traits
+2026-11-03 18:55:51,151 - INFO - alembic.runtime.migration - Running upgrade e0a1b2c3d4e5 -> f1a2b3c4d5e6, add_memory_links_from_type_weight_index
+2026-11-03 18:55:51,152 - INFO - alembic.runtime.migration - Running upgrade f1a2b3c4d5e6 -> g2a3b4c5d6e7, add_tags_column
+2026-11-03 18:55:51,152 - INFO - alembic.runtime.migration - Running upgrade g2a3b4c5d6e7 -> h3c4d5e6f7g8, mental_models_v4
+2026-11-03 18:55:51,159 - INFO - alembic.runtime.migration - Running upgrade h3c4d5e6f7g8 -> i4d5e6f7g8h9, delete_opinions
+2026-11-03 18:55:51,159 - INFO - alembic.runtime.migration - Running upgrade i4d5e6f7g8h9 -> j5e6f7g8h9i0, mental_model_versions
+2026-11-03 18:55:51,162 - INFO - alembic.runtime.migration - Running upgrade j5e6f7g8h9i0 -> k6f7g8h9i0j1, add_directive_subtype
+2026-11-03 18:55:51,163 - INFO - alembic.runtime.migration - Running upgrade k6f7g8h9i0j1 -> l7g8h9i0j1k2, add_worker_columns
+2026-11-03 18:55:51,165 - INFO - alembic.runtime.migration - Running upgrade l7g8h9i0j1k2 -> m8h9i0j1k2l3, mental_model_id_to_text
+2026-11-03 18:55:51,166 - INFO - alembic.runtime.migration - Running upgrade m8h9i0j1k2l3 -> n9i0j1k2l3m4, learnings_and_pinned_reflections
+2026-11-03 18:55:51,174 - INFO - alembic.runtime.migration - Running upgrade n9i0j1k2l3m4 -> o0j1k2l3m4n5, migrate_mental_models_data
+2026-11-03 18:55:51,176 - INFO - alembic.runtime.migration - Running upgrade o0j1k2l3m4n5 -> p1k2l3m4n5o6, new_knowledge_architecture
+2026-11-03 18:55:51,183 - INFO - alembic.runtime.migration - Running upgrade p1k2l3m4n5o6 -> q2l3m4n5o6p7, fix_mental_model_fact_type
+2026-11-03 18:55:51,183 - INFO - alembic.runtime.migration - Running upgrade q2l3m4n5o6p7 -> r3m4n5o6p7q8, Add reflect_response JSONB column to reflections
+2026-11-03 18:55:51,184 - INFO - alembic.runtime.migration - Running upgrade r3m4n5o6p7q8 -> s4n5o6p7q8r9, Add consolidated_at column to memory_units for incremental consolidation tracking.
+2026-11-03 18:55:51,185 - INFO - alembic.runtime.migration - Running upgrade s4n5o6p7q8r9 -> t5o6p7q8r9s0, Rename mental_model fact_type to observation and reflections table to mental_models
+2026-11-03 18:55:51,188 - INFO - alembic.runtime.migration - Running upgrade t5o6p7q8r9s0 -> u6p7q8r9s0t1, Change mental_models.id from UUID to TEXT
+2026-11-03 18:55:51,190 - INFO - alembic.runtime.migration - Running upgrade u6p7q8r9s0t1 -> v7q8r9s0t1u2, Add max_tokens and trigger columns to mental_models
+2026-11-03 18:55:51,190 - INFO - alembic.runtime.migration - Running upgrade v7q8r9s0t1u2 -> w8r9s0t1u2v3, Fix mental_models primary key to be scoped per bank
+2026-11-03 18:55:51,191 - INFO - alembic.runtime.migration - Running upgrade w8r9s0t1u2v3 -> x9s0t1u2v3w4, Add config JSONB column to banks table for hierarchical configuration
+2026-11-03 18:55:51,192 - INFO - alembic.runtime.migration - Running upgrade x9s0t1u2v3w4 -> y0t1u2v3w4x5, Add GIN index on async_operations.result_metadata for parent_operation_id queries
+2026-11-03 18:55:51,193 - INFO - alembic.runtime.migration - Running upgrade y0t1u2v3w4x5 -> a1b2c3d4e5f6, Add file_storage table for BYTEA-based file storage
+2026-11-03 18:55:51,194 - INFO - alembic.runtime.migration - Running upgrade a1b2c3d4e5f6 -> z1u2v3w4x5y6, Add observation_scopes column to memory_units table
+2026-11-03 18:55:51,195 - INFO - alembic.runtime.migration - Running upgrade z1u2v3w4x5y6 -> aa2b3c4d5e6f, Make event_date nullable in memory_units to support timestamp-free content
+2026-11-03 18:55:51,195 - INFO - alembic.runtime.migration - Running upgrade aa2b3c4d5e6f -> a2b3c4d5e6f7, Add text_signals column to memory_units for enriched BM25 indexing.
+2026-11-03 18:55:51,199 - INFO - alembic.runtime.migration - Running upgrade a2b3c4d5e6f7 -> b4c5d6e7f8a9, Backfill observation_scopes column if missing.
+2026-11-03 18:55:51,199 - INFO - alembic.runtime.migration - Running upgrade b4c5d6e7f8a9 -> c1a2b3d4e5f6, Enable pg_trgm extension and add GIN trigram index on entities.canonical_name
+2026-11-03 18:55:51,209 - INFO - alembic.runtime.migration - Running upgrade c1a2b3d4e5f6 -> b3c4d5e6f7g8, Add partial indexes on memory_units temporal date fields for fast temporal retrieval
+2026-11-03 18:55:51,211 - INFO - alembic.runtime.migration - Running upgrade b3c4d5e6f7g8 -> d2e3f4a5b6c7, Add covering and composite indexes to speed up link expansion graph retrieval.
+2026-11-03 18:55:51,212 - INFO - alembic.runtime.migration - Running upgrade d2e3f4a5b6c7 -> e4f5a6b7c8d9, Add webhooks table and next_retry_at to async_operations.
+2026-11-03 18:55:51,214 - INFO - alembic.runtime.migration - Running upgrade e4f5a6b7c8d9 -> f7g8h9i0j1k2, Add http_config JSONB column to webhooks table.
+2026-11-03 18:55:51,215 - INFO - alembic.runtime.migration - Running upgrade f7g8h9i0j1k2 -> a2b3c4d5e6f8, Add GIN index on source_memory_ids for observation lookup performance
+2026-11-03 18:55:51,216 - INFO - alembic.runtime.migration - Running upgrade a2b3c4d5e6f7, a2b3c4d5e6f8 -> c3d4e5f6g7h8, Add history column to mental_models
+2026-11-03 18:55:51,216 - INFO - alembic.runtime.migration - Running upgrade c3d4e5f6g7h8 -> d5e6f7a8b9c0, Add internal_id to banks and per-(bank, fact_type) partial vector indexes
+2026-11-03 18:55:51,219 - INFO - alembic.runtime.migration - Running upgrade d5e6f7a8b9c0 -> d4e5f6g7h8i9, Recreate idx_memory_units_source_memory_ids GIN index with fastupdate=off
+2026-11-03 18:55:51,220 - INFO - alembic.runtime.migration - Running upgrade d4e5f6g7h8i9 -> e5f6g7h8i9j0, Add CASCADE DELETE FK from async_operations and webhooks to banks.
+2026-11-03 18:55:51,222 - INFO - alembic.runtime.migration - Running upgrade e5f6g7h8i9j0 -> f6g7h8i9j0k1, chunk_fk_cascade_delete
+2026-11-03 18:55:51,224 - INFO - alembic.runtime.migration - Running upgrade f6g7h8i9j0k1 -> g7h8i9j0k1l2, backsweep_orphan_memory_units
+2026-11-03 18:55:51,225 - INFO - alembic.runtime.migration - Running upgrade g7h8i9j0k1l2 -> a3b4c5d6e7f8, Add consolidation_failed_at column to memory_units for tracking persistent LLM failures.
+2026-11-03 18:55:51,226 - INFO - alembic.runtime.migration - Running upgrade f1a2b3c4d5e6 -> g2h3i4j5k6l7, remove_opinion_fact_type
+2026-11-03 18:55:51,227 - INFO - alembic.runtime.migration - Running upgrade a3b4c5d6e7f8 -> b3c4d5e6f7a8, add content_hash to chunks table for delta retain
+2026-11-03 18:55:51,228 - INFO - alembic.runtime.migration - Running upgrade b3c4d5e6f7a8 -> c5d6e7f8a9b0, Add bank_id column to memory_links for direct filtering
+2026-11-03 18:55:51,229 - INFO - alembic.runtime.migration - Running upgrade a3b4c5d6e7f8, c8e5f2a3b4d1 -> c2d3e4f5g6h7, Add audit_log table for feature usage tracking.
+2026-11-03 18:55:51,231 - INFO - alembic.runtime.migration - Running upgrade c2d3e4f5g6h7, c5d6e7f8a9b0 -> d6e7f8a9b0c1, Drop unused metadata column from documents table
+2026-11-03 18:55:51,232 - INFO - alembic.runtime.migration - Running upgrade d6e7f8a9b0c1 -> 2eee35aa3cfc, Recreate entities trigram index on LOWER(canonical_name) for case-insensitive matching
+2026-11-03 18:55:51,233 - INFO - alembic.runtime.migration - Running upgrade 2eee35aa3cfc -> a4b5c6d7e8f9, Fix per-bank vector indexes to match configured extension
+2026-11-03 18:55:51,233 - INFO - alembic.runtime.migration - Running upgrade a4b5c6d7e8f9, g2h3i4j5k6l7 -> h3i4j5k6l7m8, Merge 3 migration heads and add unit_entities composite index
+2026-11-03 18:55:51,234 - INFO - alembic.runtime.migration - Running upgrade z1u2v3w4x5y6 -> a2v3w4x5y6z7, Add last_refreshed_source_query column to mental_models
+2026-11-03 18:55:51,235 - INFO - alembic.runtime.migration - Running upgrade a2v3w4x5y6z7 -> b3w4x5y6z7a8, Add structured_content JSONB column to mental_models
+2026-11-03 18:55:51,235 - INFO - alembic.runtime.migration - Running upgrade b3w4x5y6z7a8 -> c4x5y6z7a8b9, backsweep_orphan_observations_v2
+2026-11-03 18:55:51,236 - INFO - alembic.runtime.migration - Running upgrade c4x5y6z7a8b9, h3i4j5k6l7m8 -> 8c6fa6f7230b, Merge divergent migration heads for v0.5.3
+2026-11-03 18:55:51,236 - INFO - alembic.runtime.migration - Running upgrade 8c6fa6f7230b -> d5y6z7a8b9c0, Backfill mental_models.subtype for databases that ran h3c4d5e6f7g8 before the fix
+2026-11-03 18:55:51,238 - INFO - alembic.runtime.migration - Running upgrade d5y6z7a8b9c0 -> i4j5k6l7m8n9, Add 'cancelled' to async_operations status check constraint
+2026-11-03 18:55:51,239 - INFO - alembic.runtime.migration - Running upgrade i4j5k6l7m8n9 -> k6l7m8n9o0p1, No-op: observation_sources table is Oracle-only
+2026-11-03 18:55:51,239 - INFO - alembic.runtime.migration - Running upgrade k6l7m8n9o0p1 -> o1a2b3c4d5e6, oracle_baseline
+2026-11-03 18:55:51,240 - INFO - alembic.runtime.migration - Running upgrade o1a2b3c4d5e6 -> b5d4e3f2a1c9, Backfill entity_cooccurrences.last_cooccurred from memory_units event time
+2026-11-03 18:55:51,241 - INFO - alembic.runtime.migration - Running upgrade o1a2b3c4d5e6 -> 9f8e7d6c5b4a, Make memory_links.from_unit_id and memory_links.to_unit_id FKs deferrable.
+2026-11-03 18:55:51,242 - INFO - alembic.runtime.migration - Running upgrade 9f8e7d6c5b4a, b5d4e3f2a1c9 -> m3rg3h3ad5f6, Merge divergent heads from deferrable FK and cooccurrence backfill
+2026-11-03 18:55:51,243 - INFO - alembic.runtime.migration - Running upgrade m3rg3h3ad5f6 -> 86f7a033d372, Repair mental_models.subtype on databases stuck at m3rg3h3ad5f6
+2026-11-03 18:55:51,245 - INFO - alembic.runtime.migration - Running upgrade 86f7a033d372 -> b8c9d0e1f2a3, Re-create vchord vector indexes with vector_cosine_ops
+2026-11-03 18:55:51,245 - INFO - alembic.runtime.migration - Running upgrade 86f7a033d372 -> p4q5r6s7t8u9, Drop GENERATED expression on tsvector search_vector columns.
+2026-11-03 18:55:51,248 - INFO - alembic.runtime.migration - Running upgrade p4q5r6s7t8u9 -> e1b2c3d4f5a6, Drop indexes that are unused or redundant with composite indexes.
+2026-11-03 18:55:51,251 - INFO - alembic.runtime.migration - Running upgrade e1b2c3d4f5a6 -> e9b2c7d1f3a4, Drop materialized entity rows from memory_links.
+2026-11-03 18:55:51,253 - INFO - alembic.runtime.migration - Running upgrade e9b2c7d1f3a4 -> b5a4c3e2f1d8, Add graph_maintenance_queue table
+2026-11-03 18:55:51,254 - INFO - alembic.runtime.migration - Running upgrade b5a4c3e2f1d8, b8c9d0e1f2a3 -> c1d2e3f4a5b6, Merge graph_maintenance_queue and vchord_cosine_opclass heads.
+2026-11-03 18:55:51,255 - INFO - alembic.runtime.migration - Running upgrade c1d2e3f4a5b6 -> d3e4f5a6b7c8, Add llm_requests table for per-bank LLM request tracing.
+2026-11-03 18:55:51,257 - INFO - alembic.runtime.migration - Running upgrade d3e4f5a6b7c8 -> a7b8c9d0e1f2, Move mental-model and observation history into dedicated tables.
+2026-11-03 18:55:51,261 - INFO - alembic.runtime.migration - Running upgrade a7b8c9d0e1f2 -> e5f6a7b8c9d0, Add server-side routines for background maintenance sweeps.
+2026-11-03 18:55:51,263 - INFO - alembic.runtime.migration - Running upgrade e5f6a7b8c9d0 -> b2d4f6a8c1e3, Repair: install maintenance routines on the ``public`` / base-schema run.
+2026-11-03 18:55:51,263 - INFO - alembic.runtime.migration - Running upgrade b2d4f6a8c1e3 -> c9a1b2d3e4f5, Add invalidated_memory_units table for curation (edit/invalidate).
+2026-11-03 18:55:51,267 - INFO - alembic.runtime.migration - Running upgrade c9a1b2d3e4f5 -> c3e5a7b9d1f4, Repair: widen ``*_history.bank_id`` from VARCHAR(64) to TEXT on PostgreSQL.
+2026-11-03 18:55:51,269 - INFO - alembic.runtime.migration - Running upgrade c3e5a7b9d1f4 -> a1d3f5b7c9e2, Repair: widen the remaining live ``bank_id`` columns from VARCHAR(64) to TEXT on PostgreSQL.
+2026-11-03 18:55:51,272 - INFO - alembic.runtime.migration - Running upgrade a1d3f5b7c9e2 -> 2071c7518f88, Add a composite index on memory_links(bank_id, link_type) (PostgreSQL).
+2026-11-03 18:55:51,274 - INFO - alembic.runtime.migration - Running upgrade a1d3f5b7c9e2 -> d4f6a8c2e1b3, Drop the embedding column from the curation archive (invalidated_memory_units).
+2026-11-03 18:55:51,274 - INFO - alembic.runtime.migration - Running upgrade d4f6a8c2e1b3, 2071c7518f88 -> e1f2a3b4c5d6, Merge two divergent migration heads.
+2026-11-03 18:55:51,275 - INFO - alembic.runtime.migration - Running upgrade e1f2a3b4c5d6 -> c7e9f1a3b5d2, Make maintenance routines resilient to schemas that vanish mid-scan.
+2026-11-03 18:55:51,276 - INFO - alembic.runtime.migration - Running upgrade c7e9f1a3b5d2 -> f4d1c2b3a5e6, Add server-side routine for cron-scheduled mental model refresh.
+2026-11-03 18:55:51,276 - INFO - alembic.runtime.migration - Running upgrade f4d1c2b3a5e6 -> c3f7a1b9d2e4, Backfill search_vector for native-backend observations.
+2026-11-03 18:55:51,278 - INFO - alembic.runtime.migration - Running upgrade c3f7a1b9d2e4 -> b57a7c9e0d13, Add bank_stats_cache table for distributed get_bank_stats caching
+2026-11-03 18:55:51,279 - INFO - alembic.runtime.migration - Running upgrade b57a7c9e0d13 -> e7c3a9f1b2d5, Drop the search_vector column from the curation archive (invalidated_memory_units).
+2026-11-03 18:55:51,280 - INFO - alembic.runtime.migration - Running upgrade e7c3a9f1b2d5 -> a8c1e4f7b0d3, Add indexes for terminal cleanup and newest-first operation listing.
+2026-11-03 18:55:51,281 - INFO - alembic.runtime.migration - Running upgrade a8c1e4f7b0d3 -> b6d2f8a4c1e7, Install the maintenance discovery routines into the configured schema.
+2026-11-03 18:55:51,282 - INFO - alembic.runtime.migration - Running upgrade b6d2f8a4c1e7 -> d7b2f8a1c934, Add the ``schemas_with_expired_operations`` cross-tenant discovery routine.
+2026-11-03 18:55:51,283 - INFO - alembic.runtime.migration - Running upgrade d7b2f8a1c934 -> c7d1e9a4b3f2, Add ``causal_links`` to the curation archive (invalidated_memory_units).
+2026-11-03 18:55:51,284 - INFO - alembic.runtime.migration - Running upgrade c7d1e9a4b3f2 -> a1c9e7f3b2d8, Drop observation_history's FK to memory_units.
+2026-11-03 18:55:51,285 - INFO - alembic.runtime.migration - Running upgrade a1c9e7f3b2d8 -> a9b8c7d6e5f4, Add knowledge_pages table (knowledge-base hierarchy).
+2026-11-03 18:55:51,289 - INFO - alembic.runtime.migration - Running upgrade a9b8c7d6e5f4 -> e4a7c1b9d2f6, Drop the never-written `access_count` column from memory_units (and its archive).
+2026-11-03 18:55:51,290 - INFO - alembic.runtime.migration - Running upgrade e4a7c1b9d2f6 -> f2a6d8c4b1e9, Repair: drop the stale global memory_units vector index on per-bank backends.
+2026-11-03 18:55:51,290 - INFO - alembic.runtime.migration - Running upgrade f2a6d8c4b1e9 -> b3e8d1c6f4a9, Add entities.entity_kind and exclude label entities from the trigram index.
+2026-11-03 18:55:51,293 - INFO - alembic.runtime.migration - Running upgrade b3e8d1c6f4a9 -> d9c1a7b4e2f6, Add async_operations.serialization_key for per-document retain serialization.
+2026-11-03 18:55:51,294 - INFO - alembic.runtime.migration - Running upgrade d9c1a7b4e2f6 -> c4f7a91b2d38, Add entity_maintenance_queue table (+ seed it with every existing entity)
+2026-11-03 18:55:51,296 - INFO - alembic.runtime.migration - Running upgrade c4f7a91b2d38 -> e7c3a91f4b62, Add last_memory_seen_at to mental_models, splitting it from last_refreshed_at.
+2026-11-03 18:55:51,296 - INFO - alembic.runtime.migration - Running upgrade e7c3a91f4b62 -> c8b4e2a71f95, Make the cross-schema maintenance routines skip a schema under concurrent DDL.
+2026-11-03 18:55:51,298 - INFO - alembic.runtime.migration - Running upgrade c8b4e2a71f95 -> f2a7c9d4b168, Add a partial index for the cron-scheduled mental model discovery sweep.
+2026-11-03 18:55:51,299 - INFO - alembic.runtime.migration - Running upgrade f2a7c9d4b168 -> c4e8a1b7d2f6, Index memory_units(bank_id, updated_at) so the scoped staleness check is cheap.
+2026-11-03 18:55:51,300 - INFO - alembic.runtime.migration - Running upgrade c4e8a1b7d2f6 -> d1e2f3a4b5c6, Drop schema-v1 mental model structured_content
+2026-11-03 18:55:51,301 - INFO - alembic.runtime.migration - Running upgrade d1e2f3a4b5c6 -> e2f4a6c8b0d1, Add attachments and document_attachments (inline retain attachments).
+2026-11-03 18:55:51,304 - INFO - alembic.runtime.migration - Running upgrade e2f4a6c8b0d1 -> f3a5b7c9d1e2, Drop the unused memory_units_bm25 materialized view.
+2026-11-03 18:55:51,305 - INFO - alembic.runtime.migration - Running upgrade f3a5b7c9d1e2 -> a7c2e9f41b60, Give every attachment an owning document, and drop document_attachments.
+2026-11-03 18:55:51,308 - INFO - alembic.runtime.migration - Running upgrade a7c2e9f41b60 -> b8d3f1a6c2e4, Add last_refresh_failed_at column to mental_models
+2026-11-03 18:55:51,308 - INFO - alembic.runtime.migration - Running upgrade b8d3f1a6c2e4 -> c8d1e4f7a20b, Add bank_aliases: extra ids a bank also answers to.
+2026-11-03 18:55:51,310 - INFO - alembic.runtime.migration - Running upgrade c8d1e4f7a20b -> d4f8b1c6e903, Let one of a bank's aliases be the id shown in its place.
+2026-11-03 18:55:51,311 - INFO - alembic.runtime.migration - Running upgrade d4f8b1c6e903 -> a6c4e8f1b203, Store per-request reasoning tokens alongside visible output tokens.
+2026-11-03 18:55:51,311 - INFO - alembic.runtime.migration - Running upgrade d4f8b1c6e903 -> 7c2e5a9d1f40, Scope the entities trigram index by bank: GIN (bank_id, LOWER(canonical_name)).
+2026-11-03 18:55:51,322 - INFO - alembic.runtime.migration - Running upgrade 7c2e5a9d1f40, a6c4e8f1b203 -> e5b1c7d3a902, Merge divergent heads from the bank-scoped trigram index and reasoning tokens
+2026-11-03 18:55:51,323 - INFO - alembic.runtime.migration - Running upgrade e5b1c7d3a902 -> c8e2f4a6b1d3, Oracle Text index for knowledge-page search
+2026-11-03 18:55:51,323 - INFO - alembic.runtime.migration - Running upgrade c8e2f4a6b1d3 -> b2429c65cc20, Make ``banks_needing_consolidation()`` probe each bank instead of scanning facts.
+2026-11-03 18:55:51,324 - INFO - alembic.runtime.migration - Running upgrade b2429c65cc20 -> d4f7a2c9e1b5, Scheduled full refresh for mental models
+2026-11-03 18:55:51,325 - INFO - alembic.runtime.migration - Running upgrade d4f7a2c9e1b5 -> e8c1a4f7b2d9, Repair: drop every global memory_units vector index on per-bank backends.
+2026-11-03 18:55:51,326 - INFO - alembic.runtime.migration - Running upgrade e8c1a4f7b2d9 -> f2a9c4e7b1d3, Repair: widen the columns that reference ``mental_models.id``.
+2026-11-03 18:55:51,328 - INFO - alembic.runtime.migration - Running upgrade f2a9c4e7b1d3 -> c7e2f9a4d1b8, Clear year-1 / year-9999 placeholder event_date values from memory_units
+2026-11-03 18:55:51,329 - INFO - hindsight_api.migrations - Database migrations completed successfully for schema 'public'
+2026-11-03 18:55:51,337 - INFO - hindsight_api.migrations - Using vector extension: pgvector
+2026-11-03 18:55:51,344 - INFO - hindsight_api.migrations - Target vector extension: pgvector
+2026-11-03 18:55:51,360 - INFO - hindsight_api.engine.memory_engine - Schema migrations completed
+2026-11-03 18:55:51,360 - INFO - hindsight_api.engine.memory_engine - Connecting to database at postgresql://***:***@127.0.0.1:5432/hindsight
+2026-11-03 18:55:51,373 - INFO - hindsight_api.engine.db.postgresql - PostgreSQL pool created (min=5, max=100, cmd_timeout=60s, acquire_timeout=30s, session_setup_on_acquire=True)
+2026-11-03 18:55:51,380 - INFO - hindsight_api.engine.task_backend - BrokerTaskBackend initialized
+2026-11-03 18:55:51,380 - INFO - hindsight_api.engine.memory_engine - Memory system initialized (pool and task backend started)
+2026-11-03 18:55:51,380 - INFO - root - Memory system initialized
+2026-11-03 18:55:51,808 - INFO - root - DB pool metrics configured
+2026-11-03 18:55:51,808 - INFO - hindsight.loop_watchdog - Loop watchdog started (stall_threshold=1.00s, poll_interval=0.25s)
+2026-11-03 18:55:51,808 - INFO - root - Worker id: runnervmnwato (source: hostname (default))
+2026-11-03 18:55:51,809 - INFO - root - Worker poller started (worker_id=runnervmnwato)
+2026-11-03 18:55:51,809 - INFO - root - Tenant extension started
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8888 (Press CTRL+C to quit)
+2026-11-03 18:55:51,811 - INFO - hindsight_api.worker.poller - Worker runnervmnwato starting polling loop (max_slots=10, reservations=[consolidation=2], shared_pool=8)
+2026-11-03 18:55:51,811 - INFO - hindsight_api.worker.poller - Worker runnervmnwato recovering stale tasks across 1 schemas
+2026-11-03 18:55:51,814 - INFO - hindsight_api.worker.poller - Worker runnervmnwato recovered 0 stale tasks from previous run (1 schemas in 0.0s)
+2026-11-03 18:55:52,315 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=0/10 | reserved: [consolidation=0/2(avail=2)] | shared=0/8(avail=8) | global: pending=0 (queried=0/1 schemas: ) | others: none | pool: size=5 limits=5-100 idle=5 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1644 peak_rss_mb=1712 | my_active: none
+2026-11-03 18:55:56,437 - INFO - hindsight_api.engine.memory_engine - Created parent operation 12ecac0c-afed-4e9d-b675-1ff9f9dba4e0 with 1 child sub-batch(es)
+2026-11-03 18:55:56,549 - INFO - hindsight_api.config_resolver - Updated bank config for coding-agent::dotenv: ['reflect_mission', 'retain_mission', 'retain_extraction_mode', 'enable_observations', 'observations_mission', 'entity_labels', 'entities_allow_free_form', 'retain_default_strategy', 'retain_strategies']
+2026-11-03 18:55:56,621 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Component map' for bank coding-agent::dotenv
+2026-11-03 18:55:56,627 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::dotenv, operation_id=08967c6c-70d6-4323-81a9-b49413100721
+2026-11-03 18:55:56,656 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Core concepts' for bank coding-agent::dotenv
+2026-11-03 18:55:56,660 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::dotenv, operation_id=ab92afbe-a5fb-4cc7-b9ce-b96f462848f6
+2026-11-03 18:55:56,683 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Conventions and patterns' for bank coding-agent::dotenv
+2026-11-03 18:55:56,687 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::dotenv, operation_id=ada209a4-4136-43fe-ac36-b0fbee2f2c5f
+2026-11-03 18:55:56,730 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Key decisions and rationale' for bank coding-agent::dotenv
+2026-11-03 18:55:56,737 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::dotenv, operation_id=a30224a1-1af5-42c5-b0df-5640f4f9257e
+2026-11-03 18:55:56,799 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Initiatives and enhancements' for bank coding-agent::dotenv
+2026-11-03 18:55:56,805 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::dotenv, operation_id=475be839-d89c-4c91-ba15-1f48d10c49f1
+2026-11-03 18:55:56,861 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 6 tasks (0 consolidation): batch_retain:1, refresh_mental_model:5 (schemas: default)
+2026-11-03 18:55:56,874 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::dotenv, mental_model_id=mm-2296699b7c7f46769ca3938196020fd2
+2026-11-03 18:55:56,875 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::dotenv, mental_model_id=mm-f43c1aa591884d5592f9540a2b1ddd17
+2026-11-03 18:55:56,876 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::dotenv, mental_model_id=mm-ffd3e65d2a044d04a745071d6fc181c1
+2026-11-03 18:55:56,876 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=62ecb81d-fe76-414b-aacd-4eca08a02c67
+2026-11-03 18:55:56,892 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::dotenv, mental_model_id=mm-d58c3630ce86429b86d824f2c25b693d
+2026-11-03 18:55:56,895 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::dotenv, mental_model_id=mm-b22c317acaa64980b13c905bfc7ff602
+2026-11-03 18:55:56,928 - INFO - hindsight_api.engine.memory_engine - Created parent operation 31681afc-0dd8-4833-9d6b-c0181bc8161a with 1 child sub-batch(es)
+2026-11-03 18:55:56,932 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-b22c317acaa64980b13c905bfc7ff602: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 18:55:56,941 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-b22c317acaa64980b13c905bfc7ff602 (full): no new facts found, preserving content
+2026-11-03 18:55:56,943 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-ffd3e65d2a044d04a745071d6fc181c1: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 18:55:56,943 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-ffd3e65d2a044d04a745071d6fc181c1 (full): no new facts found, preserving content
+2026-11-03 18:55:56,945 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-2296699b7c7f46769ca3938196020fd2: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 18:55:56,945 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-2296699b7c7f46769ca3938196020fd2 (full): no new facts found, preserving content
+2026-11-03 18:55:56,948 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::dotenv, mental_model_id=mm-ffd3e65d2a044d04a745071d6fc181c1
+2026-11-03 18:55:57,158 - WARNING - hindsight_api.engine.db_utils - [DB POOL] Slow acquire: 0.210s
+2026-11-03 18:55:57,159 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-f43c1aa591884d5592f9540a2b1ddd17: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 18:55:57,160 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-f43c1aa591884d5592f9540a2b1ddd17 (full): no new facts found, preserving content
+2026-11-03 18:55:57,160 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-d58c3630ce86429b86d824f2c25b693d: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 18:55:57,160 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-d58c3630ce86429b86d824f2c25b693d (full): no new facts found, preserving content
+2026-11-03 18:55:57,229 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: ab92afbe-a5fb-4cc7-b9ce-b96f462848f6
+2026-11-03 18:55:57,229 - WARNING - hindsight_api.engine.db_utils - [DB POOL] Slow acquire: 0.068s
+2026-11-03 18:55:57,231 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::dotenv, mental_model_id=mm-2296699b7c7f46769ca3938196020fd2
+2026-11-03 18:55:57,234 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::dotenv, mental_model_id=mm-d58c3630ce86429b86d824f2c25b693d
+2026-11-03 18:55:57,315 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::dotenv, mental_model_id=mm-b22c317acaa64980b13c905bfc7ff602
+2026-11-03 18:55:57,317 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::dotenv, mental_model_id=mm-f43c1aa591884d5592f9540a2b1ddd17
+2026-11-03 18:55:57,319 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 08967c6c-70d6-4323-81a9-b49413100721
+2026-11-03 18:55:57,320 - WARNING - hindsight_api.engine.db_utils - [DB POOL] Slow acquire: 0.081s
+2026-11-03 18:55:57,327 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: a30224a1-1af5-42c5-b0df-5640f4f9257e
+2026-11-03 18:55:57,327 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 475be839-d89c-4c91-ba15-1f48d10c49f1
+2026-11-03 18:55:57,328 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: ada209a4-4136-43fe-ac36-b0fbee2f2c5f
+2026-11-03 18:55:57,355 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 18:55:57,357 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=55da9375-49de-4895-a507-3f927364e3cf
+2026-11-03 18:55:57,360 - INFO - hindsight_api.engine.memory_engine - Large batch detected (19,507 tokens from 1 items). Splitting into sub-batches of ~10,000 tokens each...
+2026-11-03 18:55:57,366 - INFO - hindsight_api.engine.memory_engine - Processing sub-batch 1: 1 items, 9,933 tokens
+2026-11-03 18:55:58,064 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:55:58,385 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:55:58,461 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:55:58,527 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:55:59,837 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:00,204 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:00,336 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:00,441 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:02,625 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:03,136 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:03,261 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:03,342 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:07,361 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:07,364 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=10.487s 0.0KB/s | pg.acquire=0.03s/7c/0%
+2026-11-03 18:56:07,364 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:07,607 - WARNING - hindsight_api.worker.poller - Task 62ecb81d-fe76-414b-aacd-4eca08a02c67 scheduled for retry at 2026-11-03 18:57:07.370832+00:00: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:07,610 - WARNING - hindsight_api.engine.db_utils - [DB POOL] Slow acquire: 0.084s
+2026-11-03 18:56:07,969 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:07,970 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=10.612s 6.3KB/s | pg.acquire=0.003s/8c/0%
+2026-11-03 18:56:07,970 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7690, in _run_retain_execution
+    collected.append(await task)
+                     ^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7582, in _run_sub
+    sub_outcome = await self._retain_batch_async_internal(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:07,974 - WARNING - hindsight_api.worker.poller - Task 55da9375-49de-4895-a507-3f927364e3cf scheduled for retry at 2026-11-03 18:57:07.972914+00:00: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:22,584 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=0/10 | reserved: [consolidation=0/2(avail=2)] | shared=0/8(avail=8) | global: pending=4 (queried=1/1 schemas: default) | others: none | pool: size=7 limits=5-100 idle=7 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1684 peak_rss_mb=1712 | my_active: none
+2026-11-03 18:56:22,584 - INFO - hindsight_api.worker.poller - [PENDING_BREAKDOWN] batch_retain: total=2 payload_null=2 retry_blocked=0 assigned=0 | retain: total=2 payload_null=0 retry_blocked=2 assigned=0
+2026-11-03 18:56:37,202 - INFO - hindsight_api.engine.memory_engine - Created parent operation 6ac6c2ac-2c85-522a-84d0-f657585717c9 with 1 child sub-batch(es)
+2026-11-03 18:56:37,313 - INFO - hindsight_api.engine.memory_engine - [REFLECT coding-a-97313-3b5032] Starting agentic reflect for query: A developer is starting a coding session in this r...
+2026-11-03 18:56:37,318 - INFO - hindsight_api.engine.memory_engine - [REFLECT coding-a-97313-3b5032] Bank has 5 mental models
+2026-11-03 18:56:37,715 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 18:56:37,718 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=fac315bb-8cde-4c22-a46b-67ee80740d61
+2026-11-03 18:56:38,046 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code tool call error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:38,413 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:39,762 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code tool call error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:40,096 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:41,153 - INFO - hindsight_api.engine.maintenance - Maintenance: retention took 0.002s
+2026-11-03 18:56:41,154 - INFO - hindsight_api.engine.maintenance - Maintenance: consolidation reconcile took 0.001s
+2026-11-03 18:56:41,156 - INFO - hindsight_api.engine.maintenance - Maintenance: scheduled mental model refresh took 0.001s
+2026-11-03 18:56:42,516 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code tool call error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:42,721 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:47,255 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code tool call error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:47,255 - WARNING - hindsight_api.engine.reflect.agent - [REFLECT coding-a-97313-3b5032] LLM error on iteration 1: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it. (9935ms, 0ms queued)
+2026-11-03 18:56:47,428 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:47,429 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=9.71s 0.3KB/s | pg.acquire=0.002s/7c/0%
+2026-11-03 18:56:47,429 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:47,433 - WARNING - hindsight_api.worker.poller - Task fac315bb-8cde-4c22-a46b-67ee80740d61 scheduled for retry at 2026-11-03 18:57:47.432327+00:00: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:47,944 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code tool call error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:49,642 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code tool call error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:52,314 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code tool call error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:53,035 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=0/10 | reserved: [consolidation=0/2(avail=2)] | shared=0/8(avail=8) | global: pending=6 (queried=1/1 schemas: default) | others: none | pool: size=7 limits=5-100 idle=7 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1685 peak_rss_mb=1712 | my_active: none
+2026-11-03 18:56:53,035 - INFO - hindsight_api.worker.poller - [PENDING_BREAKDOWN] batch_retain: total=3 payload_null=3 retry_blocked=0 assigned=0 | retain: total=3 payload_null=0 retry_blocked=3 assigned=0
+2026-11-03 18:56:57,011 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code tool call error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:56:57,012 - WARNING - hindsight_api.engine.reflect.agent - [REFLECT coding-a-97313-3b5032] LLM error on iteration 2: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it. (9756ms, 0ms queued)
+2026-11-03 18:56:57,014 - ERROR - hindsight_api.api.http - Error in /v1/default/banks/coding-agent::dotenv/reflect: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+
+Traceback:
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/api/http.py", line 6634, in api_reflect
+    core_result = await run_cancellable_on_disconnect(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/api/http.py", line 473, in run_cancellable_on_disconnect
+    return await run_task_cancellable_on_disconnect(http_request, coro, operation=operation, bank_id=bank_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/api/http.py", line 509, in run_task_cancellable_on_disconnect
+    return task.result()
+           ^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 16175, in reflect_async
+    agent_result = await asyncio.wait_for(
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/asyncio/tasks.py", line 520, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/reflect/agent.py", line 595, in run_reflect_agent
+    return await _run_reflect_agent_inner(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/reflect/agent.py", line 1539, in _run_reflect_agent_inner
+    result = await llm_config.call_with_tools(**ct_kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/llm_wrapper.py", line 1896, in call_with_tools
+    return await object.__getattribute__(self, "_provider").call_with_tools(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/llm_wrapper.py", line 1483, in call_with_tools
+    return await receiver._call_with_tools(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/llm_wrapper.py", line 1599, in _call_with_tools
+    result = await self._provider_impl.call_with_tools(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/providers/claude_code_llm.py", line 811, in call_with_tools
+    raise _result_error(message)
+RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+
+2026-11-03 18:56:58,979 - INFO - hindsight_api.engine.memory_engine - Created parent operation 0f18cee4-7664-544c-a794-9793e06a888a with 1 child sub-batch(es)
+2026-11-03 18:56:59,083 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 18:56:59,084 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=dc30fc85-b45b-48d3-8006-37f3f09093ca
+2026-11-03 18:56:59,765 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:01,393 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:04,025 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:07,652 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 18:57:07,654 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=62ecb81d-fe76-414b-aacd-4eca08a02c67
+2026-11-03 18:57:08,174 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 18:57:08,175 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=55da9375-49de-4895-a507-3f927364e3cf
+2026-11-03 18:57:08,178 - INFO - hindsight_api.engine.memory_engine - Large batch detected (19,507 tokens from 1 items). Splitting into sub-batches of ~10,000 tokens each...
+2026-11-03 18:57:08,184 - INFO - hindsight_api.engine.memory_engine - Processing sub-batch 1: 1 items, 9,933 tokens
+2026-11-03 18:57:08,411 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:08,776 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:08,777 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=9.693s 0.3KB/s | pg.acquire=0.001s/7c/0%
+2026-11-03 18:57:08,777 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:08,792 - WARNING - hindsight_api.worker.poller - Task dc30fc85-b45b-48d3-8006-37f3f09093ca scheduled for retry at 2026-11-03 18:58:08.785484+00:00: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:09,108 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:09,263 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:09,285 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:10,051 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:10,926 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:11,036 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:11,098 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:12,689 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:13,738 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:13,862 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:13,932 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:17,332 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:17,333 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=9.679s 0.0KB/s | pg.acquire=0.001s/7c/0%
+2026-11-03 18:57:17,333 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:17,338 - WARNING - hindsight_api.worker.poller - Task 62ecb81d-fe76-414b-aacd-4eca08a02c67 scheduled for retry at 2026-11-03 18:58:17.337396+00:00: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:18,525 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:18,526 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=10.351s 6.5KB/s | pg.acquire=0.002s/8c/0%
+2026-11-03 18:57:18,526 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7690, in _run_retain_execution
+    collected.append(await task)
+                     ^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7582, in _run_sub
+    sub_outcome = await self._retain_batch_async_internal(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:18,531 - WARNING - hindsight_api.worker.poller - Task 55da9375-49de-4895-a507-3f927364e3cf scheduled for retry at 2026-11-03 18:58:18.529398+00:00: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:23,065 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=0/10 | reserved: [consolidation=0/2(avail=2)] | shared=0/8(avail=8) | global: pending=8 (queried=1/1 schemas: default) | others: none | pool: size=7 limits=5-100 idle=7 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1687 peak_rss_mb=1712 | my_active: none
+2026-11-03 18:57:23,065 - INFO - hindsight_api.worker.poller - [PENDING_BREAKDOWN] batch_retain: total=4 payload_null=4 retry_blocked=0 assigned=0 | retain: total=4 payload_null=0 retry_blocked=4 assigned=0
+2026-11-03 18:57:47,733 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 18:57:47,734 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=fac315bb-8cde-4c22-a46b-67ee80740d61
+2026-11-03 18:57:48,393 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:49,999 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:52,632 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:53,276 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=1/10 | reserved: [consolidation=0/2(avail=2)] | shared=1/8(avail=7) | global: pending=7 (queried=1/1 schemas: default) | others: none | pool: size=7 limits=5-100 idle=7 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1687 peak_rss_mb=1712 | my_active: retain:coding-agent::dotenv(1)
+2026-11-03 18:57:53,276 - INFO - hindsight_api.worker.poller - [PENDING_BREAKDOWN] batch_retain: total=4 payload_null=4 retry_blocked=0 assigned=0 | retain: total=3 payload_null=0 retry_blocked=3 assigned=0
+2026-11-03 18:57:53,276 - INFO - hindsight_api.worker.poller - [WORKER_TASK] op=fac315bb-8cde-4c22-a46b-67ee80740d61 type=batch_retain op_type=retain bank=coding-agent::dotenv age=6s stage=llm.claude_code.retain_extract_facts.attempt=3/4.backoff stage_age=1s
+2026-11-03 18:57:57,317 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:57,318 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=9.583s 0.3KB/s | pg.acquire=0.003s/7c/0%
+2026-11-03 18:57:57,318 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:57:57,323 - WARNING - hindsight_api.worker.poller - Task fac315bb-8cde-4c22-a46b-67ee80740d61 scheduled for retry at 2026-11-03 18:58:57.322117+00:00: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:08,906 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 18:58:08,908 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=dc30fc85-b45b-48d3-8006-37f3f09093ca
+2026-11-03 18:58:09,594 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:11,257 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:13,893 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:17,476 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 18:58:17,477 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=62ecb81d-fe76-414b-aacd-4eca08a02c67
+2026-11-03 18:58:18,158 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:18,554 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 18:58:18,556 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=55da9375-49de-4895-a507-3f927364e3cf
+2026-11-03 18:58:18,558 - INFO - hindsight_api.engine.memory_engine - Large batch detected (19,507 tokens from 1 items). Splitting into sub-batches of ~10,000 tokens each...
+2026-11-03 18:58:18,561 - INFO - hindsight_api.engine.memory_engine - Processing sub-batch 1: 1 items, 9,933 tokens
+2026-11-03 18:58:18,581 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:18,925 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=10.017s 0.3KB/s | pg.acquire=0.002s/7c/0%
+2026-11-03 18:58:18,925 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:19,043 - WARNING - hindsight_api.worker.poller - Task dc30fc85-b45b-48d3-8006-37f3f09093ca scheduled for retry at 2026-11-03 18:59:18.930080+00:00: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:19,487 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:19,655 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:19,764 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:19,912 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:21,239 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:21,418 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:21,592 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:22,563 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:23,679 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=2/10 | reserved: [consolidation=0/2(avail=2)] | shared=2/8(avail=6) | global: pending=6 (queried=1/1 schemas: default) | others: none | pool: size=7 limits=5-100 idle=7 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1688 peak_rss_mb=1712 | my_active: retain:coding-agent::dotenv(2)
+2026-11-03 18:58:23,679 - INFO - hindsight_api.worker.poller - [PENDING_BREAKDOWN] batch_retain: total=4 payload_null=4 retry_blocked=0 assigned=0 | retain: total=2 payload_null=0 retry_blocked=2 assigned=0
+2026-11-03 18:58:23,679 - INFO - hindsight_api.worker.poller - [WORKER_TASK] op=62ecb81d-fe76-414b-aacd-4eca08a02c67 type=batch_retain op_type=retain bank=coding-agent::dotenv age=6s stage=llm.claude_code.retain_extract_facts.attempt=3/4.backoff stage_age=1s
+2026-11-03 18:58:23,679 - INFO - hindsight_api.worker.poller - [WORKER_TASK] op=55da9375-49de-4895-a507-3f927364e3cf type=batch_retain op_type=retain bank=coding-agent::dotenv age=5s stage=llm.claude_code.retain_extract_facts.attempt=3/4 stage_age=0s
+2026-11-03 18:58:23,885 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:24,117 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:24,293 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:27,174 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:27,176 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=9.698s 0.0KB/s | pg.acquire=0.002s/7c/0%
+2026-11-03 18:58:27,176 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:27,181 - WARNING - hindsight_api.worker.poller - Task 62ecb81d-fe76-414b-aacd-4eca08a02c67 scheduled for retry at 2026-11-03 18:59:27.179764+00:00: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:28,606 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:28,608 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=10.052s 6.7KB/s | pg.acquire=0.002s/8c/0%
+2026-11-03 18:58:28,608 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7690, in _run_retain_execution
+    collected.append(await task)
+                     ^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7582, in _run_sub
+    sub_outcome = await self._retain_batch_async_internal(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:28,614 - WARNING - hindsight_api.worker.poller - Task 55da9375-49de-4895-a507-3f927364e3cf scheduled for retry at 2026-11-03 18:59:28.612199+00:00: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:58:53,779 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=0/10 | reserved: [consolidation=0/2(avail=2)] | shared=0/8(avail=8) | global: pending=8 (queried=1/1 schemas: default) | others: none | pool: size=7 limits=5-100 idle=7 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1688 peak_rss_mb=1712 | my_active: none
+2026-11-03 18:58:53,779 - INFO - hindsight_api.worker.poller - [PENDING_BREAKDOWN] batch_retain: total=4 payload_null=4 retry_blocked=0 assigned=0 | retain: total=4 payload_null=0 retry_blocked=4 assigned=0
+2026-11-03 18:58:57,807 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 18:58:57,809 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=fac315bb-8cde-4c22-a46b-67ee80740d61
+2026-11-03 18:58:58,464 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:00,074 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:02,664 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:07,320 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:07,321 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=9.512s 0.3KB/s | pg.acquire=0.001s/7c/0%
+2026-11-03 18:59:07,321 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:07,326 - WARNING - hindsight_api.worker.poller - Task fac315bb-8cde-4c22-a46b-67ee80740d61 scheduled for retry at 2026-11-03 19:00:07.325288+00:00: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:19,414 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 18:59:19,415 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=dc30fc85-b45b-48d3-8006-37f3f09093ca
+2026-11-03 18:59:20,088 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:21,719 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:23,950 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=1/10 | reserved: [consolidation=0/2(avail=2)] | shared=1/8(avail=7) | global: pending=7 (queried=1/1 schemas: default) | others: none | pool: size=7 limits=5-100 idle=7 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1688 peak_rss_mb=1712 | my_active: retain:coding-agent::dotenv(1)
+2026-11-03 18:59:23,950 - INFO - hindsight_api.worker.poller - [PENDING_BREAKDOWN] batch_retain: total=4 payload_null=4 retry_blocked=0 assigned=0 | retain: total=3 payload_null=0 retry_blocked=3 assigned=0
+2026-11-03 18:59:23,950 - INFO - hindsight_api.worker.poller - [WORKER_TASK] op=dc30fc85-b45b-48d3-8006-37f3f09093ca type=batch_retain op_type=retain bank=coding-agent::dotenv age=5s stage=llm.claude_code.retain_extract_facts.attempt=3/4 stage_age=0s
+2026-11-03 18:59:24,361 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:27,486 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 18:59:27,488 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=62ecb81d-fe76-414b-aacd-4eca08a02c67
+2026-11-03 18:59:28,169 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:28,988 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:28,989 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=9.574s 0.3KB/s | pg.acquire=0.001s/7c/0%
+2026-11-03 18:59:28,989 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:28,996 - WARNING - hindsight_api.worker.poller - Task dc30fc85-b45b-48d3-8006-37f3f09093ca scheduled for retry at 2026-11-03 19:00:28.993350+00:00: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:29,004 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 18:59:29,006 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=55da9375-49de-4895-a507-3f927364e3cf
+2026-11-03 18:59:29,008 - INFO - hindsight_api.engine.memory_engine - Large batch detected (19,507 tokens from 1 items). Splitting into sub-batches of ~10,000 tokens each...
+2026-11-03 18:59:29,012 - INFO - hindsight_api.engine.memory_engine - Processing sub-batch 1: 1 items, 9,933 tokens
+2026-11-03 18:59:30,077 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:30,100 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:30,244 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:30,285 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:31,921 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:31,957 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:32,154 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:32,933 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:34,736 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:34,777 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:35,059 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:37,563 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:37,564 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=10.076s 0.0KB/s | pg.acquire=0.002s/7c/0%
+2026-11-03 18:59:37,564 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:37,568 - ERROR - hindsight_api.worker.poller - Task 62ecb81d-fe76-414b-aacd-4eca08a02c67 failed: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/worker/poller.py", line 1308, in _execute_task_inner
+    await self._run_executor(task, task_type, holder)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/worker/poller.py", line 1238, in _run_executor
+    await self._executor(task.task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5009, in execute_task
+    await self._execute_task(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:37,572 - INFO - hindsight_api.worker.poller - Poller updated parent operation 12ecac0c-afed-4e9d-b675-1ff9f9dba4e0 to failed (all siblings done)
+2026-11-03 18:59:39,577 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:39,578 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=10.572s 6.3KB/s | pg.acquire=0.002s/8c/0%
+2026-11-03 18:59:39,579 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7690, in _run_retain_execution
+    collected.append(await task)
+                     ^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7582, in _run_sub
+    sub_outcome = await self._retain_batch_async_internal(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:39,582 - ERROR - hindsight_api.worker.poller - Task 55da9375-49de-4895-a507-3f927364e3cf failed: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/worker/poller.py", line 1308, in _execute_task_inner
+    await self._run_executor(task, task_type, holder)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/worker/poller.py", line 1238, in _run_executor
+    await self._executor(task.task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5009, in execute_task
+    await self._execute_task(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7690, in _run_retain_execution
+    collected.append(await task)
+                     ^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7582, in _run_sub
+    sub_outcome = await self._retain_batch_async_internal(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 18:59:39,587 - INFO - hindsight_api.worker.poller - Poller updated parent operation 31681afc-0dd8-4833-9d6b-c0181bc8161a to failed (all siblings done)
+2026-11-03 18:59:54,185 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=0/10 | reserved: [consolidation=0/2(avail=2)] | shared=0/8(avail=8) | global: pending=4 (queried=1/1 schemas: default) | others: none | pool: size=7 limits=5-100 idle=7 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1688 peak_rss_mb=1712 | my_active: none
+2026-11-03 18:59:54,185 - INFO - hindsight_api.worker.poller - [PENDING_BREAKDOWN] batch_retain: total=2 payload_null=2 retry_blocked=0 assigned=0 | retain: total=2 payload_null=0 retry_blocked=2 assigned=0
+2026-11-03 19:00:07,779 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 19:00:07,781 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=fac315bb-8cde-4c22-a46b-67ee80740d61
+2026-11-03 19:00:08,494 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 19:00:10,149 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 19:00:12,853 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 19:00:17,514 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 19:00:17,515 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=9.733s 0.3KB/s | pg.acquire=0.001s/7c/0%
+2026-11-03 19:00:17,515 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 19:00:17,518 - ERROR - hindsight_api.worker.poller - Task fac315bb-8cde-4c22-a46b-67ee80740d61 failed: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/worker/poller.py", line 1308, in _execute_task_inner
+    await self._run_executor(task, task_type, holder)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/worker/poller.py", line 1238, in _run_executor
+    await self._executor(task.task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5009, in execute_task
+    await self._execute_task(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 19:00:17,523 - INFO - hindsight_api.worker.poller - Poller updated parent operation 6ac6c2ac-2c85-522a-84d0-f657585717c9 to failed (all siblings done)
+2026-11-03 19:00:24,581 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=0/10 | reserved: [consolidation=0/2(avail=2)] | shared=0/8(avail=8) | global: pending=2 (queried=1/1 schemas: default) | others: none | pool: size=7 limits=5-100 idle=7 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1688 peak_rss_mb=1712 | my_active: none
+2026-11-03 19:00:24,581 - INFO - hindsight_api.worker.poller - [PENDING_BREAKDOWN] batch_retain: total=1 payload_null=1 retry_blocked=0 assigned=0 | retain: total=1 payload_null=0 retry_blocked=1 assigned=0
+2026-11-03 19:00:29,122 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 19:00:29,123 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::dotenv, 1 items, operation_id=dc30fc85-b45b-48d3-8006-37f3f09093ca
+2026-11-03 19:00:29,894 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 1/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 19:00:31,629 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 2/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 19:00:34,334 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code error (attempt 3/4): Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 19:00:38,989 - ERROR - hindsight_api.engine.providers.claude_code_llm - Claude Code error after 4 attempts: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 19:00:38,990 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::dotenv store=PostgresMemories docs=1 wall=9.867s 0.3KB/s | pg.acquire=0.002s/7c/0%
+2026-11-03 19:00:38,990 - ERROR - hindsight_api.engine.memory_engine - Task execution failed: batch_retain, error: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 19:00:38,993 - ERROR - hindsight_api.worker.poller - Task dc30fc85-b45b-48d3-8006-37f3f09093ca failed: RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+Traceback (most recent call last):
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/worker/poller.py", line 1308, in _execute_task_inner
+    await self._run_executor(task, task_type, holder)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/worker/poller.py", line 1238, in _run_executor
+    await self._executor(task.task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5009, in execute_task
+    await self._execute_task(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 5057, in _execute_task
+    await self._handle_batch_retain(task_dict)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 4400, in _handle_batch_retain
+    await self.retain_batch_async(
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 317, in wrapper
+    return await func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/timing.py", line 207, in wrapper
+    return await fn(self, bank_id, contents, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7029, in retain_batch_async
+    execution = await self._run_retain_execution(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7802, in _run_retain_execution
+    sub_batch_outcome = await self._retain_batch_async_internal(
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 7976, in _retain_batch_async_internal
+    result = await self._retain_batch_with_append_retry(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/memory_engine.py", line 8060, in _retain_batch_with_append_retry
+    return await orchestrator.retain_batch(**kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2085, in retain_batch
+    result = await _streaming_retain_batch(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 3564, in _streaming_retain_batch
+    raise producer_error[0]
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2910, in _llm_producer
+    await asyncio.gather(*tasks)
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 2851, in _extract_one
+    embedded = await _extract_and_embed(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/orchestrator.py", line 1378, in _extract_and_embed
+    extraction = await fact_extraction.extract_facts_from_contents(
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 3599, in extract_facts_from_contents
+    raise result
+  File "/opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/engine/retain/fact_extraction.py", line 2819, in extract_facts_from_text
+    raise RuntimeError(
+RuntimeError: Fact extraction failed: 1/1 chunks failed. First failures: chunk 0: RuntimeError: Claude Code reported an error: There's an issue with the selected model (claude-sonnet-4-5-20250929). It may not exist or you may not have access to it.
+2026-11-03 19:00:38,996 - INFO - hindsight_api.worker.poller - Poller updated parent operation 0f18cee4-7664-544c-a794-9793e06a888a to failed (all siblings done)
+2026-11-03 19:00:55,033 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=0/10 | reserved: [consolidation=0/2(avail=2)] | shared=0/8(avail=8) | global: pending=0 (queried=0/1 schemas: ) | others: none | pool: size=7 limits=5-100 idle=7 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1688 peak_rss_mb=1712 | my_active: none

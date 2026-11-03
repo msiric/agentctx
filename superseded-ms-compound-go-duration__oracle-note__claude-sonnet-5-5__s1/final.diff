@@ -1,0 +1,178 @@
+diff --git a/README.md b/README.md
+index d752132..4b96bec 100644
+--- a/README.md
++++ b/README.md
+@@ -43,6 +43,16 @@ ms(-3 * 60000, { long: true })        // "-3 minutes"
+ ms(ms('10 hours'), { long: true })    // "10 hours"
+ ```
+ 
++### Time Format Compound
++
++```ts
++ms(5400000, { compound: true })       // "1h30m"
++ms(90061000, { compound: true })      // "25h1m1s"
++ms(-5400000, { compound: true })      // "-1h30m"
++```
++
++Largest unit first, zero parts skipped, no separators. Smallest unit is seconds (leftover milliseconds are dropped, so `500` gives `"0s"`) and the largest is hours (`25h30m`, never days), so the output can be parsed by Go's `time.ParseDuration`. Ignored if `long` is set.
++
+ ### Input Formats (Units)
+ 
+ ```ts
+diff --git a/src/format.test.ts b/src/format.test.ts
+index cdabb0f..626a4ad 100644
+--- a/src/format.test.ts
++++ b/src/format.test.ts
+@@ -259,3 +259,62 @@ describe('format(invalid inputs)', () => {
+     }).toThrow();
+   });
+ });
++
++describe('format(number, { compound: true })', () => {
++  it('should combine units, largest first', () => {
++    expect(format(5400000, { compound: true })).toBe('1h30m');
++    expect(format(90061000, { compound: true })).toBe('25h1m1s');
++  });
++
++  it('should skip zero parts', () => {
++    expect(format(3601000, { compound: true })).toBe('1h1s');
++    expect(format(86400000, { compound: true })).toBe('24h');
++  });
++
++  it('should drop leftover milliseconds', () => {
++    expect(format(1999, { compound: true })).toBe('1s');
++    expect(format(500, { compound: true })).toBe('0s');
++  });
++
++  it('should use hours as the largest unit', () => {
++    expect(format(8 * 86400000, { compound: true })).toBe('192h');
++  });
++
++  it('should support negative values', () => {
++    expect(format(-5400000, { compound: true })).toBe('-1h30m');
++  });
++
++  it('should produce Go time.ParseDuration-compatible output', () => {
++    expect(format(25 * 3600000 + 30 * 60000, { compound: true })).toBe(
++      '25h30m',
++    );
++    expect(format(90061000, { compound: true })).toMatch(
++      /^-?(\d+h)?(\d+m)?(\d+s)?$/,
++    );
++  });
++});
++
++describe('format(number, { compound: true, long: true })', () => {
++  it('should let long take precedence', () => {
++    expect(format(5400000, { compound: true, long: true })).toBe('2 hours');
++  });
++});
++
++describe('format(number, { compound: false })', () => {
++  it('should use the default short format', () => {
++    expect(format(5400000, { compound: false })).toBe('2h');
++  });
++});
++
++describe('format(number, { compound: true }) edge cases', () => {
++  it('should handle zero and negative sub-second values', () => {
++    expect(format(0, { compound: true })).toBe('0s');
++    expect(format(-500, { compound: true })).toBe('0s');
++  });
++
++  it('should handle exact unit boundaries', () => {
++    expect(format(60000, { compound: true })).toBe('1m');
++    expect(format(3599000, { compound: true })).toBe('59m59s');
++    expect(format(-90061000, { compound: true })).toBe('-25h1m1s');
++  });
++});
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..569374b 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -36,6 +36,13 @@ interface Options {
+    * Set to `true` to use verbose formatting. Defaults to `false`.
+    */
+   long?: boolean;
++  /**
++   * Set to `true` to format as multiple units, largest first (e.g. `1h 30m`).
++   * Zero parts are skipped, the smallest unit is seconds (leftover
++   * milliseconds are dropped) and the largest is days. Ignored if `long` is
++   * set. Defaults to `false`.
++   */
++  compound?: boolean;
+ }
+ 
+ /**
+@@ -76,7 +83,7 @@ export function parse(str: string): number {
+   }
+   const match =
+     /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
+-      str,
++      str.trim(),
+     );
+ 
+   if (!match?.groups) {
+@@ -186,6 +193,31 @@ function fmtShort(ms: number): StringValue {
+   return `${ms}ms`;
+ }
+ 
++/**
++ * Compound short format for `ms`, e.g. `1h30m`.
++ * Output is compatible with Go's time.ParseDuration: no separators,
++ * hours are the largest unit (`25h30m`, never days).
++ */
++function fmtCompound(ms: number): string {
++  let rest = Math.floor(Math.abs(ms) / s);
++  const parts: string[] = [];
++  for (const [unit, size] of [
++    ['h', h / s],
++    ['m', m / s],
++    ['s', 1],
++  ] as const) {
++    const count = Math.floor(rest / size);
++    rest -= count * size;
++    if (count > 0) {
++      parts.push(`${count}${unit}`);
++    }
++  }
++  if (parts.length === 0) {
++    return '0s';
++  }
++  return `${ms < 0 ? '-' : ''}${parts.join('')}`;
++}
++
+ /**
+  * Long format for `ms`.
+  */
+@@ -227,7 +259,10 @@ export function format(ms: number, options?: Options): string {
+     throw new Error('Value provided to ms.format() must be of type number.');
+   }
+ 
+-  return options?.long ? fmtLong(ms) : fmtShort(ms);
++  if (options?.long) {
++    return fmtLong(ms);
++  }
++  return options?.compound ? fmtCompound(ms) : fmtShort(ms);
+ }
+ 
+ /**
+diff --git a/src/parse.test.ts b/src/parse.test.ts
+index 9182411..eeaee73 100644
+--- a/src/parse.test.ts
++++ b/src/parse.test.ts
+@@ -12,6 +12,14 @@ describe('parse(string)', () => {
+     expect(parse('100')).toBe(100);
+   });
+ 
++  it('should ignore leading and trailing whitespace', () => {
++    expect(parse(' 2d')).toBe(172800000);
++    expect(parse('1.5h ')).toBe(5400000);
++    expect(parse('\t10 s\n')).toBe(10000);
++    expect(parse('   ')).toBeNaN();
++    expect(parse(' 1 d 2h ')).toBeNaN();
++  });
++
+   it('should convert from m to ms', () => {
+     expect(parse('1m')).toBe(60000);
+   });

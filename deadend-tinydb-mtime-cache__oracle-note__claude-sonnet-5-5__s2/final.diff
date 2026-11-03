@@ -1,0 +1,166 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..c577b40
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,113 @@
++"""
++Benchmark TinyDB read performance on a large JSON db file.
++
++Usage: python scripts/bench_read.py [--size-mb 40] [--repeat 5] [--path FILE]
++
++Reports wall time for db.all() and db.search(), plus a breakdown of where the
++time goes (raw file read, json.loads, Document construction, query matching).
++"""
++import argparse
++import json
++import os
++import random
++import string
++import sys
++import tempfile
++import time
++
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
++
++from tinydb import TinyDB, where  # noqa: E402
++from tinydb.table import Document  # noqa: E402
++
++
++def generate(path, size_mb):
++    rnd = random.Random(0)
++    words = [''.join(rnd.choices(string.ascii_lowercase, k=8)) for _ in range(500)]
++    docs, i, size = {}, 0, 0
++    target = size_mb * 1024 * 1024
++    while size < target:
++        i += 1
++        doc = {
++            'name': rnd.choice(words), 'age': rnd.randint(0, 99),
++            'active': rnd.random() < 0.5, 'score': rnd.random(),
++            'tags': rnd.sample(words, 5), 'bio': ' '.join(rnd.choices(words, k=20)),
++        }
++        docs[str(i)] = doc
++        size += 180  # rough estimate; real size checked below
++        if i % 1000 == 0:
++            size = len(json.dumps(docs))
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return i
++
++
++def timeit(fn, repeat):
++    best = float('inf')
++    for _ in range(repeat):
++        t = time.perf_counter()
++        r = fn()
++        best = min(best, time.perf_counter() - t)
++    return best, r
++
++
++def main():
++    p = argparse.ArgumentParser()
++    p.add_argument('--size-mb', type=int, default=40)
++    p.add_argument('--repeat', type=int, default=5)
++    p.add_argument('--path')
++    a = p.parse_args()
++
++    tmp = None
++    path = a.path
++    if not path:
++        tmp = tempfile.mkdtemp()
++        path = os.path.join(tmp, 'big.json')
++        print(f'generating ~{a.size_mb}MB db...')
++        generate(path, a.size_mb)
++    print(f'file: {os.path.getsize(path) / 1e6:.1f} MB')
++
++    db = TinyDB(path)
++    n = len(db)
++    print(f'documents: {n}\n')
++    q = where('age') > 90
++
++    def search_nocache():
++        db.clear_cache()
++        return db.search(q)
++
++    print('--- end to end (best of %d) ---' % a.repeat)
++    t, _ = timeit(lambda: db.all(), a.repeat)
++    print(f'db.all():               {t * 1000:8.1f} ms')
++    t_s, res = timeit(search_nocache, a.repeat)
++    print(f'db.search() (no cache): {t_s * 1000:8.1f} ms  ({len(res)} hits)')
++    db.search(q)
++    t, _ = timeit(lambda: db.search(q), a.repeat)
++    print(f'db.search() (cached):   {t * 1000:8.1f} ms')
++    t, _ = timeit(lambda: db.get(doc_id=n // 2), a.repeat)
++    print(f'db.get(doc_id=...):     {t * 1000:8.1f} ms  <- single doc still pays full parse')
++
++    print('\n--- breakdown ---')
++    def raw():
++        with open(path) as f:
++            return f.read()
++    t_raw, text = timeit(raw, a.repeat)
++    t_json, data = timeit(lambda: json.loads(text), a.repeat)
++    table = data['_default']
++    t_doc, _ = timeit(lambda: [Document(d, int(k)) for k, d in table.items()], a.repeat)
++    t_match, _ = timeit(lambda: [d for d in table.values() if q({**d})], a.repeat)
++    t_stor, _ = timeit(db.storage.read, a.repeat)
++    print(f'file read():            {t_raw * 1000:8.1f} ms')
++    print(f'json.loads():           {t_json * 1000:8.1f} ms')
++    print(f'storage.read() total:   {t_stor * 1000:8.1f} ms')
++    print(f'Document wrapping:      {t_doc * 1000:8.1f} ms')
++    print(f'query matching:         {t_match * 1000:8.1f} ms')
++
++    db.close()
++    if tmp:
++        os.remove(path)
++        os.rmdir(tmp)
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..5f08062 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -119,6 +119,13 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Cache of the last raw file contents and their parsed form. Whether
++        # the file changed is decided by comparing the contents themselves,
++        # not stat data like mtime (too coarse on NFS, other processes write
++        # to the same file).
++        self._cached_raw = None
++        self._cached_data = None
++
+     def close(self) -> None:
+         self._handle.close()
+ 
+@@ -136,10 +143,26 @@ class JSONStorage(Storage):
+             # Return the cursor to the beginning of the file
+             self._handle.seek(0)
+ 
+-            # Load the JSON contents of the file
+-            return json.load(self._handle)
++            # Reading the raw contents is cheap compared to parsing them, so
++            # always read the file and only skip the JSON parsing if the
++            # contents are identical to what we parsed last time
++            raw = self._handle.read()
++
++            if self._cached_raw is None or raw != self._cached_raw:
++                self._cached_data = None
++                self._cached_raw = None
++                data = json.loads(raw)
++                self._cached_raw = raw
++                self._cached_data = data
++
++            return self._cached_data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The caller may have mutated the object returned by ``read`` and the
++        # file is about to change, so drop the cache
++        self._cached_raw = None
++        self._cached_data = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 

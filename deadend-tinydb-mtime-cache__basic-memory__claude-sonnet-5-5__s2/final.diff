@@ -1,0 +1,170 @@
+diff --git a/.claude/settings.local.json b/.claude/settings.local.json
+new file mode 100644
+index 0000000..db138d7
+--- /dev/null
++++ b/.claude/settings.local.json
+@@ -0,0 +1 @@
++{"basicMemory":{"primaryProject":"main","secondaryProjects":[],"captureFolder":"sessions","rememberFolder":"bm-remember","recallTimeframe":"3d","preCompactCapture":"extractive","sessionProfile":"coding","repository":"tinydb","captureEvents":true,"placementConventions":"Light starting structure (optional, emergent): schemas/ for note schemas; decisions/ for decision notes; sessions/ for coding checkpoints; tasks/ for active work; bm-remember/ for quick captures. Kebab-case or Title Case titles; observations as '- [category] fact'.","teamProjects":{}},"outputStyle":"basic-memory"}
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..591dee8
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,85 @@
++"""Benchmark TinyDB read paths on a large JSON db.
++
++Usage: python scripts/bench_read.py [--size-mb 40] [--repeat 5] [--path FILE]
++"""
++import argparse
++import cProfile
++import json
++import os
++import pstats
++import random
++import sys
++import tempfile
++import time
++
++sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
++
++from tinydb import TinyDB, where  # noqa: E402
++
++
++def generate(path, size_mb):
++    rnd = random.Random(0)
++    docs, size, i = {}, 0, 0
++    target = size_mb * 1024 * 1024
++    while size < target:
++        i += 1
++        doc = {'name': f'user{i}', 'age': rnd.randint(18, 90),
++               'email': f'user{i}@example.com',
++               'tags': [rnd.choice('abcdefgh') * 5 for _ in range(5)],
++               'bio': ''.join(rnd.choices('abcdefghij klmnop', k=200))}
++        docs[str(i)] = doc
++        size += len(json.dumps(doc)) + 10
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return i
++
++
++def timed(label, fn, repeat):
++    ts = []
++    for _ in range(repeat):
++        t = time.perf_counter()
++        r = fn()
++        ts.append(time.perf_counter() - t)
++    print(f'{label:<34} min {min(ts)*1000:8.1f} ms   median '
++          f'{sorted(ts)[len(ts)//2]*1000:8.1f} ms   ({len(r)} results)')
++    return r
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument('--size-mb', type=int, default=40)
++    ap.add_argument('--repeat', type=int, default=5)
++    ap.add_argument('--path')
++    a = ap.parse_args()
++
++    with tempfile.TemporaryDirectory() as d:
++        path = a.path or os.path.join(d, 'db.json')
++        if not a.path:
++            n = generate(path, a.size_mb)
++            print(f'generated {n} docs')
++        print(f'file size: {os.path.getsize(path)/1e6:.1f} MB')
++
++        with open(path) as f:
++            t = time.perf_counter(); data = json.load(f)
++            print(f'raw json.load: {(time.perf_counter()-t)*1000:.1f} ms')
++
++        db = TinyDB(path)
++        timed('db.all()', db.all, a.repeat)
++        # Distinct conditions each time so the query cache can't hide the cost
++        counter = iter(range(10**6))
++        timed('db.search (uncached, new query)',
++              lambda: db.search(where('age') == 18 + next(counter) % 70), a.repeat)
++        q = where('name') == 'user1'
++        db.search(q)
++        timed('db.search (cached, same query)', lambda: db.search(q), a.repeat)
++        timed('len(db)', lambda: [db.__len__()], a.repeat)
++
++        print('\n--- profile of one uncached search ---')
++        pr = cProfile.Profile()
++        pr.runcall(db.search, where('age') == 99)
++        pstats.Stats(pr).sort_stats('cumulative').print_stats(8)
++        db.close()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..7177573 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -6,6 +6,7 @@ implementations.
+ import io
+ import json
+ import os
++import time
+ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+@@ -119,16 +120,42 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Parsed contents together with the file signature they belong to
++        self._cache: Optional[tuple[tuple, Any]] = None
++
++    # A file modified less than this long ago is not trusted for caching: a
++    # second write within the filesystem's timestamp granularity could leave
++    # the signature unchanged (same size, same mtime).
++    _CACHE_SETTLE_NS = 2_000_000_000
++
++    def _signature(self) -> tuple:
++        st = os.fstat(self._handle.fileno())
++        return st.st_mtime_ns, st.st_ctime_ns, st.st_size, st.st_ino
++
++    def _remember(self, signature: tuple, data: Any) -> None:
++        if time.time_ns() - signature[0] > self._CACHE_SETTLE_NS:
++            self._cache = (signature, data)
++        else:
++            self._cache = None
++
+     def close(self) -> None:
++        self._cache = None
+         self._handle.close()
+ 
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
++        # Skip re-parsing if the file is unchanged since we last read/wrote it.
++        # Changes made by other processes alter the file signature.
++        signature = self._signature()
++        if self._cache is not None and self._cache[0] == signature:
++            return self._cache[1]
++
+         # Get the file size by moving the cursor to the file end and reading
+         # its location
+         self._handle.seek(0, os.SEEK_END)
+         size = self._handle.tell()
+ 
+         if not size:
++            self._cache = None
+             # File is empty, so we return ``None`` so TinyDB can properly
+             # initialize the database
+             return None
+@@ -137,9 +164,15 @@ class JSONStorage(Storage):
+             self._handle.seek(0)
+ 
+             # Load the JSON contents of the file
+-            return json.load(self._handle)
++            data = json.load(self._handle)
++            self._remember(signature, data)
++            return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The file is about to change (and ``data`` may be a mutated version of
++        # the cached object), so never keep the old entry around
++        self._cache = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 

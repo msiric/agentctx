@@ -1,0 +1,166 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..58dfdf2
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,78 @@
++"""Benchmark TinyDB read performance on a large JSON db.
++
++Usage: python scripts/bench_read.py [target_mb] [repeats]
++"""
++import cProfile
++import json
++import os
++import pstats
++import random
++import sys
++import tempfile
++import time
++
++from tinydb import TinyDB, where
++
++
++def generate(path, target_mb):
++    rnd = random.Random(0)
++    docs, size, i = {}, 0, 0
++    while size < target_mb * 1024 * 1024:
++        doc = {'id': i, 'name': f'user{i}', 'group': rnd.randrange(100),
++               'tags': [rnd.choice('abcdefgh') for _ in range(5)],
++               'text': ''.join(rnd.choices('abcdefghij ', k=100))}
++        docs[str(i + 1)] = doc
++        size += len(json.dumps(doc)) + 10
++        i += 1
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return i
++
++
++def timeit(fn, repeats):
++    times = []
++    for _ in range(repeats):
++        t = time.perf_counter()
++        fn()
++        times.append(time.perf_counter() - t)
++    return min(times), sum(times) / len(times)
++
++
++def main():
++    mb = float(sys.argv[1]) if len(sys.argv) > 1 else 40
++    repeats = int(sys.argv[2]) if len(sys.argv) > 2 else 5
++    with tempfile.TemporaryDirectory() as d:
++        path = os.path.join(d, 'db.json')
++        n = generate(path, mb)
++        print(f'{n} docs, {os.path.getsize(path) / 1e6:.1f} MB')
++        db = TinyDB(path)
++
++        def report(label, fn):
++            lo, avg = timeit(fn, repeats)
++            print(f'{label:34s} min {lo*1000:8.1f} ms  avg {avg*1000:8.1f} ms')
++
++        report('json.load of file (floor)',
++               lambda: json.load(open(path)))
++        report('storage.read()', db.storage.read)
++        report('db.all()', db.all)
++        counter = iter(range(10**6))
++        # distinct query each time -> bypasses the query cache
++        report('search (uncached, ~1% match)',
++               lambda: db.search(where('group') == next(counter) % 100))
++        report('search (cached repeat)',
++               lambda: db.search(where('group') == 5))
++        db.search(where('group') == 5)
++        report('search (cached repeat, warm)',
++               lambda: db.search(where('group') == 5))
++
++        print('\nProfile of one uncached search:')
++        pr = cProfile.Profile()
++        pr.enable()
++        db.search(where('name') == 'nobody')
++        pr.disable()
++        pstats.Stats(pr).sort_stats('cumulative').print_stats(8)
++        db.close()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..290e7ae 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,21 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_read_cache_sees_external_same_size_write(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    with open(path, 'w') as f:
++        f.write('{"_default": {"1": {"a": 1}}}')
++
++    storage = JSONStorage(path)
++    assert storage.read() == {'_default': {'1': {'a': 1}}}
++    assert storage.read() is storage.read()  # unchanged file -> no re-parse
++
++    # Another process rewrites the file with identical size (and possibly
++    # identical mtime on coarse-resolution filesystems)
++    with open(path, 'w') as f:
++        f.write('{"_default": {"1": {"a": 2}}}')
++
++    assert storage.read() == {'_default': {'1': {'a': 2}}}
++    storage.close()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..5138cbf 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -119,27 +119,41 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Cache of the last raw file contents and their parsed form. The file
++        # may be modified by other processes, and mtime/size are unreliable
++        # on some filesystems (e.g. NFS with 1s mtime resolution), so the
++        # cache is validated by comparing the actual contents instead.
++        self._cached_raw = None
++        self._cached_data = None
++
+     def close(self) -> None:
+         self._handle.close()
+ 
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
+-        # Get the file size by moving the cursor to the file end and reading
+-        # its location
+-        self._handle.seek(0, os.SEEK_END)
+-        size = self._handle.tell()
++        # Re-read the raw contents every time (cheap compared to parsing) and
++        # only skip ``json.load`` if they are identical to the last read.
++        self._handle.seek(0)
++        raw = self._handle.read()
+ 
+-        if not size:
++        if not raw:
+             # File is empty, so we return ``None`` so TinyDB can properly
+             # initialize the database
++            self._cached_raw = self._cached_data = None
+             return None
+-        else:
+-            # Return the cursor to the beginning of the file
+-            self._handle.seek(0)
+ 
+-            # Load the JSON contents of the file
+-            return json.load(self._handle)
++        if self._cached_raw is None or raw != self._cached_raw:
++            self._cached_data = json.loads(raw)
++            self._cached_raw = raw
++
++        # Note: the cached object is shared between calls, so callers must
++        # not mutate it without writing it back (TinyDB's tables do this).
++        return self._cached_data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The file is about to change, drop the cache (it may also have been
++        # mutated in place by the caller)
++        self._cached_raw = self._cached_data = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 

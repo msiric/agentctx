@@ -1,0 +1,17 @@
+{
+  "narrative": "Shipping velocity: this is the first recorded window, and nothing has shipped yet. One request is open, at about 10% and still in exploration, so there is no ask-to-ship time to measure.\n\n## 3 November 2026: looking up jobs by the function they run\n\nThe owner asked for a way to look up the jobs that run a given function, something like `get_jobs_for(func)`, with tests. The reason they gave was that they keep holding on to Job objects only so they can cancel them later. The request is titled \"Look up jobs by the function they run (get_jobs_for)\".\n\nThe first finding came within seconds of the ask (observation #1). The schedule library stores each scheduled callable as a `functools.partial` on `Job.job_func`. A lookup therefore can't compare `job_func` to the target function directly. It has to unwrap the partial first, and that shapes the design.\n\nAs of the last review, nothing beyond exploration is recorded. There is no implementation, no tests, no PR and no release. The request is at 10%, which means exploring or planning.\n\n## What this teaches so far\n\nThe work is early and the history is too short to show rework or stalls. The owner's ask was specific. It named the function shape and required tests, so the delivery they expect includes tests.",
+  "preferences": [
+    {
+      "preference": "Wants API conveniences that remove the need to keep object references, and wants them delivered with tests.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Add a way to look up the jobs that run a given function, something like `get_jobs_for(func)`, with tests.",
+          "at": "2026-11-03T15:34:00.498Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T15:34:35.176Z"
+}

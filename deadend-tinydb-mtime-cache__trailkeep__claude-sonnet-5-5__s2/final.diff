@@ -1,0 +1,144 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..006f140
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,72 @@
++"""Benchmark JSONStorage read performance on a large database file.
++
++Usage: python scripts/bench_read.py [--size-mb 40] [--profile]
++"""
++import argparse
++import cProfile
++import json
++import os
++import pstats
++import sys
++import tempfile
++import time
++
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
++
++from tinydb import TinyDB, where  # noqa: E402
++
++
++def generate(path, size_mb):
++    target = size_mb * 1024 * 1024
++    docs, size, i = {}, 0, 0
++    while size < target:
++        i += 1
++        doc = {'name': f'user{i}', 'age': i % 90, 'email': f'user{i}@example.com',
++               'tags': ['a', 'b', 'c'], 'address': {'city': f'city{i % 500}', 'zip': i}}
++        docs[str(i)] = doc
++        size += len(json.dumps(doc)) + 8
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return len(docs)
++
++
++def timed(label, fn):
++    t = time.perf_counter()
++    result = fn()
++    print(f'{label:<34}{(time.perf_counter() - t) * 1000:9.1f} ms')
++    return result
++
++
++def main():
++    p = argparse.ArgumentParser()
++    p.add_argument('--size-mb', type=int, default=40)
++    p.add_argument('--profile', action='store_true', help='cProfile a cold search')
++    args = p.parse_args()
++
++    with tempfile.TemporaryDirectory() as d:
++        path = os.path.join(d, 'db.json')
++        n = generate(path, args.size_mb)
++        print(f'{n} docs, {os.path.getsize(path) / 1e6:.1f} MB\n')
++
++        with open(path) as f:
++            timed('raw json.load (floor)', lambda: json.load(f))
++
++        with TinyDB(path) as db:
++            timed('storage.read()', db.storage.read)
++            timed('db.all()', db.all)
++            timed('db.all() again', db.all)
++            q = where('age') == 42
++            timed('search (cold, not cached)', lambda: db.search(q))
++            timed('search same query (cached)', lambda: db.search(q))
++            timed('search new query', lambda: db.search(where('age') == 43))
++            timed('db.get(doc_id=1)', lambda: db.get(doc_id=1))
++            timed('len(db)', lambda: len(db))
++
++            if args.profile:
++                pr = cProfile.Profile()
++                pr.runcall(db.search, where('age') == 44)
++                pstats.Stats(pr).sort_stats('cumulative').print_stats(8)
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..534cb1e 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -5,6 +5,7 @@ implementations.
+ 
+ import io
+ import json
++import marshal
+ import os
+ import warnings
+ from abc import ABC, abstractmethod
+@@ -103,6 +104,7 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
++        self._cache = None  # (raw file contents, marshalled data)
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+@@ -123,23 +125,35 @@ class JSONStorage(Storage):
+         self._handle.close()
+ 
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
+-        # Get the file size by moving the cursor to the file end and reading
+-        # its location
+-        self._handle.seek(0, os.SEEK_END)
+-        size = self._handle.tell()
++        # Always read the raw file contents: another process may have changed
++        # the file, and file metadata (mtime/size) is not a reliable way to
++        # detect that (e.g. coarse mtime resolution on NFS). Comparing the
++        # contents is exact and much cheaper than parsing them again.
++        self._handle.seek(0)
++        raw = self._handle.read()
+ 
+-        if not size:
++        if not raw:
+             # File is empty, so we return ``None`` so TinyDB can properly
+             # initialize the database
++            self._cache = None
+             return None
+-        else:
+-            # Return the cursor to the beginning of the file
+-            self._handle.seek(0)
+ 
+-            # Load the JSON contents of the file
+-            return json.load(self._handle)
++        if self._cache is not None and self._cache[0] == raw:
++            return marshal.loads(self._cache[1])
++
++        data = json.loads(raw)
++
++        # Keep a snapshot of the parsed data. Callers modify what ``read()``
++        # returns, so every read gets a fresh copy; unmarshalling one is much
++        # cheaper than parsing the JSON again. (JSON data only consists of
++        # types that ``marshal`` supports.)
++        self._cache = (raw, marshal.dumps(data))
++        return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The file is about to change, so the cached parse is stale
++        self._cache = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 

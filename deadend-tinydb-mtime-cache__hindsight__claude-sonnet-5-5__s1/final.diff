@@ -1,0 +1,288 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..30a91da
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,83 @@
++"""Benchmark TinyDB read paths on a large JSON db.
++
++Usage: python scripts/bench_read.py [--mb 40] [--repeat 5] [--keep]
++"""
++import argparse
++import cProfile
++import json
++import os
++import pstats
++import random
++import sys
++import tempfile
++import time
++
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
++
++from tinydb import TinyDB, where  # noqa: E402
++from tinydb.storages import JSONStorage  # noqa: E402
++
++
++def generate(path, target_mb):
++    rnd = random.Random(0)
++    docs, size, i = {}, 0, 0
++    while size < target_mb * 1024 * 1024:
++        i += 1
++        doc = {'id': i, 'name': 'user%d' % i, 'age': rnd.randint(18, 90),
++               'tags': [rnd.choice('abcdefgh') * 5 for _ in range(5)],
++               'bio': ''.join(rnd.choices('abcdefghij ', k=200))}
++        docs[str(i)] = doc
++        size += 330
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return len(docs)
++
++
++def timeit(label, fn, repeat):
++    times = []
++    for _ in range(repeat):
++        t = time.perf_counter()
++        fn()
++        times.append(time.perf_counter() - t)
++    print('%-34s min %7.1f ms  median %7.1f ms' % (
++        label, min(times) * 1e3, sorted(times)[len(times) // 2] * 1e3))
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument('--mb', type=float, default=40)
++    ap.add_argument('--repeat', type=int, default=5)
++    ap.add_argument('--keep', action='store_true')
++    a = ap.parse_args()
++
++    path = os.path.join(tempfile.mkdtemp(), 'big.json')
++    n = generate(path, a.mb)
++    print('db: %d docs, %.1f MB' % (n, os.path.getsize(path) / 2**20))
++
++    db = TinyDB(path)
++    st = db.storage
++    counter = iter(range(10**9))
++
++    timeit('raw json.load of file', lambda: json.load(open(path)), a.repeat)
++    timeit('storage.read()', st.read, a.repeat)
++    timeit('db.all()', db.all, a.repeat)
++    timeit('db.search (uncached, new query)',
++           lambda: db.search(where('age') > 18 + next(counter) % 70), a.repeat)
++    same = where('age') > 50
++    db.search(same)
++    timeit('db.search (cache hit)', lambda: db.search(same), a.repeat)
++
++    print('\nprofile of one uncached search:')
++    pr = cProfile.Profile()
++    pr.enable()
++    db.search(where('name') == 'user%d' % (next(counter) + 1))
++    pr.disable()
++    pstats.Stats(pr).sort_stats('cumulative').print_stats(8)
++
++    db.close()
++    if not a.keep:
++        os.remove(path)
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..7ecd85e 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,44 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_read_cache_sees_external_writes(tmpdir):
++    import json as _json
++    import os as _os
++    path = str(tmpdir.join('db.json'))
++    storage = JSONStorage(path)
++    storage._CACHE_MIN_AGE_NS = 0  # trust the cache immediately
++
++    storage.write({'_default': {'1': {'a': 1}}})
++    first = storage.read()
++    assert storage.read() is first  # unchanged file: no re-parse
++    version = storage.version
++
++    # An external process rewrites the file (same size, so only the
++    # timestamps differ)
++    with open(path, 'w') as f:
++        _json.dump({'_default': {'1': {'a': 2}}}, f)
++    _os.utime(path, ns=(1, 1))
++
++    assert storage.read() == {'_default': {'1': {'a': 2}}}
++    assert storage.version == version + 1
++    storage.close()
++
++
++def test_tinydb_search_sees_external_writes(tmpdir):
++    import json as _json
++    import os as _os
++    from tinydb import where
++    path = str(tmpdir.join('db.json'))
++    db = TinyDB(path)
++    db.storage._CACHE_MIN_AGE_NS = 0
++    db.insert({'a': 1})
++    assert len(db.search(where('a') == 1)) == 1
++    assert len(db.search(where('a') == 1)) == 1  # cached
++
++    with open(path, 'w') as f:
++        _json.dump({'_default': {'1': {'a': 1}, '2': {'a': 1}}}, f)
++    _os.utime(path, ns=(1, 1))
++    assert len(db.search(where('a') == 1)) == 2
++    db.close()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..af2a517 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -6,6 +6,7 @@ implementations.
+ import io
+ import json
+ import os
++import time
+ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+@@ -119,27 +120,71 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Parsed contents of the file together with the file signature they
++        # were parsed from. ``version`` counts how often the file was parsed
++        # anew, so users of the storage can tell whether the data changed.
++        self._cache: Any = None
++        self._cache_sig: Optional[tuple] = None
++        self.version = 0
++
++    # Minimum age of the file's mtime before the parsed cache is trusted
++    _CACHE_MIN_AGE_NS = 2 * 10**9
++
+     def close(self) -> None:
+         self._handle.close()
+ 
++    def invalidate_cache(self) -> None:
++        """
++        Drop the cached file contents so the next read parses the file again.
++        """
++
++        self._cache = None
++        self._cache_sig = None
++
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
+-        # Get the file size by moving the cursor to the file end and reading
+-        # its location
+-        self._handle.seek(0, os.SEEK_END)
+-        size = self._handle.tell()
++        """
++        Read the database from the file.
++
++        The parsed result is reused as long as the file is unchanged, which
++        is detected through its inode, size and modification/change times, so
++        writes by other processes are picked up. The returned object is shared
++        between reads: callers must not modify it in place.
++        """
++
++        stat = os.fstat(self._handle.fileno())
+ 
+-        if not size:
++        if not stat.st_size:
+             # File is empty, so we return ``None`` so TinyDB can properly
+             # initialize the database
++            self.invalidate_cache()
+             return None
++
++        sig = (stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
++        if self._cache is not None and sig == self._cache_sig:
++            return self._cache
++
++        # Return the cursor to the beginning of the file
++        self._handle.seek(0)
++
++        # Load the JSON contents of the file
++        data = json.load(self._handle)
++        self.version += 1
++
++        # Only trust the signature if the file was last modified well before
++        # now: a file system with coarse timestamps could otherwise hide a
++        # second same-sized write that lands within the same tick.
++        if time.time_ns() - stat.st_mtime_ns > self._CACHE_MIN_AGE_NS:
++            self._cache, self._cache_sig = data, sig
+         else:
+-            # Return the cursor to the beginning of the file
+-            self._handle.seek(0)
++            self.invalidate_cache()
+ 
+-            # Load the JSON contents of the file
+-            return json.load(self._handle)
++        return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The caller may have modified the cached object in place, so it can
++        # no longer be trusted
++        self.invalidate_cache()
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..98d3726 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -104,6 +104,7 @@ class Table:
+ 
+         self._storage = storage
+         self._name = name
++        self._storage_version = getattr(storage, 'version', None)
+         self._query_cache: LRUCache[QueryLike, list[Document]] \
+             = self.query_cache_class(capacity=cache_size)
+ 
+@@ -262,6 +263,7 @@ class Table:
+ 
+         # First, we check the query cache to see if it has results for this
+         # query
++        self._sync_query_cache()
+         cached_results = self._query_cache.get(cond)
+         if cached_results is not None:
+             return cached_results[:]
+@@ -776,6 +778,20 @@ class Table:
+ 
+         return next_id
+ 
++    def _sync_query_cache(self) -> None:
++        """
++        Drop cached query results if the storage was changed externally.
++
++        Storages that cache their parsed data expose a ``version`` that
++        changes whenever the data was re-read from its source.
++        """
++
++        self._storage.read()  # let the storage notice external changes
++        version = getattr(self._storage, 'version', None)
++        if version != self._storage_version:
++            self._storage_version = version
++            self._query_cache.clear()
++
+     def _read_table(self) -> dict[str, Mapping]:
+         """
+         Read the table data from the underlying storage.
+@@ -837,7 +853,14 @@ class Table:
+         }
+ 
+         # Perform the table update operation
+-        updater(table)
++        try:
++            updater(table)
++        except BaseException:
++            # The updater may have modified storage-cached data in place
++            invalidate = getattr(self._storage, 'invalidate_cache', None)
++            if invalidate is not None:
++                invalidate()
++            raise
+ 
+         # Convert the document IDs back to strings.
+         # This is required as some storages (most notably the JSON file format)

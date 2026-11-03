@@ -1,0 +1,244 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..dca6845
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,107 @@
++"""
++Benchmark TinyDB read performance on a large JSON database.
++
++Usage: python scripts/bench_read.py [--size-mb 40] [--keep PATH]
++
++Generates a db of roughly --size-mb, then times db.all(), an uncached
++search, a repeated (cached) search, and the raw json.load / storage.read()
++cost, so you can see how much of a query is file parsing.
++"""
++import argparse
++import cProfile
++import json
++import os
++import pstats
++import random
++import statistics
++import sys
++import tempfile
++import time
++
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
++
++from tinydb import TinyDB, where  # noqa: E402
++
++
++def generate(path, size_mb):
++    rnd = random.Random(0)
++    docs, n = {}, 0
++    target = size_mb * 1024 * 1024
++    approx = 0
++    while approx < target:
++        n += 1
++        doc = {
++            'name': f'user{n}', 'age': rnd.randint(1, 90),
++            'email': f'user{n}@example.com',
++            'tags': [rnd.choice('abcdefgh') * 5 for _ in range(5)],
++            'address': {'city': rnd.choice(['Berlin', 'Paris', 'Rome']),
++                        'zip': str(rnd.randint(10000, 99999))},
++        }
++        docs[str(n)] = doc
++        approx += 190  # rough serialized size per doc
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return n
++
++
++def timeit(label, fn, repeat=5):
++    times = []
++    for _ in range(repeat):
++        t = time.perf_counter()
++        fn()
++        times.append(time.perf_counter() - t)
++    print(f'{label:<38} median {statistics.median(times)*1000:9.1f} ms '
++          f'(min {min(times)*1000:.1f})')
++    return statistics.median(times)
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument('--size-mb', type=float, default=40)
++    ap.add_argument('--keep', help='write the db here and keep it')
++    ap.add_argument('--profile', action='store_true')
++    args = ap.parse_args()
++
++    tmp = None
++    path = args.keep
++    if not path:
++        tmp = tempfile.TemporaryDirectory()
++        path = os.path.join(tmp.name, 'big.json')
++    n = generate(path, args.size_mb)
++    print(f'{n} docs, {os.path.getsize(path)/1e6:.1f} MB\n')
++
++    db = TinyDB(path)
++    storage = db.storage
++    counter = [0]
++
++    def uncached_search():
++        counter[0] += 1  # distinct query each time defeats the query cache
++        return db.search(where('age') == counter[0] % 90)
++
++    timeit('json.load (raw, file already open)',
++           lambda: (storage._handle.seek(0), json.load(storage._handle)))
++    timeit('storage.read()', storage.read)
++    t_all = timeit('db.all()', db.all)
++    t_search = timeit('db.search (uncached)', uncached_search)
++    q = where('age') == 42
++    db.search(q)
++    timeit('db.search (cached, same query)', lambda: db.search(q))
++    docs = storage.read()['_default']
++    timeit('filter only (parsed data in memory)',
++           lambda: [d for d in docs.values() if d['age'] == 42])
++
++    if args.profile:
++        print('\n-- cProfile of db.search (uncached) --')
++        pr = cProfile.Profile()
++        pr.enable()
++        uncached_search()
++        pr.disable()
++        pstats.Stats(pr).sort_stats('cumulative').print_stats(8)
++
++    db.close()
++    if tmp:
++        tmp.cleanup()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..99419bb 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,36 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_read_cache_sees_external_changes(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    with TinyDB(path) as db:
++        db.insert({'a': 1})
++        s = db.storage
++        first = s.read()
++        assert s.read() is first  # cached, not re-parsed
++
++        # Another process rewrites the file in place
++        with open(path, 'w') as f:
++            f.write(json.dumps({'_default': {'1': {'a': 2}}}))
++        assert db.all()[0]['a'] == 2
++
++        with open(path, 'w') as f:
++            f.write(json.dumps({'_default': {'1': {'a': 2}, '2': {'a': 3}}}))
++        assert len(db.all()) == 2
++
++
++def test_json_read_cache_failed_update_not_poisoned(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    with TinyDB(path) as db:
++        db.insert({'a': 1})
++        db.all()
++
++        def boom(doc):
++            doc['a'] = 99
++            raise RuntimeError
++
++        with pytest.raises(RuntimeError):
++            db.update(boom)
++        assert db.all()[0]['a'] == 1
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..22bdb4c 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -104,6 +104,12 @@ class JSONStorage(Storage):
+ 
+         self._mode = access_mode
+         self.kwargs = kwargs
++        self._path = path
++
++        # Parsed contents of the file together with the file signature they
++        # were read at, see ``_signature``
++        self._cache: Any = None
++        self._cache_sig: Optional[tuple] = None
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+             warnings.warn(
+@@ -122,7 +128,29 @@ class JSONStorage(Storage):
+     def close(self) -> None:
+         self._handle.close()
+ 
++    def _signature(self) -> Optional[tuple]:
++        """
++        Identify the current file version so that changes made by other
++        processes (in place or via replace-by-rename) are noticed.
++        """
++        try:
++            st = os.stat(self._path)
++        except OSError:
++            return None
++        return st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns
++
++    def invalidate_cache(self) -> None:
++        """
++        Drop the cached file contents, forcing the next read to re-parse.
++        """
++        self._cache = None
++        self._cache_sig = None
++
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
++        sig = self._signature()
++        if sig is not None and self._cache is not None and sig == self._cache_sig:
++            return self._cache
++
+         # Get the file size by moving the cursor to the file end and reading
+         # its location
+         self._handle.seek(0, os.SEEK_END)
+@@ -137,9 +165,20 @@ class JSONStorage(Storage):
+             self._handle.seek(0)
+ 
+             # Load the JSON contents of the file
+-            return json.load(self._handle)
++            data = json.load(self._handle)
++
++            # Only cache if the file did not change while we were parsing it
++            if sig is not None and self._signature() == sig:
++                self._cache, self._cache_sig = data, sig
++            else:
++                self.invalidate_cache()
++            return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The caller may keep mutating ``data``, so never trust the cache
++        # after a write
++        self.invalidate_cache()
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..7503eb4 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -837,7 +837,15 @@ class Table:
+         }
+ 
+         # Perform the table update operation
+-        updater(table)
++        try:
++            updater(table)
++        except BaseException:
++            # The updater may have modified documents that are shared with
++            # a storage-level read cache; make sure it is not reused
++            invalidate = getattr(self._storage, 'invalidate_cache', None)
++            if invalidate is not None:
++                invalidate()
++            raise
+ 
+         # Convert the document IDs back to strings.
+         # This is required as some storages (most notably the JSON file format)

@@ -1,0 +1,143 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..23618bd 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -85,6 +85,7 @@ class Scheduler:
+ 
+     def __init__(self) -> None:
+         self.jobs: List[Job] = []
++        self._paused_tags: Set[Hashable] = set()
+ 
+     def run_pending(self) -> None:
+         """
+@@ -95,8 +96,12 @@ class Scheduler:
+         that should run every minute and you only call run_pending()
+         in one hour increments then your job won't be run 60 times in
+         between but only once.
++
++        Jobs with a tag that was paused via :meth:`pause` are skipped.
+         """
+-        runnable_jobs = (job for job in self.jobs if job.should_run)
++        runnable_jobs = (
++            job for job in self.jobs if job.should_run and not self._is_paused(job)
++        )
+         for job in sorted(runnable_jobs):
+             self._run_job(job)
+ 
+@@ -132,6 +137,42 @@ class Scheduler:
+         else:
+             return [job for job in self.jobs if tag in job.tags]
+ 
++    def get_jobs_for(self, func: Callable) -> List["Job"]:
++        """
++        Gets scheduled jobs that run the given function, regardless of
++        the arguments they were scheduled with.
++
++        :param func: The function that was passed to :meth:`Job.do`
++        """
++        return [job for job in self.jobs if job.job_func.func == func]
++
++    def pause(self, tag: Hashable) -> None:
++        """
++        Pause all jobs marked with the given tag. Paused jobs are skipped
++        by :meth:`run_pending` until :meth:`resume` is called. This also
++        applies to jobs with that tag that are added while paused.
++
++        A job that became due while paused runs on the first
++        :meth:`run_pending` call after resuming.
++
++        :param tag: An identifier used to identify a subset of jobs to pause
++        """
++        logger.debug('Pausing all jobs tagged "%s"', tag)
++        self._paused_tags.add(tag)
++
++    def resume(self, tag: Hashable) -> None:
++        """
++        Resume jobs marked with the given tag that were paused via
++        :meth:`pause`. Does nothing if the tag is not paused.
++
++        :param tag: An identifier used to identify a subset of jobs to resume
++        """
++        logger.debug('Resuming all jobs tagged "%s"', tag)
++        self._paused_tags.discard(tag)
++
++    def _is_paused(self, job: "Job") -> bool:
++        return not self._paused_tags.isdisjoint(job.tags)
++
+     def clear(self, tag: Optional[Hashable] = None) -> None:
+         """
+         Deletes scheduled jobs marked with the given tag, or all jobs
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..b5d901c 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1588,6 +1588,69 @@ class SchedulerTests(TestCase):
+         schedule.clear()
+         assert len(schedule.jobs) == 0
+ 
++    def test_get_jobs_for(self):
++        job1 = make_mock_job(name="job1")
++        job2 = make_mock_job(name="job2")
++        a = every().second.do(job1)
++        b = every().minute.do(job1, "arg", key="value")
++        c = every().second.do(job2)
++        assert schedule.default_scheduler.get_jobs_for(job1) == [a, b]
++        assert schedule.default_scheduler.get_jobs_for(job2) == [c]
++        assert schedule.default_scheduler.get_jobs_for(make_mock_job(name="other")) == []
++
++        for job in schedule.default_scheduler.get_jobs_for(job1):
++            schedule.cancel_job(job)
++        assert schedule.jobs == [c]
++        assert schedule.default_scheduler.get_jobs_for(job1) == []
++
++    def test_pause_and_resume(self):
++        scheduler = schedule.Scheduler()
++        mock_job = make_mock_job()
++        with mock_datetime(2020, 1, 1, 12, 0, 0):
++            scheduler.every().minute.do(mock_job).tag("maint")
++            other = make_mock_job(name="other")
++            scheduler.every().minute.do(other).tag("keep")
++        with mock_datetime(2020, 1, 1, 12, 1, 0):
++            scheduler.pause("maint")
++            scheduler.run_pending()
++            assert mock_job.call_count == 0
++            assert other.call_count == 1
++            scheduler.resume("maint")
++            scheduler.run_pending()
++            assert mock_job.call_count == 1
++            assert len(scheduler.get_jobs("maint")) == 1
++
++    def test_pause_applies_to_jobs_added_later(self):
++        scheduler = schedule.Scheduler()
++        mock_job = make_mock_job()
++        scheduler.pause("maint")
++        with mock_datetime(2020, 1, 1, 12, 0, 0):
++            scheduler.every().second.do(mock_job).tag("maint")
++        with mock_datetime(2020, 1, 1, 12, 0, 5):
++            scheduler.run_pending()
++            assert mock_job.call_count == 0
++            scheduler.resume("maint")
++            scheduler.run_pending()
++            assert mock_job.call_count == 1
++
++    def test_pause_multiple_tags_and_unknown_tag(self):
++        scheduler = schedule.Scheduler()
++        mock_job = make_mock_job()
++        with mock_datetime(2020, 1, 1, 12, 0, 0):
++            scheduler.every().second.do(mock_job).tag("a", "b")
++        scheduler.resume("never-paused")  # no-op
++        scheduler.pause("a")
++        scheduler.pause("b")
++        with mock_datetime(2020, 1, 1, 12, 0, 5):
++            scheduler.run_pending()
++            assert mock_job.call_count == 0
++            scheduler.resume("a")
++            scheduler.run_pending()
++            assert mock_job.call_count == 0  # still paused via "b"
++            scheduler.resume("b")
++            scheduler.run_pending()
++            assert mock_job.call_count == 1
++
+     def test_misconfigured_job_wont_break_scheduler(self):
+         """
+         Ensure an interrupted job definition chain won't break

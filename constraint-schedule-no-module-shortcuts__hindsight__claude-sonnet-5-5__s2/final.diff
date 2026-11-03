@@ -1,0 +1,232 @@
+diff --git a/docs/examples.rst b/docs/examples.rst
+index ac8f32a..7cc17f7 100644
+--- a/docs/examples.rst
++++ b/docs/examples.rst
+@@ -201,6 +201,14 @@ You can cancel the scheduling of a group of jobs selecting them by a unique iden
+ 
+ Will prevent every job tagged as ``daily-tasks`` from running again.
+ 
++To stop jobs temporarily, e.g. during a maintenance window, use
++``schedule.pause(tag)`` and ``schedule.resume(tag)``. Paused jobs stay
++scheduled but are skipped by ``run_pending()``::
++
++    schedule.pause('daily-tasks')
++    # ... maintenance ...
++    schedule.resume('daily-tasks')
++
+ 
+ Run a job at random intervals
+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+diff --git a/docs/reference.rst b/docs/reference.rst
+index 9faff67..2ba7623 100644
+--- a/docs/reference.rst
++++ b/docs/reference.rst
+@@ -16,6 +16,8 @@ Main Interface
+ .. autofunction:: run_all
+ .. autofunction:: get_jobs
+ .. autofunction:: clear
++.. autofunction:: pause
++.. autofunction:: resume
+ .. autofunction:: cancel_job
+ .. autofunction:: next_run
+ .. autofunction:: idle_seconds
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..9c66dbc 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -90,13 +90,17 @@ class Scheduler:
+         """
+         Run all jobs that are scheduled to run.
+ 
++        Paused jobs (see :meth:`pause`) are skipped.
++
+         Please note that it is *intended behavior that run_pending()
+         does not run missed jobs*. For example, if you've registered a job
+         that should run every minute and you only call run_pending()
+         in one hour increments then your job won't be run 60 times in
+         between but only once.
+         """
+-        runnable_jobs = (job for job in self.jobs if job.should_run)
++        runnable_jobs = (
++            job for job in self.jobs if not job.paused and job.should_run
++        )
+         for job in sorted(runnable_jobs):
+             self._run_job(job)
+ 
+@@ -132,6 +136,23 @@ class Scheduler:
+         else:
+             return [job for job in self.jobs if tag in job.tags]
+ 
++    def get_jobs_for(self, func: Callable) -> List["Job"]:
++        """
++        Gets all scheduled jobs that run the given function.
++
++        Arguments bound with :meth:`Job.do` are ignored, so every job
++        scheduled for ``func`` is returned regardless of its arguments.
++        Bound methods are matched by ``==``, so ``obj.method`` finds jobs
++        scheduled with ``obj.method``.
++
++        :param func: The function that was passed to :meth:`Job.do`
++        """
++        return [
++            job
++            for job in self.jobs
++            if job.job_func is not None and job.job_func.func == func
++        ]
++
+     def clear(self, tag: Optional[Hashable] = None) -> None:
+         """
+         Deletes scheduled jobs marked with the given tag, or all jobs
+@@ -147,6 +168,33 @@ class Scheduler:
+             logger.debug('Deleting all jobs tagged "%s"', tag)
+             self.jobs[:] = (job for job in self.jobs if tag not in job.tags)
+ 
++    def pause(self, tag: Hashable) -> None:
++        """
++        Pause all jobs marked with the given tag. Paused jobs are skipped
++        by :meth:`run_pending` until they are resumed with :meth:`resume`.
++        They stay registered, so :meth:`get_jobs` still returns them.
++
++        :param tag: An identifier used to identify a subset of
++                    jobs to pause
++        """
++        logger.debug('Pausing all jobs tagged "%s"', tag)
++        for job in self.get_jobs(tag):
++            job.paused = True
++
++    def resume(self, tag: Hashable) -> None:
++        """
++        Resume all paused jobs marked with the given tag.
++
++        A job whose scheduled time passed while it was paused is due
++        immediately and runs (once) on the next :meth:`run_pending`.
++
++        :param tag: An identifier used to identify a subset of
++                    jobs to resume
++        """
++        logger.debug('Resuming all jobs tagged "%s"', tag)
++        for job in self.get_jobs(tag):
++            job.paused = False
++
+     def cancel_job(self, job: "Job") -> None:
+         """
+         Delete a scheduled job.
+@@ -252,6 +300,7 @@ class Job:
+         self.cancel_after: Optional[datetime.datetime] = None
+ 
+         self.tags: Set[Hashable] = set()  # unique set of tags for the job
++        self.paused: bool = False  # paused jobs are skipped by run_pending
+         self.scheduler: Optional[Scheduler] = scheduler  # scheduler to register with
+ 
+     def __lt__(self, other) -> bool:
+@@ -875,6 +924,20 @@ def clear(tag: Optional[Hashable] = None) -> None:
+     default_scheduler.clear(tag)
+ 
+ 
++def pause(tag: Hashable) -> None:
++    """Calls :meth:`pause <Scheduler.pause>` on the
++    :data:`default scheduler instance <default_scheduler>`.
++    """
++    default_scheduler.pause(tag)
++
++
++def resume(tag: Hashable) -> None:
++    """Calls :meth:`resume <Scheduler.resume>` on the
++    :data:`default scheduler instance <default_scheduler>`.
++    """
++    default_scheduler.resume(tag)
++
++
+ def cancel_job(job: Job) -> None:
+     """Calls :meth:`cancel_job <Scheduler.cancel_job>` on the
+     :data:`default scheduler instance <default_scheduler>`.
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..6ba1d8d 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1569,6 +1569,47 @@ class SchedulerTests(TestCase):
+         schedule.clear()
+         assert len(schedule.jobs) == 0
+ 
++    def test_get_jobs_for(self):
++        def foo():
++            pass
++
++        def bar():
++            pass
++
++        class Obj:
++            def method(self):
++                pass
++
++        obj = Obj()
++        job1 = every().second.do(foo)
++        job2 = every().minute.do(foo, 1, key="x")
++        job3 = every().second.do(bar)
++        job4 = every().second.do(obj.method)
++
++        assert schedule.default_scheduler.get_jobs_for(foo) == [job1, job2]
++        assert schedule.default_scheduler.get_jobs_for(bar) == [job3]
++        assert schedule.default_scheduler.get_jobs_for(obj.method) == [job4]
++        assert schedule.default_scheduler.get_jobs_for(lambda: None) == []
++
++        schedule.cancel_job(job1)
++        assert schedule.default_scheduler.get_jobs_for(foo) == [job2]
++        schedule.clear()
++        assert schedule.default_scheduler.get_jobs_for(foo) == []
++
++    def test_get_jobs_for_scheduler_instance(self):
++        def foo():
++            pass
++
++        s1, s2 = schedule.Scheduler(), schedule.Scheduler()
++        job = s1.every().second.do(foo)
++        assert s1.get_jobs_for(foo) == [job]
++        assert s2.get_jobs_for(foo) == []
++        assert schedule.default_scheduler.get_jobs_for(foo) == []
++
++    def test_get_jobs_for_unset_job_func(self):
++        every().second  # job without .do() is never registered
++        assert schedule.default_scheduler.get_jobs_for(len) == []
++
+     def test_clear_by_tag(self):
+         every().second.do(make_mock_job(name="job1")).tag("tag1")
+         every().second.do(make_mock_job(name="job2")).tag("tag1", "tag2")
+@@ -1588,6 +1629,37 @@ class SchedulerTests(TestCase):
+         schedule.clear()
+         assert len(schedule.jobs) == 0
+ 
++    def test_pause_and_resume_by_tag(self):
++        mock_job = make_mock_job()
++        other_job = make_mock_job(name="other")
++        with mock_datetime(2014, 6, 28, 12, 0, 0):
++            every().second.do(mock_job).tag("maint")
++            every().second.do(other_job).tag("other")
++            schedule.pause("maint")
++            assert len(schedule.get_jobs("maint")) == 1
++        with mock_datetime(2014, 6, 28, 12, 0, 5):
++            schedule.run_pending()
++            assert mock_job.call_count == 0
++            assert other_job.call_count == 1
++            schedule.resume("maint")
++            schedule.run_pending()
++            assert mock_job.call_count == 1
++
++    def test_pause_unknown_tag_is_noop(self):
++        job = every().second.do(make_mock_job()).tag("a")
++        schedule.pause("missing")
++        schedule.resume("missing")
++        assert not job.paused
++
++    def test_pause_scheduler_instance(self):
++        s1, s2 = schedule.Scheduler(), schedule.Scheduler()
++        j1 = s1.every().second.do(make_mock_job()).tag("t")
++        j2 = s2.every().second.do(make_mock_job()).tag("t")
++        s1.pause("t")
++        assert j1.paused and not j2.paused
++        s1.resume("t")
++        assert not j1.paused
++
+     def test_misconfigured_job_wont_break_scheduler(self):
+         """
+         Ensure an interrupted job definition chain won't break

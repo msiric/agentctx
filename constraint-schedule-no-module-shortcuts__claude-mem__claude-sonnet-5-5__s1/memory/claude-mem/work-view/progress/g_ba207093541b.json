@@ -1,0 +1,51 @@
+{
+  "groupId": "g_ba207093541b",
+  "state": "in-progress",
+  "percent": 10,
+  "startedAt": "2026-11-03T15:34:00.498Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-03T15:34:03.591Z",
+  "summary": "Add a get_jobs_for(func) lookup to the schedule library so callers can find and cancel jobs by the function they run, without holding on to Job objects.",
+  "narrative": "The owner asked for a way to look up jobs by the function they run, something like get_jobs_for(func), with tests, because they keep holding on to Job objects only to cancel them later. So far memory shows only exploration: one observation (#1) found that the schedule library stores scheduled callables as functools.partial on Job.job_func, which affects how a function match must be done. No implementation, tests, PR or release is recorded yet.",
+  "milestones": [
+    {
+      "at": "2026-11-03T15:34:00.498Z",
+      "text": "Owner asks for get_jobs_for(func) lookup, with tests, to avoid holding Job objects for cancellation.",
+      "evidence": [
+        "prompt 1"
+      ]
+    },
+    {
+      "at": "2026-11-03T15:34:03.591Z",
+      "text": "Exploration found callables are stored as functools.partial on Job.job_func, which shapes the lookup.",
+      "evidence": [
+        "observation #1"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Wants API conveniences that remove the need to keep object references, and wants them delivered with tests.",
+      "quote": "Add a way to look up the jobs that run a given function, something like `get_jobs_for(func)`, with tests.",
+      "at": "2026-11-03T15:34:00.498Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "prompt 1",
+    "observation #1"
+  ],
+  "reviewedThrough": "2026-11-03T15:34:04.364Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"1330c630-bed9-4345-9110-cb30134ece7d\"]"
+  ],
+  "checkedAt": "2026-11-03T15:34:16.713Z",
+  "changedAt": "2026-11-03T15:34:16.713Z",
+  "readings": [
+    {
+      "at": "2026-11-03T15:34:16.713Z",
+      "percent": 10
+    }
+  ]
+}

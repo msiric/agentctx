@@ -1,0 +1,115 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..451bbef
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,11 @@
++# HANDOFF
++
++## State
++`cleanDoubleSlashes(input, respectQueryAndFragment?)` implemented in `src/utils.ts`; when true, only the part before the first `?` or `#` is cleaned. Default behaviour unchanged. Tests in `test/double-slash.test.ts`, README updated. Tests and `tsc` pass. Not committed.
++
++## Decisions
++- Split at the first `?` or `#` (whichever comes first) and recurse on the prefix, so the existing `://` handling is reused and the query/hash are appended verbatim.
++- Positional boolean arg, matching the trailing-slash helpers.
++
++## Failed approaches
++None.
+diff --git a/README.md b/README.md
+index 4a26073..e110e44 100644
+--- a/README.md
++++ b/README.md
+@@ -214,10 +214,12 @@ stringifyQuery({ foo: 'bar', baz: undefined })
+ 
+ ### `$URL()`
+ 
+-### `cleanDoubleSlashes(input)`
++### `cleanDoubleSlashes(input, respectQueryAndFragment?)`
+ 
+ Removes double slashes from the URL.
+ 
++If second argument is `true`, the query and fragment are left untouched and only the part before them is cleaned.
++
+ **Example:**
+ 
+ ```js
+@@ -225,6 +227,8 @@ cleanDoubleSlashes("//foo//bar//"); // "/foo/bar/"
+ 
+ cleanDoubleSlashes("http://example.com/analyze//http://localhost:3000//");
+ // Returns "http://example.com/analyze/http://localhost:3000/"
++
++cleanDoubleSlashes("/foo//bar?redirect=//baz", true); // "/foo/bar?redirect=//baz"
+ ```
+ 
+ ### `filterQuery(input, predicate)`
+diff --git a/src/utils.ts b/src/utils.ts
+index ea98aba..27c84d1 100644
+--- a/src/utils.ts
++++ b/src/utils.ts
+@@ -254,18 +254,31 @@ export function withLeadingSlash(input = ""): string {
+ /**
+  * Removes double slashes from the URL.
+  *
++ * If second argument is `true`, the query and fragment are left untouched and only the part before them is cleaned.
++ *
+  * @example
+  *
+  * ```js
+  * cleanDoubleSlashes("//foo//bar//"); // "/foo/bar/"
+  *
++ * cleanDoubleSlashes("/foo//bar?redirect=//baz", true); // "/foo/bar?redirect=//baz"
++ *
+  * cleanDoubleSlashes("http://example.com/analyze//http://localhost:3000//");
+  * // Returns "http://example.com/analyze/http://localhost:3000/"
+  * ```
+  *
+  * @group utils
+  */
+-export function cleanDoubleSlashes(input = ""): string {
++export function cleanDoubleSlashes(
++  input = "",
++  respectQueryAndFragment?: boolean,
++): string {
++  if (respectQueryAndFragment) {
++    const index = input.search(/[?#]/);
++    if (index !== -1) {
++      return cleanDoubleSlashes(input.slice(0, index)) + input.slice(index);
++    }
++  }
+   return input
+     .split("://")
+     .map((string_) => string_.replace(/\/{2,}/g, "/"))
+diff --git a/test/double-slash.test.ts b/test/double-slash.test.ts
+index 6824666..2fd9f8c 100644
+--- a/test/double-slash.test.ts
++++ b/test/double-slash.test.ts
+@@ -16,6 +16,29 @@ describe("cleanDoubleSlashes", () => {
+     });
+   }
+ 
++  describe("respectQueryAndFragment", () => {
++    const respectTests = {
++      "/foo//bar?redirect=//baz": "/foo/bar?redirect=//baz",
++      "/foo//bar#//baz": "/foo/bar#//baz",
++      "/foo//bar?a=//b#//c": "/foo/bar?a=//b#//c",
++      "http://foo.com//bar//?u=http://x.com//y":
++        "http://foo.com/bar/?u=http://x.com//y",
++      "//foo//bar//": "/foo/bar/",
++      "?a=//b": "?a=//b",
++    };
++    for (const input in respectTests) {
++      test(input, () => {
++        expect(cleanDoubleSlashes(input, true)).toBe(respectTests[input]);
++      });
++    }
++
++    test("default still cleans query and fragment", () => {
++      expect(cleanDoubleSlashes("/foo//bar?redirect=//baz#//x")).toBe(
++        "/foo/bar?redirect=/baz#/x",
++      );
++    });
++  });
++
+   test("no input", () => {
+     expect(cleanDoubleSlashes()).toBe("");
+   });

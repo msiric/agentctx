@@ -1,0 +1,257 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..7e5f6d9
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,31 @@
++# HANDOFF
++
++## Task
++User reports slow reads on ~40MB db files; suspected JSONStorage re-parses the file on every query. Asked for a benchmark under scripts/ and an explanation of where time goes.
++
++## State
++- Added `scripts/bench_read.py` (run: `PYTHONPATH=. python scripts/bench_read.py [MB] [repeat]`; PYTHONPATH needed because the script dir, not the repo root, is on sys.path).
++- No library code changed. Not committed.
++
++## Findings (42 MB, 288k docs, Python 3.12)
++- storage.read (json.load): ~500 ms, paid on EVERY read call (`Table._read_table` -> `JSONStorage.read`, no caching).
++- db.all(): ~1170 ms = parse + building 288k Document objects.
++- db.search uncached: ~720 ms; db.get(doc_id=1): ~550 ms (almost all parse).
++- Repeated identical search: ~0 ms (query cache), but cache is cleared on writes.
++
++## Decisions / notes
++- Benchmark uses a fresh query each iteration to defeat the query cache.
++- No fix attempted yet; candidate: CachingMiddleware or a mtime-validated read cache in JSONStorage (branch name perf/read-cache). Needs care re: mutation of cached dicts.
++
++## Failed approaches (from user)
++- mtime-validated read cache: tried last year and removed. DBs live on NFS with 1-second mtime resolution, so writes by the importer within the same second as a cached read left stale data being served. Do NOT rely on mtime alone (size/inode also weak). Any new cache needs a different invalidation scheme or explicit opt-in.
++
++## Status update
++- Benchmark script committed on perf/read-cache; HANDOFF.md left uncommitted. User is deciding on the fix approach.
++
++## Implementation (this session, uncommitted)
++- `JSONStorage(cache_reads=True)` (opt-in, default off): reads file bytes each call, blake2b content hash; re-parses only if hash differs. No mtime/size/inode, per the NFS failure above -> importer writes always visible.
++- `write()` drops cache first; `Table._update_table` calls `storage.invalidate_read_cache()` if the updater raises (updater mutates the cached dict in place). Returned data is shared: callers must not mutate it (documented).
++- Tests added in tests/test_storages.py (same-size external write with restored mtime; failed update not served). Full suite: 230 pass (run `python -m pytest -c /dev/null --rootdir=. tests`; pytest.ini needs pytest-cov).
++- Measured ~300k docs: db.get 277 ms -> 119 ms. Remaining cost = reading + hashing the whole file; skipping that needs a cheap change signal, which NFS doesn't give reliably.
++- Opt-in rather than default because of shared-object mutation semantics.
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..aed8c83
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,70 @@
++"""Benchmark read performance of TinyDB's JSONStorage on a large db file.
++
++Usage: python scripts/bench_read.py [target_mb=40] [repeat=3]
++"""
++import cProfile
++import json
++import os
++import pstats
++import sys
++import tempfile
++import time
++
++from tinydb import TinyDB, where
++from tinydb.storages import JSONStorage
++
++
++def generate(path, target_mb):
++    docs, size, i = {}, 0, 0
++    while size < target_mb * 1024 * 1024:
++        doc = {'name': f'user{i}', 'age': i % 90, 'email': f'user{i}@example.com',
++               'tags': ['a', 'b', 'c'], 'addr': {'city': f'city{i % 500}', 'zip': i}}
++        docs[str(i + 1)] = doc
++        size += len(json.dumps(doc)) + 10
++        i += 1
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return i
++
++
++def timed(label, fn, repeat):
++    ts = []
++    for _ in range(repeat):
++        t = time.perf_counter()
++        fn()
++        ts.append(time.perf_counter() - t)
++    print(f'{label:<34} best {min(ts)*1000:8.1f} ms  (n={repeat})')
++
++
++def main():
++    mb = float(sys.argv[1]) if len(sys.argv) > 1 else 40
++    repeat = int(sys.argv[2]) if len(sys.argv) > 2 else 3
++    with tempfile.TemporaryDirectory() as d:
++        path = os.path.join(d, 'db.json')
++        n = generate(path, mb)
++        print(f'{n} docs, {os.path.getsize(path)/1e6:.1f} MB')
++        db = TinyDB(path)
++        storage = db._storage
++
++        timed('raw json.load (storage.read)', storage.read, repeat)
++        timed('db.all()', db.all, repeat)
++        # a fresh condition each time defeats the query cache
++        counter = iter(range(10**6))
++        timed('db.search (uncached, new query)',
++              lambda: db.search(where('age') == next(counter) % 90), repeat)
++        q = where('age') == 42
++        db.search(q)
++        timed('db.search (cached, same query)', lambda: db.search(q), repeat)
++        timed('db.get(doc_id=1)', lambda: db.get(doc_id=1), repeat)
++
++        print('\nprofile of one uncached search:')
++        pr = cProfile.Profile()
++        pr.enable()
++        db.search(where('age') == 7)
++        pr.disable()
++        pstats.Stats(pr).sort_stats('cumulative').print_stats(8)
++        db.close()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..9ef5ba0 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,36 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_read_cache_sees_external_writes_and_skips_parse(tmpdir, monkeypatch):
++    path = str(tmpdir.join('db.json'))
++    with open(path, 'w') as f:
++        f.write('{"_default": {"1": {"a": 1}}}')
++
++    s = JSONStorage(path, cache_reads=True)
++    first = s.read()
++    assert s.read() is first  # unchanged content -> no re-parse
++
++    # External write with identical size and restored mtime (NFS-like)
++    st = os.stat(path)
++    with open(path, 'w') as f:
++        f.write('{"_default": {"1": {"a": 2}}}')
++    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
++    assert s.read()['_default']['1']['a'] == 2
++    s.close()
++
++
++def test_json_read_cache_failed_update_not_served(tmpdir):
++    from tinydb import TinyDB
++    db = TinyDB(str(tmpdir.join('db.json')), cache_reads=True)
++    db.insert({'a': 1})
++
++    def boom(doc):
++        doc['a'] = 99
++        raise RuntimeError
++
++    with pytest.raises(RuntimeError):
++        db.update(boom)
++    assert db.get(doc_id=1)['a'] == 1
++    db.close()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..7af6f38 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -3,6 +3,7 @@ Contains the :class:`base class <tinydb.storages.Storage>` for storages and
+ implementations.
+ """
+ 
++import hashlib
+ import io
+ import json
+ import os
+@@ -81,7 +82,8 @@ class JSONStorage(Storage):
+     Store the data in a JSON file.
+     """
+ 
+-    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+', **kwargs):
++    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+',
++                 cache_reads=False, **kwargs):
+         """
+         Create a new instance.
+ 
+@@ -98,10 +100,20 @@ class JSONStorage(Storage):
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
++        :param cache_reads: Opt in to skipping the JSON parse when the file
++            content is unchanged since the last read/write. Validity is
++            decided by hashing the file *content* (never mtime/size, which
++            are unreliable on e.g. NFS), so writes by other processes are
++            always picked up, but the file is still read in full on every
++            call. The returned data is shared between calls: do not mutate it.
++        :type cache_reads: bool
+         """
+ 
+         super().__init__()
+ 
++        self._cache_reads = cache_reads
++        self._cache: Optional[tuple[bytes, Any]] = None  # (digest, parsed)
++
+         self._mode = access_mode
+         self.kwargs = kwargs
+ 
+@@ -122,7 +134,28 @@ class JSONStorage(Storage):
+     def close(self) -> None:
+         self._handle.close()
+ 
++    def invalidate_read_cache(self) -> None:
++        self._cache = None
++
++    def _read_cached(self):
++        self._handle.seek(0)
++        raw = self._handle.read()
++        if not raw:
++            self._cache = None
++            return None
++        if isinstance(raw, str):
++            raw = raw.encode('utf-8', 'surrogatepass')
++        digest = hashlib.blake2b(raw).digest()
++        if self._cache is not None and self._cache[0] == digest:
++            return self._cache[1]
++        data = json.loads(raw)
++        self._cache = (digest, data)
++        return data
++
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
++        if self._cache_reads:
++            return self._read_cached()
++
+         # Get the file size by moving the cursor to the file end and reading
+         # its location
+         self._handle.seek(0, os.SEEK_END)
+@@ -140,6 +173,9 @@ class JSONStorage(Storage):
+             return json.load(self._handle)
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The file is about to change; never keep a pre-write parse around
++        self._cache = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..f3aa4d6 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -837,7 +837,15 @@ class Table:
+         }
+ 
+         # Perform the table update operation
+-        updater(table)
++        try:
++            updater(table)
++        except BaseException:
++            # ``tables`` may have been partially mutated in place; make sure
++            # a read cache (if any) cannot keep serving it
++            invalidate = getattr(self._storage, 'invalidate_read_cache', None)
++            if invalidate is not None:
++                invalidate()
++            raise
+ 
+         # Convert the document IDs back to strings.
+         # This is required as some storages (most notably the JSON file format)

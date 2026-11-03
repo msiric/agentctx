@@ -1,0 +1,182 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..2bd50a1
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,76 @@
++"""Benchmark TinyDB read paths on a large JSON db.
++
++Usage: python scripts/bench_read.py [target_mb=40] [repeats=5]
++"""
++import cProfile
++import json
++import os
++import pstats
++import sys
++import tempfile
++import time
++
++from tinydb import TinyDB, where
++from tinydb.storages import JSONStorage
++
++
++def build(path, target_mb):
++    docs = {}
++    size, i = 0, 1
++    while size < target_mb * 1024 * 1024:
++        d = {'name': f'user{i}', 'age': i % 90, 'email': f'user{i}@example.com',
++             'tags': ['a', 'b', 'c'], 'address': {'city': f'city{i % 500}', 'zip': str(10000 + i % 90000)},
++             'bio': 'lorem ipsum dolor sit amet ' * 4}
++        docs[str(i)] = d
++        size += len(json.dumps(d)) + 8
++        i += 1
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return len(docs)
++
++
++def best(fn, repeats):
++    ts = []
++    for _ in range(repeats):
++        t = time.perf_counter()
++        fn()
++        ts.append(time.perf_counter() - t)
++    return min(ts)
++
++
++def main():
++    mb = float(sys.argv[1]) if len(sys.argv) > 1 else 40
++    repeats = int(sys.argv[2]) if len(sys.argv) > 2 else 5
++    with tempfile.TemporaryDirectory() as tmp:
++        path = os.path.join(tmp, 'big.json')
++        n = build(path, mb)
++        print(f'db: {n} docs, {os.path.getsize(path) / 1e6:.1f} MB')
++
++        st = JSONStorage(path)
++        print(f'raw JSONStorage.read():  {best(st.read, repeats) * 1000:8.1f} ms')
++        st.close()
++
++        db = TinyDB(path)
++        q = where('address')['city'] == 'city42'
++
++        def cold_search():
++            db.table('_default').clear_cache()
++            return db.search(q)
++
++        print(f'db.all():                {best(db.all, repeats) * 1000:8.1f} ms')
++        print(f'db.search() cold cache:  {best(cold_search, repeats) * 1000:8.1f} ms')
++        print(f'db.search() warm cache:  {best(lambda: db.search(q), repeats) * 1000:8.1f} ms')
++        print(f'db.get(doc_id=1):        {best(lambda: db.get(doc_id=1), repeats) * 1000:8.1f} ms')
++
++        print('\ncProfile of db.all() + cold search (top 8 by tottime):')
++        pr = cProfile.Profile()
++        pr.enable()
++        db.all()
++        cold_search()
++        pr.disable()
++        pstats.Stats(pr).sort_stats('tottime').print_stats(8)
++        db.close()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..b32b09e 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -6,6 +6,7 @@ implementations.
+ import io
+ import json
+ import os
++import time
+ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+@@ -81,7 +82,8 @@ class JSONStorage(Storage):
+     Store the data in a JSON file.
+     """
+ 
+-    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+', **kwargs):
++    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+',
++                 cache_reads=True, **kwargs):
+         """
+         Create a new instance.
+ 
+@@ -98,10 +100,21 @@ class JSONStorage(Storage):
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
++        :param cache_reads: Keep the parsed JSON and reuse it while the file
++                            is unchanged (checked via inode, size, mtime and
++                            ctime), so changes made by other processes are
++                            still picked up. **Note:** ``read()`` then returns
++                            the same object on repeated calls, so mutating it
++                            without calling ``write()`` affects later reads.
++                            Pass ``False`` to always re-parse.
+         """
+ 
+         super().__init__()
+ 
++        self._cache_reads = cache_reads
++        self._cache_key = None
++        self._cache_data = None
++
+         self._mode = access_mode
+         self.kwargs = kwargs
+ 
+@@ -122,13 +135,35 @@ class JSONStorage(Storage):
+     def close(self) -> None:
+         self._handle.close()
+ 
++    # A file whose mtime is this close to "now" may still be modified within
++    # the same timestamp tick without the stat signature changing, so we don't
++    # trust the cache for it (same idea as git's "racy" index entries). Must
++    # exceed the coarsest filesystem timestamp granularity we care about.
++    _RACY_WINDOW_NS = 2_000_000_000
++
++    def _signature(self):
++        st = os.fstat(self._handle.fileno())
++        return (st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns), st.st_mtime_ns
++
++    def _remember(self, data):
++        self._cache_key = self._cache_data = None
++        if not self._cache_reads:
++            return
++        key, mtime_ns = self._signature()
++        if time.time_ns() - mtime_ns > self._RACY_WINDOW_NS:
++            self._cache_key, self._cache_data = key, data
++
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
++        if self._cache_key is not None and self._signature()[0] == self._cache_key:
++            return self._cache_data
++
+         # Get the file size by moving the cursor to the file end and reading
+         # its location
+         self._handle.seek(0, os.SEEK_END)
+         size = self._handle.tell()
+ 
+         if not size:
++            self._cache_key = self._cache_data = None
+             # File is empty, so we return ``None`` so TinyDB can properly
+             # initialize the database
+             return None
+@@ -137,7 +172,9 @@ class JSONStorage(Storage):
+             self._handle.seek(0)
+ 
+             # Load the JSON contents of the file
+-            return json.load(self._handle)
++            data = json.load(self._handle)
++            self._remember(data)
++            return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
+         # Move the cursor to the beginning of the file just in case
+@@ -160,6 +197,8 @@ class JSONStorage(Storage):
+         # gotten shorter
+         self._handle.truncate()
+ 
++        self._remember(data)
++
+ 
+ class MemoryStorage(Storage):
+     """

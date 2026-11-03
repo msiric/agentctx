@@ -1,0 +1,17 @@
+{
+  "narrative": "Shipping velocity: nothing has shipped yet. One request is in the record, and it is at about 15% and still in the exploration stage. It started and last saw activity on 2026-11-03, so there is no ask-to-ship time to report.\n\n## Benchmarking JSONStorage read speed (2026-11-03)\n\nThe owner suspected that JSONStorage re-parses the whole file on every query. They asked for a benchmark script under scripts/ that builds a roughly 40MB db and times db.all() and a search, so the cost is measured and not guessed.\n\nMemory holds one observation of work so far. An initial read of tinydb/storages.py found that JSONStorage re-reads and fully parses the db file on each table read path. That matches the owner's hypothesis. No benchmark script, timings or write-up have been recorded yet.\n\n## What this shows so far\n\nThe request is at the exploration stage, so there is no rework, stall or release to learn from. One working preference is already visible: the owner wants numbers before any change is made to fix a performance suspicion.",
+  "preferences": [
+    {
+      "preference": "Wants measurements to back up performance hunches before any changes are made.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "I think JSONStorage re-parses the whole file on every query, but I'd like numbers.",
+          "at": "2026-11-03T16:36:28.870Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T16:37:05.419Z"
+}

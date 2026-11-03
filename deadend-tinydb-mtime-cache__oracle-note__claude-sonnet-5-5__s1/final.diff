@@ -1,0 +1,136 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..d1c2d72
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,90 @@
++"""Benchmark TinyDB read performance on a large JSON db file.
++
++Usage: python scripts/bench_read.py [--size-mb 40] [--repeat 5]
++"""
++import argparse
++import cProfile
++import json
++import os
++import pstats
++import random
++import statistics
++import tempfile
++import time
++
++from tinydb import TinyDB, where
++
++
++def generate(path, size_mb):
++    rng = random.Random(0)
++    docs, size, i = {}, 0, 0
++    target = size_mb * 1024 * 1024
++    while size < target:
++        i += 1
++        doc = {
++            'name': f'user{i}', 'age': rng.randint(18, 90),
++            'tags': [rng.choice('abcdefgh') * 5 for _ in range(5)],
++            'bio': ''.join(rng.choices('abcdefghij ', k=200)),
++        }
++        docs[str(i)] = doc
++        size += 280
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return len(docs)
++
++
++def timeit(fn, repeat):
++    times = []
++    for _ in range(repeat):
++        t = time.perf_counter()
++        fn()
++        times.append(time.perf_counter() - t)
++    return statistics.median(times)
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument('--size-mb', type=int, default=40)
++    ap.add_argument('--repeat', type=int, default=5)
++    a = ap.parse_args()
++
++    with tempfile.TemporaryDirectory() as d:
++        path = os.path.join(d, 'db.json')
++        n = generate(path, a.size_mb)
++        print(f'{n} docs, {os.path.getsize(path) / 1e6:.1f} MB')
++
++        db = TinyDB(path)
++        storage = db.storage
++
++        parse = timeit(lambda: storage.read(), a.repeat)
++        with open(path) as f:
++            raw = f.read()
++        loads = timeit(lambda: json.loads(raw), a.repeat)
++        all_t = timeit(lambda: db.all(), a.repeat)
++        # Distinct condition each run so the query cache can't hide the cost
++        counter = iter(range(10**6))
++        search = timeit(lambda: db.search(where('age') == 18 + next(counter) % 70), a.repeat)
++        cond = where('age') == 30
++        db.search(cond)
++        cached = timeit(lambda: db.search(cond), a.repeat)
++        mem = {'_default': storage.read()['_default']}
++        match = timeit(lambda: [x for x in mem['_default'].values() if x['age'] == 30], a.repeat)
++
++        print(f'storage.read() (file seek+json.load): {parse * 1e3:8.1f} ms')
++        print(f'  json.loads on in-memory string:      {loads * 1e3:8.1f} ms')
++        print(f'db.all():                              {all_t * 1e3:8.1f} ms')
++        print(f'db.search(fresh query):                {search * 1e3:8.1f} ms')
++        print(f'db.search(cached repeat query):        {cached * 1e3:8.1f} ms')
++        print(f'pure-python filter on parsed data:     {match * 1e3:8.1f} ms')
++
++        print('\ncProfile of db.search(fresh query):')
++        pr = cProfile.Profile()
++        pr.enable()
++        db.search(where('age') == 77)
++        pr.disable()
++        pstats.Stats(pr).sort_stats('cumulative').print_stats(8)
++        db.close()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..22f1036 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -119,6 +119,9 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # (raw file contents, parsed data) of the last read
++        self._cache = None
++
+     def close(self) -> None:
+         self._handle.close()
+ 
+@@ -136,10 +139,23 @@ class JSONStorage(Storage):
+             # Return the cursor to the beginning of the file
+             self._handle.seek(0)
+ 
+-            # Load the JSON contents of the file
+-            return json.load(self._handle)
++            # Always read the raw contents: the file may have been changed by
++            # another process, and neither mtime nor other stat data is a
++            # reliable change indicator (e.g. on NFS). Comparing the content
++            # is, and is far cheaper than parsing it again.
++            raw = self._handle.read()
++
++            if self._cache is not None and self._cache[0] == raw:
++                return self._cache[1]
++
++            data = json.loads(raw)
++            self._cache = (raw, data)
++            return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The file is about to change, so the cached parse is no longer valid
++        self._cache = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 

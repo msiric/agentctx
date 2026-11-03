@@ -1,0 +1,267 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..aab8673
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,122 @@
++"""
++Benchmark read performance of TinyDB on a large JSON file.
++
++Usage: python scripts/bench_read.py [--size-mb 40] [--path /tmp/x.json] [--profile]
++"""
++import argparse
++import cProfile
++import json
++import os
++import pstats
++import random
++import string
++import sys
++import tempfile
++import time
++
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
++
++from tinydb import TinyDB, where  # noqa: E402
++
++
++def make_doc(i, rng):
++    word = lambda n: ''.join(rng.choices(string.ascii_lowercase, k=n))
++    return {
++        'id': i,
++        'name': word(12),
++        'email': f'{word(8)}@example.com',
++        'age': rng.randint(18, 90),
++        'tags': [word(5) for _ in range(5)],
++        'address': {'city': word(10), 'zip': str(rng.randint(10000, 99999))},
++        'bio': word(200),
++    }
++
++
++def generate(path, size_mb):
++    rng = random.Random(42)
++    docs = {}
++    i = 0
++    target = size_mb * 1024 * 1024
++    # Estimate doc size from a sample, then build the dict in one go
++    per_doc = len(json.dumps(make_doc(0, rng)))
++    n = target // (per_doc + 10)
++    for i in range(1, n + 1):
++        docs[str(i)] = make_doc(i, rng)
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return n
++
++
++def timed(label, fn, repeat=3):
++    times = []
++    result = None
++    for _ in range(repeat):
++        t = time.perf_counter()
++        result = fn()
++        times.append(time.perf_counter() - t)
++    print(f'{label:<38} {min(times) * 1000:9.1f} ms (best of {repeat})')
++    return result
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument('--size-mb', type=int, default=40)
++    ap.add_argument('--path')
++    ap.add_argument('--profile', action='store_true',
++                    help='cProfile a single uncached search')
++    args = ap.parse_args()
++
++    path = args.path or os.path.join(tempfile.mkdtemp(), 'bench.json')
++    if not os.path.exists(path):
++        n = generate(path, args.size_mb)
++        print(f'generated {n} docs')
++    print(f'file: {path} ({os.path.getsize(path) / 1e6:.1f} MB)\n')
++
++    db = TinyDB(path)
++    storage = db.storage
++
++    def raw_load():
++        with open(path) as f:
++            return json.load(f)
++
++    def raw_read_only():
++        with open(path) as f:
++            return f.read()
++
++    text = raw_read_only()
++    timed('file read (bytes -> str)', raw_read_only)
++    timed('json.loads (str -> objects)', lambda: json.loads(text))
++    timed('JSONStorage.read()', storage.read)
++    timed('db.all()', db.all)
++
++    # Use a fresh query each time so the query cache is never hit
++    # (distinct thresholds -> distinct cache keys)
++    thresholds = iter(range(-100, 0))
++    timed('db.search (uncached)',
++          lambda: db.search(where('age') > next(thresholds)))
++    ages = iter(range(18, 91))  # ~1.4% of docs match each distinct query
++    timed('db.search (uncached, selective)',
++          lambda: db.search(where('age') == next(ages)))
++    cached = where('age') > 85
++    db.search(cached)
++    timed('db.search (cached, same query)', lambda: db.search(cached))
++
++    # Cost of the query itself with the data already in memory
++    data = storage.read()['_default']
++    q = where('age') > 85
++    timed('query only, data already in memory',
++          lambda: [d for d in data.values() if q(d)])
++
++    if args.profile:
++        print('\n--- cProfile: one uncached search ---')
++        pr = cProfile.Profile()
++        pr.enable()
++        db.search(where('age') > 86)
++        pr.disable()
++        pstats.Stats(pr).sort_stats('cumulative').print_stats(8)
++
++    db.close()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..45992ed 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,49 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_read_shared_reuses_parse_and_sees_external_writes(tmp_path):
++    path = str(tmp_path / 'db.json')
++    storage = JSONStorage(path)
++    storage.write({'_default': {'1': {'a': 1}}})
++
++    first = storage.read_shared()
++    assert storage.read_shared() is first  # unchanged file: no re-parse
++
++    # Another writer replaces the file with same-length content, immediately
++    # and with the original mtime restored (simulates coarse NFS timestamps)
++    import os
++    st = os.stat(path)
++    with open(path, 'w') as f:
++        f.write('{"_default": {"1": {"a": 2}}}')
++    os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
++    assert os.stat(path).st_size == st.st_size
++
++    assert storage.read_shared() == {'_default': {'1': {'a': 2}}}
++    storage.close()
++
++
++def test_json_read_shared_invalidated_by_write_and_empty(tmp_path):
++    path = str(tmp_path / 'db.json')
++    storage = JSONStorage(path)
++    assert storage.read_shared() is None
++
++    storage.write({'_default': {'1': {'a': 1}}})
++    assert storage.read_shared() == {'_default': {'1': {'a': 1}}}
++    storage.write({'_default': {}})
++    assert storage.read_shared() == {'_default': {}}
++    storage.close()
++
++
++def test_tinydb_sees_other_instance_writes(tmp_path):
++    from tinydb import TinyDB
++    path = str(tmp_path / 'db.json')
++    reader, writer = TinyDB(path), TinyDB(path)
++    writer.insert({'x': 1})
++    assert len(reader.all()) == 1
++    writer.insert({'x': 2})
++    assert len(reader.all()) == 2
++    assert reader.get(doc_id=2) == {'x': 2}
++    reader.close()
++    writer.close()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..e56c615 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -119,6 +119,11 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Parse cache used by :meth:`read_shared`: the exact file contents
++        # that were last parsed and the result of parsing them.
++        self._cached_raw = None
++        self._cached_data = None
++
+     def close(self) -> None:
+         self._handle.close()
+ 
+@@ -139,7 +144,38 @@ class JSONStorage(Storage):
+             # Load the JSON contents of the file
+             return json.load(self._handle)
+ 
++    def read_shared(self) -> Optional[dict[str, dict[str, Any]]]:
++        """
++        Like :meth:`read`, but skips parsing if the file is unchanged.
++
++        The file contents are read on every call and compared byte for byte
++        with the contents that were parsed last time; the parsed result is
++        only reused if they are identical. This deliberately does not rely on
++        mtime/size, which can miss writes on file systems with coarse
++        timestamps or attribute caching (e.g. NFS).
++
++        **The returned data is shared between calls and must be treated as
++        read-only.** Code that modifies the data (and writes it back) must use
++        :meth:`read` instead.
++        """
++
++        self._handle.seek(0)
++        raw = self._handle.read()
++
++        if not raw:
++            return None
++
++        if self._cached_data is None or raw != self._cached_raw:
++            self._cached_data = json.loads(raw)
++            self._cached_raw = raw
++
++        return self._cached_data
++
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The file is about to change, drop the parse cache
++        self._cached_raw = None
++        self._cached_data = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..3b4c5d9 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -13,7 +13,7 @@ from typing import (
+ )
+ 
+ from .queries import QueryLike
+-from .storages import Storage
++from .storages import JSONStorage, Storage
+ from .utils import LRUCache
+ 
+ __all__ = ('Document', 'Table')
+@@ -785,8 +785,14 @@ class Table:
+         only one document for example.
+         """
+ 
+-        # Retrieve the tables from the storage
+-        tables = self._storage.read()
++        # Retrieve the tables from the storage. This method never modifies
++        # the data, so a storage that can hand out shared (cached) data is
++        # allowed to. Middlewares are deliberately excluded (they would
++        # forward the call past their own caching to the wrapped storage).
++        if isinstance(self._storage, JSONStorage):
++            tables = self._storage.read_shared()
++        else:
++            tables = self._storage.read()
+ 
+         if tables is None:
+             # The database is empty

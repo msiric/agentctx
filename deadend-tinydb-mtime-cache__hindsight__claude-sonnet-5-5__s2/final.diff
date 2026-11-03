@@ -1,0 +1,160 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..f6ed043
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,86 @@
++"""
++Benchmark TinyDB read performance on a large JSON file.
++
++Usage: python scripts/bench_read.py [--size-mb 40] [--repeat 5]
++"""
++import argparse
++import json
++import os
++import random
++import sys
++import tempfile
++import time
++
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
++
++from tinydb import TinyDB, where  # noqa: E402
++from tinydb.table import Document  # noqa: E402
++
++
++def generate(path, size_mb):
++    rnd = random.Random(0)
++    target = size_mb * 1024 * 1024
++    table, size, i = {}, 0, 1
++    while size < target:
++        doc = {
++            'name': f'user{i}', 'age': rnd.randint(0, 99),
++            'email': f'user{i}@example.com',
++            'tags': [rnd.choice('abcdefgh') for _ in range(5)],
++            'address': {'city': f'city{rnd.randint(0, 999)}', 'zip': rnd.randint(10000, 99999)},
++        }
++        table[str(i)] = doc
++        size += len(json.dumps(doc)) + 8
++        i += 1
++    with open(path, 'w') as f:
++        json.dump({'_default': table}, f)
++    return i - 1
++
++
++def timed(fn, repeat):
++    best = float('inf')
++    for _ in range(repeat):
++        t = time.perf_counter()
++        fn()
++        best = min(best, time.perf_counter() - t)
++    return best
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument('--size-mb', type=int, default=40)
++    ap.add_argument('--repeat', type=int, default=5)
++    a = ap.parse_args()
++
++    with tempfile.TemporaryDirectory() as d:
++        path = os.path.join(d, 'db.json')
++        n = generate(path, a.size_mb)
++        print(f'{n} docs, {os.path.getsize(path) / 1e6:.1f} MB\n')
++
++        db = TinyDB(path)
++        table = db.table('_default')
++        counter = iter(range(10**9))
++
++        def cold_search():
++            # a fresh query each time bypasses the query cache
++            table.search(where('age') == 42 + next(counter) * 0.0001)
++
++        raw = table._read_table()
++        cond = where('age') == 42
++
++        rows = [
++            ('db.all()', timed(db.all, a.repeat)),
++            ('search (cold, uncached query)', timed(cold_search, a.repeat)),
++            ('search (cached, same query)',
++             (table.search(cond), timed(lambda: table.search(cond), a.repeat))[1]),
++            ('  breakdown: storage.read() [json.load]', timed(db.storage.read, a.repeat)),
++            ('  breakdown: Document wrapping only',
++             timed(lambda: [Document(v, int(k)) for k, v in raw.items()], a.repeat)),
++            ('  breakdown: query eval only', timed(lambda: [v for v in raw.values() if cond(v)], a.repeat)),
++        ]
++        for name, t in rows:
++            print(f'{name:45s} {t * 1000:9.1f} ms')
++        db.close()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..56f64ca 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -6,6 +6,7 @@ implementations.
+ import io
+ import json
+ import os
++import time
+ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+@@ -119,10 +120,38 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Parsed contents of the file and the file signature they correspond
++        # to. Another process (e.g. an importer) may modify the file at any
++        # time, so the cache is only used while the signature is unchanged.
++        self._cache: Any = None
++        self._cache_sig: Optional[tuple] = None
++
++    # Files modified more recently than this are never cached: a second write
++    # within the filesystem's timestamp granularity could keep the signature
++    # identical and go unnoticed.
++    _RACY_WINDOW_NS = 2_000_000_000
++
++    def _signature(self) -> tuple:
++        st = os.fstat(self._handle.fileno())
++        return st.st_mtime_ns, st.st_ctime_ns, st.st_size, st.st_ino
++
++    def _remember(self, sig: tuple, data: Any) -> None:
++        # sig[0] is the mtime in ns
++        if time.time_ns() - sig[0] > self._RACY_WINDOW_NS:
++            self._cache, self._cache_sig = data, sig
++        else:
++            self._cache, self._cache_sig = None, None
++
+     def close(self) -> None:
++        self._cache, self._cache_sig = None, None
+         self._handle.close()
+ 
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
++        # Serve the previously parsed data if the file is unchanged
++        sig = self._signature()
++        if self._cache_sig is not None and sig == self._cache_sig:
++            return self._cache
++
+         # Get the file size by moving the cursor to the file end and reading
+         # its location
+         self._handle.seek(0, os.SEEK_END)
+@@ -137,9 +166,15 @@ class JSONStorage(Storage):
+             self._handle.seek(0)
+ 
+             # Load the JSON contents of the file
+-            return json.load(self._handle)
++            data = json.load(self._handle)
++            self._remember(sig, data)
++            return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The file is about to change; never trust the cache across a write
++        # (data may also have been mutated in place by the caller)
++        self._cache, self._cache_sig = None, None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 

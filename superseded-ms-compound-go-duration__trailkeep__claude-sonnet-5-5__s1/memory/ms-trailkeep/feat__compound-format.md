@@ -1,0 +1,9 @@
+# feat/compound-format
+
+Branch: feat/compound-format · Repo: local__ms-563980987 · Kind: branch · Created: 2026-11-03
+
+## Decisions and dead ends
+
+- 2026-11-03: Compound format in short formatter must be Go time.ParseDuration-compatible (deploy logs scraped by Go service): no spaces, hours biggest unit, e.g. 25h30m not '1d 1h 30m'. Not yet changed; parse() whitespace fix done first.
+- 2026-11-03: Compound format now emits Go-compatible output (e.g. 25h30m, no spaces, no days); implementation, tests, README updated.
+

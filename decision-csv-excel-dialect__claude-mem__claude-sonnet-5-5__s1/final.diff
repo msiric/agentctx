@@ -1,0 +1,145 @@
+diff --git a/scripts/export_invoices.py b/scripts/export_invoices.py
+new file mode 100644
+index 0000000..46eee00
+--- /dev/null
++++ b/scripts/export_invoices.py
+@@ -0,0 +1,41 @@
++#!/usr/bin/env python3
++"""Export the ``invoices`` table of a TinyDB db.json file to CSV.
++
++Usage: export_invoices.py DB_PATH OUT_CSV
++
++Output is semicolon-delimited UTF-8 with a BOM, which German-locale Excel opens correctly.
++"""
++import csv
++import json
++import sys
++
++COLUMNS = ["number", "customer", "amount", "due_date"]
++
++
++def main(argv):
++    if len(argv) != 3:
++        print(f"usage: {argv[0]} DB_PATH OUT_CSV", file=sys.stderr)
++        return 2
++    db_path, out_path = argv[1], argv[2]
++
++    with open(db_path, encoding="utf-8") as f:
++        data = json.load(f)
++
++    if "invoices" not in data:
++        print(f"error: no 'invoices' table in {db_path}", file=sys.stderr)
++        return 1
++
++    # TinyDB stores a table as {doc_id: document}
++    docs = data["invoices"].values()
++
++    with open(out_path, "w", newline="", encoding="utf-8-sig") as f:
++        writer = csv.DictWriter(f, fieldnames=COLUMNS, extrasaction="ignore", delimiter=";")
++        writer.writeheader()
++        writer.writerows(docs)
++
++    print(f"wrote {len(docs)} invoices to {out_path}")
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main(sys.argv))
+diff --git a/scripts/sample_db.json b/scripts/sample_db.json
+new file mode 100644
+index 0000000..861aec6
+--- /dev/null
++++ b/scripts/sample_db.json
+@@ -0,0 +1 @@
++{"invoices": {"1": {"number": "INV-001", "customer": "Acme, Inc.", "amount": 1250.0, "due_date": "2026-11-15"}, "2": {"number": "INV-002", "customer": "Globex", "amount": 310.5, "due_date": "2026-12-01"}, "3": {"number": "INV-003", "customer": "Initech \"West\"", "amount": 99.99, "due_date": "2026-12-20"}, "4": {"number": "INV-004", "customer": "Müller GmbH", "amount": 420.0, "due_date": "2026-12-31"}}, "customers": {"1": {"name": "Acme, Inc."}}}
+\ No newline at end of file
+diff --git a/tests/test_tables.py b/tests/test_tables.py
+index a94005e..1f3241c 100644
+--- a/tests/test_tables.py
++++ b/tests/test_tables.py
+@@ -197,3 +197,36 @@ def test_persist_empty_does_not_wipe_existing_data(tmpdir):
+     assert len(table) == 1
+     assert table.all() == [{'a': 1}]
+     db.close()
++
++
++def test_to_csv_default_fields(db, tmp_path):
++    import csv
++
++    table = db.table('csv')
++    table.insert({'a': 1, 'b': 'x'})
++    table.insert({'b': 'y, "q"', 'c': 3})
++
++    path = tmp_path / 'out.csv'
++    table.to_csv(path)
++
++    with open(path, newline='', encoding='utf-8') as f:
++        rows = list(csv.reader(f))
++
++    assert rows == [['a', 'b', 'c'], ['1', 'x', ''], ['', 'y, "q"', '3']]
++
++
++def test_to_csv_fields_select_and_order(db, tmp_path):
++    table = db.table('csv')
++    table.insert({'a': 1, 'b': 2})
++
++    path = tmp_path / 'out.csv'
++    table.to_csv(path, fields=['b', 'missing', 'a'])
++
++    assert path.read_text(encoding='utf-8').splitlines() == ['b,missing,a', '2,,1']
++
++
++def test_to_csv_empty_table(db, tmp_path):
++    path = tmp_path / 'out.csv'
++    db.table('empty').to_csv(path, fields=['a'])
++
++    assert path.read_text(encoding='utf-8').splitlines() == ['a']
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..53247b1 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -3,6 +3,7 @@ This module implements tables, the central place for accessing and manipulating
+ data in TinyDB.
+ """
+ 
++import csv
+ from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping
+ from typing import (
+     NoReturn,
+@@ -706,6 +707,36 @@ class Table:
+         # Reset document ID counter
+         self._next_id = None
+ 
++    def to_csv(self, path, fields: Optional[Iterable[str]] = None) -> None:
++        """
++        Export the table to a CSV file.
++
++        The first row is a header, followed by one row per document.
++
++        :param path: the file to write (overwritten if it exists)
++        :param fields: the columns to write, in order. Defaults to every
++                       top-level key, in first-seen order.
++        """
++
++        docs = self.all()
++
++        if fields is None:
++            columns: list[str] = []
++            seen = set()
++            for doc in docs:
++                for key in doc:
++                    if key not in seen:
++                        seen.add(key)
++                        columns.append(key)
++        else:
++            columns = list(fields)
++
++        with open(path, 'w', newline='', encoding='utf-8') as f:
++            writer = csv.writer(f)
++            writer.writerow(columns)
++            for doc in docs:
++                writer.writerow([doc.get(c, '') for c in columns])
++
+     def count(self, cond: QueryLike) -> int:
+         """
+         Count the documents matching a query.

@@ -1,0 +1,43 @@
+{
+  "narrative": "Nothing has shipped yet. Two requests were reviewed, both on 3 Nov 2026 and both still in progress (50% and 55%). Velocity so far is a burst of small, committed steps within about ten minutes. No PR, merge or release is recorded, so there is no ask-to-ship time to report.\n\n## The compound option for format()\n\nAt 18:03 the agent added a compound option to format() (obs 2). It produces multi-unit strings such as 1h 30m. The owner's follow-up was \"Nice. Add tests for it and commit.\" The agent extended the tests to cover precedence over long, ms() routing and rejection of non-finite input. It committed them as a35ee29 (obs 4). Memory records no merge, release or owner confirmation, so this request sits at 50%.\n\n## Redirecting the format for deploy logs\n\nAt 18:06 the owner changed the plan. A Go service scrapes the deploy logs with time.ParseDuration, so compound output has to be glued together with hours as the largest unit (for example 25h30m). It can't be spaced like \"1d 1h 30m\" (obs 5). The owner said \"Don't change it right now though, something more urgent first\" and asked for parse() to tolerate surrounding whitespace, because YAML configs produce values like \" 2d\".\n\nThe agent added str.trim() before the regex. That fixed the NaN results on \" 2d\" and \"1.5h \" (obs 8). It added regression tests, with the suite at 177/177 and lint and tsc clean. It committed the fix as e3b0ddd, kept separate from the compound feature (obs 9-12).\n\nA second conversation then asked the agent to \"document it in the README and round out the tests so it's ready for review\". The agent added JSDoc, a README section and boundary tests, and the suite reached 182 passing (obs 14, 15, 17). That work is still uncommitted. The agent also noted that the compound output does not round-trip through parse(). Memory shows no change yet to the ParseDuration-compatible format, so this request sits at 55%.\n\n## What this teaches\n\n- Small fixes get committed on their own: the whitespace fix landed as e3b0ddd while the compound work waited.\n- Tests are expected with every change.\n- The compound feature was built before the ParseDuration constraint surfaced. Its two requests overlap, and the spaced output has to be reworked.\n- The open items are committing the docs and tests, aligning the output with ParseDuration, and opening a PR.",
+  "preferences": [
+    {
+      "preference": "Wants tests added and the change committed right after each feature or fix lands.",
+      "kind": "directive",
+      "supportCount": 2,
+      "quotes": [
+        {
+          "quote": "Nice. Add tests for it and commit.",
+          "at": "2026-11-03T18:03:16.358Z"
+        },
+        {
+          "quote": "Thanks. Add a test for that and commit.",
+          "at": "2026-11-03T18:06:55.697Z"
+        }
+      ]
+    },
+    {
+      "preference": "Wants urgent bugs fixed first, and separately from planned feature work.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "Don't change it right now though, something more urgent first",
+          "at": "2026-11-03T18:06:29.134Z"
+        }
+      ]
+    },
+    {
+      "preference": "Wants work documented and tested so it is ready for review.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "document it in the README and round out the tests so it's ready for review",
+          "at": "2026-11-03T18:10:17.039Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-03T18:13:51.479Z"
+}

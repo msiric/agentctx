@@ -1,0 +1,1 @@
+- 2026-11-03: User never wants positional boolean parameters in code they write; use an options object (e.g. parse(str, { requireUnit: true })) so call sites are self-describing.

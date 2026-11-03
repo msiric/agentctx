@@ -1,0 +1,167 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..c29e8e3
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,104 @@
++"""
++Benchmark read performance of JSONStorage on a large database.
++
++Usage: python scripts/bench_read.py [target_mb] [repeats]
++
++Generates a ~target_mb JSON db in a temp dir, then times:
++  * raw json.load of the file (the lower bound for any read)
++  * db.all()
++  * db.search() (query cache cleared each run so it measures a real search)
++  * the same two calls through CachingMiddleware, for comparison
++"""
++import json
++import os
++import random
++import statistics
++import sys
++import tempfile
++import time
++
++from tinydb import TinyDB, where
++from tinydb.middlewares import CachingMiddleware
++from tinydb.storages import JSONStorage
++
++
++def generate(path, target_mb):
++    rnd = random.Random(0)
++    docs = {}
++    size = 0
++    i = 1
++    while size < target_mb * 1024 * 1024:
++        doc = {
++            'name': 'user%d' % i,
++            'age': rnd.randint(18, 90),
++            'email': 'user%d@example.com' % i,
++            'tags': [rnd.choice('abcdefgh') for _ in range(5)],
++            'address': {'city': rnd.choice(['Berlin', 'Paris', 'Rome']), 'zip': rnd.randint(10000, 99999)},
++        }
++        docs[str(i)] = doc
++        size += len(json.dumps(doc)) + 8
++        i += 1
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return len(docs)
++
++
++def timeit(fn, repeats):
++    times = []
++    for _ in range(repeats):
++        t = time.perf_counter()
++        fn()
++        times.append(time.perf_counter() - t)
++    return statistics.median(times)
++
++
++def main():
++    target_mb = float(sys.argv[1]) if len(sys.argv) > 1 else 40
++    repeats = int(sys.argv[2]) if len(sys.argv) > 2 else 5
++
++    with tempfile.TemporaryDirectory() as d:
++        path = os.path.join(d, 'db.json')
++        n = generate(path, target_mb)
++        print('db: %d docs, %.1f MB, median of %d runs' % (n, os.path.getsize(path) / 1e6, repeats))
++
++        def raw_load():
++            with open(path) as f:
++                json.load(f)
++
++        def read_only():
++            with open(path) as f:
++                f.read()
++
++        results = [('file read (no parse)', timeit(read_only, repeats)),
++                   ('json.load (lower bound)', timeit(raw_load, repeats))]
++
++        db = TinyDB(path)
++        table = db.table('_default')
++
++        def search():
++            table.clear_cache()
++            table.search(where('age') > 80)
++
++        results += [('JSONStorage db.all()', timeit(db.all, repeats)),
++                    ('JSONStorage search', timeit(search, repeats)),
++                    ('JSONStorage get(doc_id)', timeit(lambda: table.get(doc_id=n // 2), repeats))]
++        db.close()
++
++        db = TinyDB(path, storage=CachingMiddleware(JSONStorage))
++        table = db.table('_default')
++        db.all()  # warm
++
++        def search_c():
++            table.clear_cache()
++            table.search(where('age') > 80)
++
++        results += [('Caching db.all()', timeit(db.all, repeats)),
++                    ('Caching search', timeit(search_c, repeats))]
++        db.close()
++
++        for name, t in results:
++            print('%-28s %8.1f ms' % (name, t * 1000))
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..b7ce6ed 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -119,6 +119,15 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Parsed contents together with the file signature they were parsed
++        # from. Used to skip re-parsing when the file hasn't changed.
++        self._cache_sig = None
++        self._cache_data = None
++
++    def _signature(self):
++        st = os.fstat(self._handle.fileno())
++        return st.st_mtime_ns, st.st_ctime_ns, st.st_size, st.st_ino
++
+     def close(self) -> None:
+         self._handle.close()
+ 
+@@ -128,6 +137,12 @@ class JSONStorage(Storage):
+         self._handle.seek(0, os.SEEK_END)
+         size = self._handle.tell()
+ 
++        # Another process may have modified the file, so the cache is only
++        # valid if the file's signature is unchanged
++        sig = self._signature()
++        if self._cache_sig == sig:
++            return self._cache_data
++
+         if not size:
+             # File is empty, so we return ``None`` so TinyDB can properly
+             # initialize the database
+@@ -137,9 +152,22 @@ class JSONStorage(Storage):
+             self._handle.seek(0)
+ 
+             # Load the JSON contents of the file
+-            return json.load(self._handle)
++            data = json.load(self._handle)
++
++            # Re-check the signature after reading: if the file changed while
++            # we were parsing, don't cache a possibly torn read
++            if self._signature() == sig:
++                self._cache_sig = sig
++                self._cache_data = data
++
++            return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The cached object may have been mutated in place by the caller, and
++        # the file is about to change: drop the cache
++        self._cache_sig = None
++        self._cache_data = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 

@@ -1,0 +1,222 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..35f5a0b
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,75 @@
++"""Benchmark TinyDB read performance on a large JSON db file.
++
++Usage: python scripts/bench_read.py [target_mb] [repeats]
++"""
++import cProfile
++import json
++import os
++import pstats
++import sys
++import tempfile
++import time
++
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
++
++from tinydb import TinyDB, where  # noqa: E402
++
++
++def make_db(path, target_mb):
++    db = TinyDB(path)
++    batch, n = [], 0
++    while os.path.getsize(path) < target_mb * 1024 * 1024:
++        batch = [{'id': n + i, 'name': f'user{n + i}', 'group': (n + i) % 100,
++                  'tags': ['a', 'b', 'c'], 'text': 'lorem ipsum ' * 10}
++                 for i in range(5000)]
++        n += len(batch)
++        db.insert_multiple(batch)
++    db.close()
++    return n
++
++
++def timed(label, fn, repeats):
++    ts = []
++    for _ in range(repeats):
++        t = time.perf_counter()
++        fn()
++        ts.append(time.perf_counter() - t)
++    print(f'{label:<34} min {min(ts)*1000:8.1f} ms  avg {sum(ts)/len(ts)*1000:8.1f} ms')
++
++
++def main():
++    mb = float(sys.argv[1]) if len(sys.argv) > 1 else 40
++    repeats = int(sys.argv[2]) if len(sys.argv) > 2 else 5
++    with tempfile.TemporaryDirectory() as d:
++        path = os.path.join(d, 'big.json')
++        t = time.perf_counter()
++        n = make_db(path, mb)
++        print(f'generated {n} docs, {os.path.getsize(path)/1e6:.1f} MB '
++              f'in {time.perf_counter()-t:.1f}s\n')
++
++        with open(path) as f:
++            raw = f.read()
++        timed('raw json.loads (floor)', lambda: json.loads(raw), repeats)
++
++        db = TinyDB(path)
++        timed('db.all()', db.all, repeats)
++        # Fresh query each time so the query cache can't hide the cost
++        timed('db.search (uncached, new query)',
++              lambda: db.search(where('group') == time.perf_counter()), repeats)
++        q = where('group') == 7
++        db.search(q)
++        timed('db.search (query-cache hit)', lambda: db.search(q), repeats)
++        timed('db.get(doc_id=1)', lambda: db.get(doc_id=1), repeats)
++        timed('len(db)', lambda: len(db), repeats)
++
++        print('\ncProfile of one uncached search:')
++        pr = cProfile.Profile()
++        pr.enable()
++        db.search(where('group') == -1)
++        pr.disable()
++        pstats.Stats(pr).sort_stats('cumulative').print_stats(8)
++        db.close()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..880c5db 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,50 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_read_cache_sees_external_same_size_write(tmpdir):
++    # A second writer changing the file with identical size (and possibly the
++    # same mtime) must still be noticed: the cache is content-based.
++    path = str(tmpdir.join('db.json'))
++    with open(path, 'w') as f:
++        f.write('{"_default": {"1": {"v": 1}}}')
++
++    storage = JSONStorage(path)
++    assert storage.read()['_default']['1']['v'] == 1
++    mtime = os.stat(path).st_mtime_ns
++
++    with open(path, 'w') as f:
++        f.write('{"_default": {"1": {"v": 2}}}')
++    os.utime(path, ns=(mtime, mtime))
++
++    assert storage.read()['_default']['1']['v'] == 2
++    storage.close()
++
++
++def test_json_read_cache_reuses_parsed_data(tmpdir, monkeypatch):
++    path = str(tmpdir.join('db.json'))
++    with open(path, 'w') as f:
++        f.write('{"_default": {}}')
++
++    storage = JSONStorage(path)
++    calls = []
++    real_loads = json.loads
++    monkeypatch.setattr(json, 'loads',
++                        lambda *a, **k: calls.append(1) or real_loads(*a, **k))
++
++    storage.read()
++    storage.read()
++    assert len(calls) == 1
++
++    storage.write({'_default': {'1': {'a': 1}}})
++    assert storage.read() == {'_default': {'1': {'a': 1}}}
++    storage.close()
++
++
++def test_json_read_cache_can_be_disabled(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    storage = JSONStorage(path, cache_reads=False)
++    storage.write({'_default': {}})
++    assert storage.read() is not storage.read()
++    storage.close()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..bd106c0 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -3,6 +3,7 @@ Contains the :class:`base class <tinydb.storages.Storage>` for storages and
+ implementations.
+ """
+ 
++import hashlib
+ import io
+ import json
+ import os
+@@ -81,7 +82,8 @@ class JSONStorage(Storage):
+     Store the data in a JSON file.
+     """
+ 
+-    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+', **kwargs):
++    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+', cache_reads=True,
++                 **kwargs):
+         """
+         Create a new instance.
+ 
+@@ -98,12 +100,22 @@ class JSONStorage(Storage):
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
++        :param cache_reads: skip JSON parsing when the file content is
++            identical to what was parsed last time. The file is still read
++            and hashed on every call, so changes made by other processes are
++            always seen (no reliance on mtime, which is unreliable on e.g.
++            NFS). Data returned by ``read()`` is shared with the cache, so
++            callers must not mutate it without calling ``write()``.
++        :type cache_reads: bool
+         """
+ 
+         super().__init__()
+ 
+         self._mode = access_mode
+         self.kwargs = kwargs
++        self._cache_reads = cache_reads
++        self._cached_digest: Optional[bytes] = None
++        self._cached_data: Any = None
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+             warnings.warn(
+@@ -136,13 +148,38 @@ class JSONStorage(Storage):
+             # Return the cursor to the beginning of the file
+             self._handle.seek(0)
+ 
+-            # Load the JSON contents of the file
+-            return json.load(self._handle)
++            if not self._cache_reads:
++                return json.load(self._handle)
++
++            # Read the raw content and compare its digest with the one of the
++            # content we parsed last. This is deliberately content-based: file
++            # timestamps can have 1s resolution (NFS) and would miss writes by
++            # other processes within the same second.
++            raw = self._handle.read()
++            digest = self._digest(raw)
++
++            if digest != self._cached_digest:
++                self._cached_data = json.loads(raw)
++                self._cached_digest = digest
++
++            return self._cached_data
++
++    @staticmethod
++    def _digest(raw) -> bytes:
++        if isinstance(raw, str):
++            raw = raw.encode('utf-8', 'surrogatepass')
++        return hashlib.sha1(raw, usedforsecurity=False).digest()
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
++        # ``data`` is typically the object handed out by ``read()`` and
++        # modified in place, so the cache can't be trusted from here on
++        # (also if the write below fails half-way).
++        self._cached_digest = None
++        self._cached_data = None
++
+         # Serialize the database state using the user-provided arguments
+         serialized = json.dumps(data, **self.kwargs)
+ 
