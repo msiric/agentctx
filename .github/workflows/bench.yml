@@ -74,7 +74,7 @@ jobs:
           npm install -g bun
           pip install -q "$bm" uv
           basic-memory --version || true
-          if grep -q '"hindsight"' "bench/plans/${{ inputs.plan }}.json"; then pip install -q "$hs" && pip show hindsight-api | head -2; fi
+          if grep -q '"hindsight["@+]' "bench/plans/${{ inputs.plan }}.json"; then pip install -q "$hs" && pip show hindsight-api | head -2; fi
           claude --version
 
       - name: Load earlier results
