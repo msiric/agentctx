@@ -108,3 +108,46 @@ Other arms now have seed 1 complete and most of seed 2. Fact traps passed:
 
 Session-start cost is unchanged from the table above. Phase A has 96 cells
 left (seeds 2 and 3); the next batch is running.
+
+## 3. Dev matrix complete (2026-11-03)
+
+All arms, 11 dev fact traps × 3 seeds (trailkeep v0.3.2: seed 1 only), plus
+the dev control. Pass rate with 95% cluster-bootstrap CI over traps:
+
+| Arm | Fact traps | vs none (paired) | vs handoff (paired) | Session-start tokens (median) | Control |
+|---|---|---|---|---|---|
+| oracle-note | 100% (100–100) | +97% | +39% (+15 to +67) | 16,134 | 3/3 |
+| **trailkeep@capture** | **91% (73–100)** | **+88% (+67 to +100)** | **+30% (+6 to +55)** | **16,655** | 3/3 |
+| resume | 70% (45–91) | +67% | +9% (−30 to +45) | 22,521 | 3/3 |
+| handoff | 61% (33–85) | +58% (+33 to +82) | — | 16,139 | 3/3 |
+| native | 45% (18–73) | +42% | −15% (−36 to 0) | 16,663 | 3/3 |
+| claude-mem | 42% (18–67) | +39% | −18% (−45 to +3) | 21,543 | 3/3 |
+| trailkeep v0.3.2 | 22% (0–56), 9 runs | +22% | −56% | 16,288 | – |
+| hindsight | 3% (0–9) | 0% | −58% | 18,692 | 3/3 |
+| basic-memory | 3% (0–9) | 0% | −58% | 19,191 | 3/3 |
+| none | 3% (0–9) | — | −58% | 15,924 | 3/3 |
+
+No arm hurt the control (H4 holds in dev). `none`'s session-start request is
+15,924 tokens; trailkeep@capture adds about 730, handoff about 215, claude-mem
+about 5,600, resume about 6,600.
+
+**Handoff's 13 failures**, the strongest competitor:
+- 9 cross-repo (both cross-repo traps, every seed): the preference was written
+  to the first repo's `HANDOFF.md`, which the second repo never sees.
+  Retrieval miss by design; a per-repo file can't carry a personal preference.
+- 4 dead-end: the dead end was in `HANDOFF.md` and the last session read it,
+  but retried the approach anyway (use failure).
+
+**trailkeep@capture's 3 failures:** one trap, use failure (section 2).
+
+H3 (lean) in dev: session-start cost is within budget (+730 tokens, far under
+2,500). The last session's total input is higher than `none`'s (140k vs
+105k), so the second half of H3 doesn't hold in dev; `none` mostly takes the
+trap's shortcut and stops sooner, so this compares unequal work.
+
+## Next: held-out run
+
+Freeze trailkeep at the `trailkeep@capture` commit (released as 0.4.0) and
+every other tool at the versions recorded in the dev cells, size the filler
+arm from trailkeep's measured injection, and run the 6 held-out fact traps
+plus the held-out control once, all arms, 3 seeds.
