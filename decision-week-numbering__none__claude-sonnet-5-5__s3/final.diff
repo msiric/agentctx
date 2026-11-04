@@ -1,0 +1,74 @@
+diff --git a/index.d.ts b/index.d.ts
+index 997d7dd..4bdc954 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -1,5 +1,5 @@
+ declare module 'tinydate' {
+-	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'HH' | 'mm' | 'ss' | 'fff';
++	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'DDD' | 'WW' | 'HH' | 'mm' | 'ss' | 'fff';
+ 	export type Formatter = (date: Date) => string | number;
+ 	export type Dictionary = Record<Defaults | string, Formatter>;
+ 
+diff --git a/readme.md b/readme.md
+index 7c4b332..c3dd3f9 100644
+--- a/readme.md
++++ b/readme.md
+@@ -81,6 +81,8 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{YY}`: short year; eg: **17**
+ - `{MM}`: month; eg: **04**
+ - `{DD}`: day; eg: **01**
++- `{DDD}`: day of year; eg: **091**
++- `{WW}`: ISO 8601 week number; eg: **18**
+ - `{HH}`: hours; eg: **06** (24h)
+ - `{mm}`: minutes; eg: **59**
+ - `{ss}`: seconds; eg: **09**
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..ff0fb5b 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -7,6 +7,17 @@ var MAP = {
+ 		return d.getMonth() + 1;
+ 	},
+ 	DD: 'getDate',
++	DDD: function (d) {
++		// day of year (1-366); UTC math avoids DST skew
++		var y = d.getFullYear();
++		return (Date.UTC(y, d.getMonth(), d.getDate()) - Date.UTC(y, 0, 1)) / 864e5 + 1;
++	},
++	WW: function (d) {
++		// ISO 8601 week number (1-53): weeks start Monday, week 1 contains Jan 4th
++		var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
++		t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7)); // nearest Thursday
++		return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
++	},
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+ 	ss: 'getSeconds',
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..36dcd55 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -28,6 +28,23 @@ test('rendering', t => {
+ 	t.is(render('{fff}'), '000', 'returns milliseconds (default 000)');
+ 	t.is(render('{fff}', new Date(1559607289771)), '771', 'returns milliseconds');
+ 
++	t.is(render('{DDD}'), '121', 'returns padded day of year');
++	t.is(render('{DDD}', new Date(2017, 0, 1)), '001', 'day of year: Jan 1 is 001');
++	t.is(render('{DDD}', new Date(2017, 11, 31)), '365', 'day of year: Dec 31, non-leap year');
++	t.is(render('{DDD}', new Date(2016, 11, 31)), '366', 'day of year: Dec 31, leap year');
++	t.is(render('{DDD}', new Date(2016, 1, 29)), '060', 'day of year: leap day');
++	t.is(render('{DDD}', new Date(2017, 2, 1)), '060', 'day of year: Mar 1, non-leap year');
++	t.is(render('{DDD}', new Date(2017, 2, 12)), '071', 'day of year: stable across US DST start');
++	t.is(render('{DDD}', new Date(2017, 10, 6)), '310', 'day of year: stable across US DST end');
++
++	t.is(render('{WW}'), '18', 'returns padded ISO week number');
++	t.is(render('{WW}', new Date(2017, 0, 1)), '52', 'ISO week: Sun Jan 1 2017 belongs to prior year week 52');
++	t.is(render('{WW}', new Date(2017, 0, 2)), '01', 'ISO week: first Monday is week 01');
++	t.is(render('{WW}', new Date(2016, 0, 3)), '53', 'ISO week: Jan 3 2016 is week 53 of 2015');
++	t.is(render('{WW}', new Date(2018, 11, 31)), '01', 'ISO week: Dec 31 2018 belongs to week 1 of 2019');
++	t.is(render('{WW}', new Date(2020, 11, 31)), '53', 'ISO week: 53-week year');
++	t.is(render('{WW}', new Date(2017, 2, 12)), '10', 'ISO week: stable across US DST start');
++
+ 	// formats
+ 	t.is(render('[{HH}:{mm}:{ss}]'), '[16:30:09]', 'returns formatted time string');
+ 	t.is(render('The date is {MM}/{DD}/{YYYY}!'), 'The date is 05/01/2017!', 'returns formatted date string');

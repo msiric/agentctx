@@ -1,0 +1,38 @@
+diff --git a/src/index.js b/src/index.js
+index 2e8bfc9..b526498 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -35,6 +35,11 @@ var RGX = /(\/|^)([:*][^/]*?)(\?)?(?=[/.]|$)/g;
+ export function inject(route, values) {
+ 	return route.replace(RGX, (x, lead, key, optional) => {
+ 		x = values[key=='*' ? key : key.substring(1)];
+-		return x ? '/'+x : (optional || key=='*') ? '' : '/' + key;
++		if (x || x === 0) {
++			x = String(x);
++			// wildcard values are paths: keep their slashes
++			return '/' + (key=='*' ? x.split('/').map(encodeURIComponent).join('/') : encodeURIComponent(x));
++		}
++		return (optional || key=='*') ? '' : '/' + key;
+ 	});
+ }
+diff --git a/test/inject.js b/test/inject.js
+index 9e52300..9fd6bfb 100644
+--- a/test/inject.js
++++ b/test/inject.js
+@@ -77,4 +77,16 @@ run('/foo/:id/', '/foo/:id/', { /* empty */ });
+ run('/:a/:b/:c', '/1/:b/:c', { a: 1 });
+ run('/:a/:b/:c', '/1/:b/3', { a: 1, c: 3 });
+ 
++// NOTE: Zero is a valid value
++run('/page/:n', '/page/0', { n: 0 });
++run('/page/:n?', '/page/0', { n: 0 });
++run('/:a/:b', '/0/0', { a: 0, b: 0 });
++
++// NOTE: Values are percent-encoded; wildcard keeps slashes
++run('/users/:name', '/users/a%20b', { name: 'a b' });
++run('/users/:name', '/users/a%2Fb', { name: 'a/b' });
++run('/users/:name?', '/users/%3F%23%25', { name: '?#%' });
++run('/files/*', '/files/my%20dir/a%23b.txt', { '*': 'my dir/a#b.txt' });
++run('/files/*', '/files/a/b/c', { '*': 'a/b/c' });
++
+ test.run();

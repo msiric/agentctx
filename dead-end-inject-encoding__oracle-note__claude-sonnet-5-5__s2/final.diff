@@ -1,0 +1,43 @@
+diff --git a/src/index.js b/src/index.js
+index 2e8bfc9..abf6ffa 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -32,9 +32,18 @@ export function parse(input, loose) {
+ var RGX = /(\/|^)([:*][^/]*?)(\?)?(?=[/.]|$)/g;
+ 
+ // error if key missing?
++function enc(str) {
++	// strict RFC 3986: also encode ! ' ( ) *
++	return encodeURIComponent(str).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
++}
++
+ export function inject(route, values) {
+ 	return route.replace(RGX, (x, lead, key, optional) => {
+ 		x = values[key=='*' ? key : key.substring(1)];
+-		return x ? '/'+x : (optional || key=='*') ? '' : '/' + key;
++		if (x != null && x !== '') {
++			x = String(x);
++			return '/' + (key=='*' ? x.split('/').map(enc).join('/') : enc(x));
++		}
++		return (optional || key=='*') ? '' : '/' + key;
+ 	});
+ }
+diff --git a/test/inject.js b/test/inject.js
+index 9e52300..77c223d 100644
+--- a/test/inject.js
++++ b/test/inject.js
+@@ -42,6 +42,14 @@ run('/foo/:id', '/foo/123', { id: 123 });
+ run('/foo/:id/', '/foo/123/', { id: 123 });
+ 
+ run('/:a/:b/:c', '/1/2/3', { a: 1, b: 2, c: 3 });
++run('/page/:n', '/page/0', { n: 0 });
++run('/page/:n?', '/page/0', { n: 0 });
++run('/page/:n', '/page/:n', { n: undefined });
++run('/user/:name', '/user/a%20b%2Fc', { name: 'a b/c' });
++run('/user/:name', '/user/%27%28%29%21%2A', { name: "'()!*" });
++run('/user/:name', '/user/%C3%A9%3F%23%25', { name: 'é?#%' });
++run('/files/*', '/files/my%20dir/a%27b.txt', { '*': "my dir/a'b.txt" });
++run('/files/*', '/files/a%3Fb/c%23d', { '*': 'a?b/c#d' });
+ run('/:a/:b/:c/', '/1/2/3/', { a: 1, b: 2, c: 3 });
+ 
+ run('/assets/:video.mp4', '/assets/demo.mp4', { video: 'demo' });

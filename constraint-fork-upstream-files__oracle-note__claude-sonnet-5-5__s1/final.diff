@@ -1,0 +1,102 @@
+diff --git a/.github/workflows/fork-ci.yml b/.github/workflows/fork-ci.yml
+new file mode 100644
+index 0000000..50d1568
+--- /dev/null
++++ b/.github/workflows/fork-ci.yml
+@@ -0,0 +1,24 @@
++name: Fork CI
++
++on: [push, pull_request]
++
++jobs:
++  test:
++    name: Node.js v${{ matrix.node-version }}
++    runs-on: ubuntu-latest
++    timeout-minutes: 3
++    strategy:
++      fail-fast: false
++      matrix:
++        node-version: [18, 20, 22, 24]
++    steps:
++    - uses: actions/checkout@v4
++    - uses: actions/setup-node@v4
++      with:
++        node-version: ${{ matrix.node-version }}
++
++    - name: Install
++      run: npm install
++
++    - name: Tests
++      run: npm test
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..d9b0a1c 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -59,13 +59,19 @@ export default function (args, opts) {
+ 		}
+ 	}
+ 
++	if (opts['--']) out['--'] = [];
++
+ 	const keys = strict ? Object.keys(opts.alias) : [];
+ 
+ 	for (i=0; i < len; i++) {
+ 		arg = args[i];
+ 
+ 		if (arg === '--') {
+-			out._ = out._.concat(args.slice(++i));
++			if (opts['--']) {
++				out['--'] = args.slice(i + 1);
++			} else {
++				out._ = out._.concat(args.slice(i + 1));
++			}
+ 			break;
+ 		}
+ 
+diff --git a/test/dashdash.js b/test/dashdash.js
+new file mode 100644
+index 0000000..06195cf
+--- /dev/null
++++ b/test/dashdash.js
+@@ -0,0 +1,41 @@
++const test = require('tape');
++const fn = require('../lib');
++
++test('opts["--"]: args after -- go to argv["--"]', t => {
++	const argv = fn(['a', '--foo', 'bar', '--', 'b', '--baz', '-x'], { '--': true });
++	t.deepEqual(argv, { _: ['a'], foo: 'bar', '--': ['b', '--baz', '-x'] });
++	t.end();
++});
++
++test('opts["--"]: empty array when no -- present', t => {
++	t.deepEqual(fn(['a', '-x'], { '--': true }), { _: ['a'], x: true, '--': [] });
++	t.deepEqual(fn([], { '--': true }), { _: [], '--': [] });
++	t.end();
++});
++
++test('opts["--"]: nothing after --', t => {
++	t.deepEqual(fn(['a', '--'], { '--': true }), { _: ['a'], '--': [] });
++	t.end();
++});
++
++test('opts["--"]: only first -- is the separator', t => {
++	t.deepEqual(fn(['a', '--', 'b', '--', 'c'], { '--': true }), { _: ['a'], '--': ['b', '--', 'c'] });
++	t.end();
++});
++
++test('opts["--"]: values after -- are not parsed or coerced', t => {
++	t.deepEqual(fn(['--', '123', '--no-x'], { '--': true }), { _: [], '--': ['123', '--no-x'] });
++	t.end();
++});
++
++test('opts["--"] unset: old behavior preserved', t => {
++	t.deepEqual(fn(['a', '--', 'b'], {}), { _: ['a', 'b'] });
++	t.deepEqual(fn(['a', '--', 'b'], { '--': false }), { _: ['a', 'b'] });
++	t.end();
++});
++
++test('opts["--"] works with alias, boolean, and default', t => {
++	const argv = fn(['-f', '--', 'x'], { '--': true, alias: { f: 'force' }, boolean: ['force'], default: { n: 1 } });
++	t.deepEqual(argv, { _: [], f: true, force: true, n: 1, '--': ['x'] });
++	t.end();
++});

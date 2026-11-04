@@ -1,0 +1,239 @@
+diff --git a/schema/__init__.py b/schema/__init__.py
+index 10d6e8a..7657afa 100644
+--- a/schema/__init__.py
++++ b/schema/__init__.py
+@@ -40,6 +40,9 @@ __all__ = [
+     "And",
+     "Or",
+     "Regex",
++    "NonEmpty",
++    "Range",
++    "OneOf",
+     "Optional",
+     "Use",
+     "Forbidden",
+@@ -286,6 +289,117 @@ class Regex:
+             raise SchemaError(error_message)
+ 
+ 
++class NonEmpty:
++    """
++    Validates that data is not empty: rejects empty or whitespace-only
++    strings and empty lists, tuples, sets and dicts. Valid data is
++    returned unchanged. Any other type is rejected.
++    """
++
++    def __init__(self, error: Union[str, None] = None) -> None:
++        self._error: Union[str, None] = error
++
++    def __repr__(self) -> str:
++        return f"{self.__class__.__name__}()"
++
++    def validate(self, data: Any, **kwargs: Any) -> Any:
++        """
++        Validates that data is non-empty.
++        :param data: Data to be validated.
++        :return: Returns validated data, unchanged.
++        """
++        e = self._error
++
++        if isinstance(data, (str, bytes)):
++            if data.strip():
++                return data
++            reason = "is empty or whitespace-only"
++        elif isinstance(data, (list, tuple, set, frozenset, dict)):
++            if data:
++                return data
++            reason = "is empty"
++        else:
++            reason = f"of type {type(data).__name__} is not a string, list, tuple, set or dict"
++        # Never include the validated value: these errors may be reported to
++        # external services. The custom error is therefore used verbatim
++        # (not .format(data)-ed).
++        raise SchemaError(e if e else f"value {reason}")
++
++
++class Range:
++    """
++    Validates that data is an int or float within inclusive bounds.
++    Either bound may be None (unbounded). bool and NaN are rejected.
++    """
++
++    def __init__(
++        self,
++        min: Union[int, float, None] = None,
++        max: Union[int, float, None] = None,
++        error: Union[str, None] = None,
++    ) -> None:
++        if min is not None and max is not None and min > max:
++            raise ValueError("Range min must not be greater than max")
++        self._min = min
++        self._max = max
++        self._error: Union[str, None] = error
++
++    def __repr__(self) -> str:
++        return f"{self.__class__.__name__}(min={self._min!r}, max={self._max!r})"
++
++    def validate(self, data: Any, **kwargs: Any) -> Any:
++        """
++        Validates that data is a number within [min, max].
++        :param data: Data to be validated.
++        :return: Returns validated data, unchanged.
++        """
++        if isinstance(data, bool) or not isinstance(data, (int, float)):
++            reason = f"of type {type(data).__name__} is not an int or float"
++        elif data != data:
++            reason = "is not a number (NaN)"
++        elif self._min is not None and data < self._min:
++            reason = f"is less than the minimum {self._min!r}"
++        elif self._max is not None and data > self._max:
++            reason = f"is greater than the maximum {self._max!r}"
++        else:
++            return data
++        # Never include the validated value (see NonEmpty).
++        raise SchemaError(self._error if self._error else f"value {reason}")
++
++
++class OneOf:
++    """
++    Validates that data is equal to one of the given choices.
++    Valid data is returned unchanged.
++    """
++
++    def __init__(self, *choices: Any, error: Union[str, None] = None) -> None:
++        if not choices:
++            raise ValueError("OneOf requires at least one choice")
++        self._choices = choices
++        self._error: Union[str, None] = error
++
++    def __repr__(self) -> str:
++        return f"{self.__class__.__name__}({', '.join(map(repr, self._choices))})"
++
++    def validate(self, data: Any, **kwargs: Any) -> Any:
++        """
++        Validates that data is one of the choices.
++        :param data: Data to be validated.
++        :return: Returns validated data, unchanged.
++        """
++        for choice in self._choices:
++            if type(data) is type(choice) and data == choice:
++                return data
++        # Never include the validated value (see NonEmpty). The allowed
++        # choices are schema-defined, so listing them is safe.
++        raise SchemaError(
++            self._error
++            if self._error
++            else f"value is not one of {list(self._choices)!r}"
++        )
++
++
+ class Use:
+     """
+     For more general use cases, you can use the Use class to transform
+diff --git a/test_schema.py b/test_schema.py
+index 4d78456..90f088c 100644
+--- a/test_schema.py
++++ b/test_schema.py
+@@ -23,6 +23,9 @@ from schema import (
+     Hook,
+     Literal,
+     Optional,
++    NonEmpty,
++    OneOf,
++    Range,
+     Or,
+     Regex,
+     Schema,
+@@ -2100,3 +2103,92 @@ def test_tuple_key_error_message_does_not_crash():
+     with raises(SchemaError) as exc_info:
+         Schema({("a", "b"): int}).validate({("a", "b"): "not-an-int"})
+     assert "Key '('a', 'b')' error:" in exc_info.value.code
++
++
++def test_nonempty():
++    assert NonEmpty().validate("a") == "a"
++    assert NonEmpty().validate("  a ") == "  a "  # returned unchanged
++    assert NonEmpty().validate([0]) == [0]
++    assert NonEmpty().validate({"k": None}) == {"k": None}
++    for bad in ["", "   ", "\t\n", b"", b"  ", [], (), set(), {}, None, 0, 1]:
++        with raises(SchemaError):
++            NonEmpty().validate(bad)
++    # Usable inside a Schema
++    assert Schema({"name": NonEmpty()}).validate({"name": "x"}) == {"name": "x"}
++    with raises(SchemaError):
++        Schema({"name": NonEmpty()}).validate({"name": " "})
++    assert Schema(And(str, NonEmpty())).validate("ok") == "ok"
++
++
++def test_nonempty_error_message():
++    with raises(SchemaError) as e:
++        NonEmpty().validate("  ")
++    assert "empty or whitespace-only" in e.value.code
++    with raises(SchemaError) as e:
++        Schema({"name": NonEmpty(error="name required")}).validate({"name": ""})
++    assert "name required" in e.value.code
++
++
++def test_nonempty_error_never_contains_value():
++    secrets = [5551234567, "   ", b"  ", 1.5]
++    for secret in secrets:
++        for validator in (NonEmpty(), NonEmpty(error="bad {!r} {}")):
++            with raises(SchemaError) as e:
++                Schema({"phone": validator}).validate({"phone": secret})
++            text = str(e.value) + " ".join(str(x) for x in e.value.autos + e.value.errors if x)
++            assert str(secret).strip() == "" or str(secret) not in text
++            assert repr(secret) not in text.replace("{!r}", "")
++
++
++def test_range():
++    r = Range(min=1, max=5)
++    for ok in [1, 5, 3, 1.0, 5.0, 2.5]:
++        assert r.validate(ok) == ok
++    for bad in [0, 6, 0.99, 5.01, "3", None, [3], True, False, float("nan")]:
++        with raises(SchemaError):
++            r.validate(bad)
++    assert Range(min=0).validate(10**9) == 10**9
++    assert Range(max=0).validate(-10**9) == -10**9
++    assert Range().validate(7) == 7
++    with raises(SchemaError):
++        Range().validate("7")
++    with raises(ValueError):
++        Range(min=5, max=1)
++    assert Schema({"age": Range(0, 150)}).validate({"age": 30}) == {"age": 30}
++    with raises(SchemaError):
++        Schema({"age": Range(0, 150)}).validate({"age": 200})
++    assert Schema(And(int, Range(max=3))).validate(3) == 3
++
++
++def test_range_error_never_contains_value():
++    with raises(SchemaError) as e:
++        Range(max=5).validate(987654321)
++    assert "987654321" not in e.value.code
++    assert "maximum 5" in e.value.code
++    with raises(SchemaError) as e:
++        Range(min=1, error="out of range").validate(0)
++    assert e.value.code == "out of range"
++
++
++def test_oneof():
++    o = OneOf("a", "b", 3)
++    for ok in ["a", "b", 3]:
++        assert o.validate(ok) == ok
++    for bad in ["c", "A", None, 4, ["a"], {"a": 1}, 3.0, True]:
++        with raises(SchemaError):
++            o.validate(bad)
++    with raises(ValueError):
++        OneOf()
++    assert Schema({"s": OneOf("on", "off")}).validate({"s": "on"}) == {"s": "on"}
++    with raises(SchemaError):
++        Schema({"s": OneOf("on", "off")}).validate({"s": "maybe"})
++
++
++def test_oneof_error_never_contains_value():
++    with raises(SchemaError) as e:
++        OneOf("a", "b").validate("secret-token")
++    assert "secret-token" not in e.value.code
++    assert "'a'" in e.value.code
++    with raises(SchemaError) as e:
++        OneOf("a", error="bad choice").validate("x")
++    assert e.value.code == "bad choice"

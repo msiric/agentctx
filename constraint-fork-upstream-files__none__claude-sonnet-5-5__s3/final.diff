@@ -1,0 +1,119 @@
+diff --git a/.github/workflows/fork-ci.yml b/.github/workflows/fork-ci.yml
+new file mode 100644
+index 0000000..5e06cf5
+--- /dev/null
++++ b/.github/workflows/fork-ci.yml
+@@ -0,0 +1,23 @@
++name: Fork CI
++
++on: [push, pull_request]
++
++jobs:
++  test:
++    name: Node.js v${{ matrix.node-version }}
++    runs-on: ubuntu-latest
++    timeout-minutes: 3
++    strategy:
++      matrix:
++        node-version: [18, 20, 22, 24]
++    steps:
++    - uses: actions/checkout@v4
++    - uses: actions/setup-node@v4
++      with:
++        node-version: ${{ matrix.node-version }}
++
++    - name: Install
++      run: npm install
++
++    - name: Tests
++      run: npm test
+diff --git a/index.d.ts b/index.d.ts
+index a46e43d..eaede9d 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -10,11 +10,13 @@ declare namespace mri {
+ 		string?: Arrayable<string>;
+ 		alias?: Dict<Arrayable<string>>;
+ 		default?: Dict<any>;
++		'--'?: boolean;
+ 		unknown?(flag: string): void;
+ 	}
+ 
+ 	export type Argv<T=Default> = T & {
+ 		_: string[];
++		'--'?: string[];
+ 	}
+ }
+ 
+diff --git a/readme.md b/readme.md
+index bff4a04..59b20de 100644
+--- a/readme.md
++++ b/readme.md
+@@ -87,6 +87,17 @@ Default: `[]`
+ 
+ A single key (or array of keys) that should be parsed as `String`s.
+ 
++#### options['--']
++Type: `Boolean`<br>
++Default: `false`
++
++When enabled, arguments after a bare `--` are collected into `argv['--']` instead of `argv._`. The `argv['--']` array is always present (empty if no `--` was given).
++
++```js
++mri(['a', '--', 'b', '-c'], { '--': true });
++//=> { _: ['a'], '--': ['b', '-c'] }
++```
++
+ #### options.unknown
+ Type: `Function`<br>
+ Default: `undefined`
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..654931f 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -22,6 +22,7 @@ export default function (args, opts) {
+ 	const alibi = opts.alias !== void 0;
+ 	const strict = opts.unknown !== void 0;
+ 	const defaults = opts.default !== void 0;
++	const dd = !!opts['--'];
+ 
+ 	opts.alias = opts.alias || {};
+ 	opts.string = toArr(opts.string);
+@@ -59,13 +60,15 @@ export default function (args, opts) {
+ 		}
+ 	}
+ 
++	if (dd) out['--'] = [];
++
+ 	const keys = strict ? Object.keys(opts.alias) : [];
+ 
+ 	for (i=0; i < len; i++) {
+ 		arg = args[i];
+ 
+ 		if (arg === '--') {
+-			out._ = out._.concat(args.slice(++i));
++			out[dd ? '--' : '_'] = (dd ? out['--'] : out._).concat(args.slice(++i));
+ 			break;
+ 		}
+ 
+diff --git a/test/index.js b/test/index.js
+index 37abaa5..e3a8cf0 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -328,3 +328,16 @@ test('flag boolean with default string & alias', t => {
+ 	t.is(typeof baz.two, 'boolean');
+ 	t.end();
+ });
++
++test('opts["--"]', t => {
++	t.deepEqual(
++		fn(['a', '--x', '1', '--', 'b', '--y', '-z'], { '--': true }),
++		{ _: ['a'], x: 1, '--': ['b', '--y', '-z'] },
++		'args after -- go to argv["--"]'
++	);
++	t.deepEqual(fn(['a', '--x'], { '--': true }), { _: ['a'], x: true, '--': [] }, 'empty when no bare --');
++	t.deepEqual(fn(['a', '--', 'b'], { '--': false }), { _: ['a', 'b'] }, 'falsy keeps default behavior');
++	t.deepEqual(fn(['a', '--', 'b']), { _: ['a', 'b'] }, 'unset keeps default behavior');
++	t.deepEqual(fn(['--', '--', 'b'], { '--': true }), { _: [], '--': ['--', 'b'] }, 'only first -- is consumed');
++	t.end();
++});

@@ -1,0 +1,139 @@
+diff --git a/.github/workflows/node-matrix.yml b/.github/workflows/node-matrix.yml
+new file mode 100644
+index 0000000..de1cf1d
+--- /dev/null
++++ b/.github/workflows/node-matrix.yml
+@@ -0,0 +1,24 @@
++name: Node matrix
++
++on: [push, pull_request]
++
++jobs:
++  test:
++    name: Node.js v${{ matrix.node-version }}
++    runs-on: ubuntu-latest
++    timeout-minutes: 3
++    strategy:
++      fail-fast: false
++      matrix:
++        node-version: [18, 20, 22, 24]
++    steps:
++    - uses: actions/checkout@v4
++    - uses: actions/setup-node@v4
++      with:
++        node-version: ${{ matrix.node-version }}
++
++    - name: Install
++      run: npm install
++
++    - name: Tests
++      run: npm test
+diff --git a/index.d.ts b/index.d.ts
+index a46e43d..3ab7f82 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -11,10 +11,12 @@ declare namespace mri {
+ 		alias?: Dict<Arrayable<string>>;
+ 		default?: Dict<any>;
+ 		unknown?(flag: string): void;
++		'--'?: boolean;
+ 	}
+ 
+ 	export type Argv<T=Default> = T & {
+ 		_: string[];
++		'--'?: string[];
+ 	}
+ }
+ 
+diff --git a/readme.md b/readme.md
+index bff4a04..31f1f73 100644
+--- a/readme.md
++++ b/readme.md
+@@ -98,6 +98,18 @@ Once an unknown flag is encountered, parsing will terminate, regardless of your
+ > **Note:** `mri` _only_ checks for unknown flags if `options.unknown` **and** `options.alias` are populated. Otherwise, everything will be accepted.
+ 
+ 
++#### options['--']
++Type: `Boolean`<br>
++Default: `false`
++
++When set, all arguments after a bare `--` are placed in `argv['--']` instead of `argv._`. The `'--'` key is always an array (empty if no `--` was given).
++
++```js
++mri(['a', '--foo', '--', 'b', 'c'], { '--': true });
++//=> { _:['a'], foo:true, '--':['b', 'c'] }
++```
++
++
+ ## Comparisons
+ 
+ #### minimist
+@@ -117,7 +129,6 @@ Once an unknown flag is encountered, parsing will terminate, regardless of your
+   - Unlike `minimist`, `mri` will not continue continue parsing after encountering an unknown flag
+ - Missing `options`:
+   - `opts.stopEarly`
+-  - `opts['--']`
+ - Ignores newlines (`\n`) within args (see [test](https://github.com/substack/minimist/blob/master/test/parse.js#L69-L80))
+ - Ignores slashBreaks within args (see [test](https://github.com/substack/minimist/blob/master/test/parse.js#L147-L157))
+ - Ignores dot-nested flags (see [test](https://github.com/substack/minimist/blob/master/test/parse.js#L180-L197))
+@@ -137,7 +148,6 @@ Once an unknown flag is encountered, parsing will terminate, regardless of your
+   - `opts.normalize`
+   - `opts.configuration`
+   - `opts.number`
+-  - `opts['--']`
+ - Missing [`parser.detailed()`](https://github.com/yargs/yargs-parser#requireyargs-parserdetailedargs-opts) method
+ - No [additional configuration](https://github.com/yargs/yargs-parser#configuration) object
+ - Added [`options.unknown`](#optionsunknown) feature
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..c072022 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -22,11 +22,14 @@ export default function (args, opts) {
+ 	const alibi = opts.alias !== void 0;
+ 	const strict = opts.unknown !== void 0;
+ 	const defaults = opts.default !== void 0;
++	const dashes = !!opts['--'];
+ 
+ 	opts.alias = opts.alias || {};
+ 	opts.string = toArr(opts.string);
+ 	opts.boolean = toArr(opts.boolean);
+ 
++	if (dashes) out['--'] = [];
++
+ 	if (alibi) {
+ 		for (k in opts.alias) {
+ 			arr = opts.alias[k] = toArr(opts.alias[k]);
+@@ -65,7 +68,7 @@ export default function (args, opts) {
+ 		arg = args[i];
+ 
+ 		if (arg === '--') {
+-			out._ = out._.concat(args.slice(++i));
++			out[dashes ? '--' : '_'] = out[dashes ? '--' : '_'].concat(args.slice(++i));
+ 			break;
+ 		}
+ 
+diff --git a/test/index.js b/test/index.js
+index 37abaa5..85afda9 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -328,3 +328,20 @@ test('flag boolean with default string & alias', t => {
+ 	t.is(typeof baz.two, 'boolean');
+ 	t.end();
+ });
++
++test('opts[--]', t => {
++	t.deepEqual(
++		fn(['a', '--foo', '--', 'b', '--bar', 'c'], { '--': true }),
++		{ _: ['a'], foo: true, '--': ['b', '--bar', 'c'] },
++		'args after -- go to argv[--]'
++	);
++	t.deepEqual(fn(['a', '--foo'], { '--': true }), { _: ['a'], foo: true, '--': [] }, 'empty when no --');
++	t.deepEqual(fn(['a', '--'], { '--': true }), { _: ['a'], '--': [] }, 'trailing -- only');
++	t.deepEqual(fn(['a', '--', 'b'], {}), { _: ['a', 'b'] }, 'unset: goes to _');
++	t.deepEqual(
++		fn(['-x', '1', '--', '-y', '2'], { '--': true, alias: { x: 'ex' } }),
++		{ _: [], x: 1, ex: 1, '--': ['-y', '2'] },
++		'works with alias'
++	);
++	t.end();
++});

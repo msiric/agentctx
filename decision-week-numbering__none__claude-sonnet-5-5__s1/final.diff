@@ -1,0 +1,74 @@
+diff --git a/index.d.ts b/index.d.ts
+index 997d7dd..4bdc954 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -1,5 +1,5 @@
+ declare module 'tinydate' {
+-	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'HH' | 'mm' | 'ss' | 'fff';
++	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'DDD' | 'WW' | 'HH' | 'mm' | 'ss' | 'fff';
+ 	export type Formatter = (date: Date) => string | number;
+ 	export type Dictionary = Record<Defaults | string, Formatter>;
+ 
+diff --git a/readme.md b/readme.md
+index 7c4b332..b32cba9 100644
+--- a/readme.md
++++ b/readme.md
+@@ -81,6 +81,8 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{YY}`: short year; eg: **17**
+ - `{MM}`: month; eg: **04**
+ - `{DD}`: day; eg: **01**
++- `{DDD}`: day of the year; eg: **091**
++- `{WW}`: ISO 8601 week of the year; eg: **09**
+ - `{HH}`: hours; eg: **06** (24h)
+ - `{mm}`: minutes; eg: **59**
+ - `{ss}`: seconds; eg: **09**
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..af9a828 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -7,6 +7,17 @@ var MAP = {
+ 		return d.getMonth() + 1;
+ 	},
+ 	DD: 'getDate',
++	DDD: function (d) {
++		// UTC math so DST shifts can't skew the day count
++		var y = d.getFullYear();
++		return Math.round((Date.UTC(y, d.getMonth(), d.getDate()) - Date.UTC(y, 0, 1)) / 864e5) + 1;
++	},
++	WW: function (d) {
++		// ISO 8601 week: the week belongs to the year containing its Thursday
++		var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
++		t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
++		return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
++	},
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+ 	ss: 'getSeconds',
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..cb72ef9 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -19,6 +19,23 @@ test('rendering', t => {
+ 	t.is(render('HH'), 'HH', 'does nothing if no `{}` wrappers');
+ 	t.is(render('{MM}'), '05', 'returns numerical month');
+ 	t.is(render('{DD}'), '01', 'returns numerical day');
++	t.is(render('{DDD}'), '121', 'returns padded day of year');
++	t.is(render('{DDD}', new Date(2017, 0, 1)), '001', 'day of year: Jan 1 is 001');
++	t.is(render('{DDD}', new Date(2017, 11, 31)), '365', 'day of year: Dec 31 (common year)');
++	t.is(render('{DDD}', new Date(2016, 11, 31)), '366', 'day of year: Dec 31 (leap year)');
++	t.is(render('{DDD}', new Date(2016, 1, 29)), '060', 'day of year: leap day');
++	t.is(render('{DDD}', new Date(2017, 2, 1)), '060', 'day of year: Mar 1 (common year)');
++	t.is(render('{DDD}', new Date(2016, 2, 1)), '061', 'day of year: Mar 1 (leap year)');
++	t.is(render('{DDD}', new Date(2017, 2, 12, 0, 0, 0)), '071', 'day of year: unaffected by DST change');
++	t.is(render('{DDD}', new Date(2017, 10, 5, 23, 59, 59)), '309', 'day of year: unaffected by time of day');
++	t.is(render('{WW}'), '18', 'returns padded ISO week');
++	t.is(render('{WW}', new Date(2017, 0, 2)), '01', 'ISO week: first Monday is 01');
++	t.is(render('{WW}', new Date(2017, 0, 1)), '52', 'ISO week: Jan 1 (Sun) belongs to previous year');
++	t.is(render('{WW}', new Date(2018, 11, 31)), '01', 'ISO week: Dec 31 can belong to next year');
++	t.is(render('{WW}', new Date(2015, 11, 31)), '53', 'ISO week: 53-week year');
++	t.is(render('{WW}', new Date(2021, 0, 3)), '53', 'ISO week: Jan 3 belongs to previous 53-week year');
++	t.is(render('{WW}', new Date(2017, 2, 12)), '10', 'ISO week: unaffected by DST change');
++	t.is(render('{WW}', new Date(2017, 10, 5, 23, 59, 59)), '44', 'ISO week: unaffected by time of day');
+ 	t.is(render('{YY}'), '17', 'returns partial year');
+ 	t.is(render('{YYYY}'), '2017', 'returns full year');
+ 	t.is(render('{HH}'), '16', 'returns full hours (24h)');

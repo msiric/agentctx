@@ -1,0 +1,50 @@
+diff --git a/bottle.py b/bottle.py
+index 2a4b1ac..dbbd4b6 100755
+--- a/bottle.py
++++ b/bottle.py
+@@ -1468,6 +1468,22 @@ class BaseRequest:
+         if ruser: return (ruser, None)
+         return None
+ 
++    @property
++    def bearer_token(self):
++        """ The token from an ``Authorization: Bearer <token>`` header, or
++            None if there is no such header or it uses another scheme.
++
++            >>> BaseRequest({'HTTP_AUTHORIZATION': 'Bearer abc123'}).bearer_token
++            'abc123'
++            >>> BaseRequest({'HTTP_AUTHORIZATION': 'Basic abc123'}).bearer_token
++            >>> BaseRequest({}).bearer_token
++        """
++        scheme, _, token = self.environ.get('HTTP_AUTHORIZATION', '').strip().partition(' ')
++        token = token.strip()
++        if scheme.lower() == 'bearer' and token:
++            return token
++        return None
++
+     @property
+     def remote_route(self):
+         """ A list of all IPs that were involved in this request, starting with
+diff --git a/test/test_environ.py b/test/test_environ.py
+index c9f2940..5df53ff 100755
+--- a/test/test_environ.py
++++ b/test/test_environ.py
+@@ -415,6 +415,18 @@ class TestRequest(unittest.TestCase):
+         e['HTTP_X_REQUESTED_WITH'] = 'XMLHttpRequest'
+         self.assertTrue(BaseRequest(e.copy()).is_ajax)
+ 
++    def test_bearer_token(self):
++        r = BaseRequest({})
++        self.assertEqual(r.bearer_token, None)
++        r.environ['HTTP_AUTHORIZATION'] = 'Bearer abc.123'
++        self.assertEqual(r.bearer_token, 'abc.123')
++        r.environ['HTTP_AUTHORIZATION'] = 'bearer  abc '
++        self.assertEqual(r.bearer_token, 'abc')
++        r.environ['HTTP_AUTHORIZATION'] = 'Bearer'
++        self.assertEqual(r.bearer_token, None)
++        r.environ['HTTP_AUTHORIZATION'] = 'Basic abc'
++        self.assertEqual(r.bearer_token, None)
++
+     def test_auth(self):
+         user, pwd = 'marc', 'secret'
+         basic = touni(base64.b64encode(tob('%s:%s' % (user, pwd))))

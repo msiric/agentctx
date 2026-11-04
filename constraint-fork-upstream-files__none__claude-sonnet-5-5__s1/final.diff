@@ -1,0 +1,135 @@
+diff --git a/.github/workflows/fork-ci.yml b/.github/workflows/fork-ci.yml
+new file mode 100644
+index 0000000..b2eda56
+--- /dev/null
++++ b/.github/workflows/fork-ci.yml
+@@ -0,0 +1,23 @@
++name: Fork CI
++
++on: [push, pull_request]
++
++jobs:
++  test:
++    name: Node.js v${{ matrix.nodejs }}
++    runs-on: ubuntu-latest
++    timeout-minutes: 3
++    strategy:
++      matrix:
++        nodejs: [18, 20, 22, 24]
++    steps:
++    - uses: actions/checkout@v4
++    - uses: actions/setup-node@v4
++      with:
++        node-version: ${{ matrix.nodejs }}
++
++    - name: Install
++      run: npm install
++
++    - name: Tests
++      run: npm test
+diff --git a/index.d.ts b/index.d.ts
+index a46e43d..3ab7f82 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -11,10 +11,12 @@ declare namespace mri {
+ 		alias?: Dict<Arrayable<string>>;
+ 		default?: Dict<any>;
+ 		unknown?(flag: string): void;
++		'--'?: boolean;
+ 	}
+ 
+ 	export type Argv<T=Default> = T & {
+ 		_: string[];
++		'--'?: string[];
+ 	}
+ }
+ 
+diff --git a/readme.md b/readme.md
+index bff4a04..54f00b8 100644
+--- a/readme.md
++++ b/readme.md
+@@ -87,6 +87,17 @@ Default: `[]`
+ 
+ A single key (or array of keys) that should be parsed as `String`s.
+ 
++#### options['--']
++Type: `Boolean`<br>
++Default: `false`
++
++When `true`, everything after a bare `--` is placed in `argv['--']` instead of `argv._`. The `'--'` key is always an array (empty if no `--` was given).
++
++```js
++mri(['a', '--foo', '--', 'b', '--bar'], { '--': true });
++//=> { _:['a'], foo:true, '--':['b', '--bar'] }
++```
++
+ #### options.unknown
+ Type: `Function`<br>
+ Default: `undefined`
+@@ -117,7 +128,6 @@ Once an unknown flag is encountered, parsing will terminate, regardless of your
+   - Unlike `minimist`, `mri` will not continue continue parsing after encountering an unknown flag
+ - Missing `options`:
+   - `opts.stopEarly`
+-  - `opts['--']`
+ - Ignores newlines (`\n`) within args (see [test](https://github.com/substack/minimist/blob/master/test/parse.js#L69-L80))
+ - Ignores slashBreaks within args (see [test](https://github.com/substack/minimist/blob/master/test/parse.js#L147-L157))
+ - Ignores dot-nested flags (see [test](https://github.com/substack/minimist/blob/master/test/parse.js#L180-L197))
+@@ -137,7 +147,6 @@ Once an unknown flag is encountered, parsing will terminate, regardless of your
+   - `opts.normalize`
+   - `opts.configuration`
+   - `opts.number`
+-  - `opts['--']`
+ - Missing [`parser.detailed()`](https://github.com/yargs/yargs-parser#requireyargs-parserdetailedargs-opts) method
+ - No [additional configuration](https://github.com/yargs/yargs-parser#configuration) object
+ - Added [`options.unknown`](#optionsunknown) feature
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..822872e 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -17,6 +17,8 @@ export default function (args, opts) {
+ 	opts = opts || {};
+ 
+ 	var k, arr, arg, name, val, out={ _:[] };
++	const dashdash = !!opts['--'];
++	if (dashdash) out['--'] = [];
+ 	var i=0, j=0, idx=0, len=args.length;
+ 
+ 	const alibi = opts.alias !== void 0;
+@@ -65,7 +67,7 @@ export default function (args, opts) {
+ 		arg = args[i];
+ 
+ 		if (arg === '--') {
+-			out._ = out._.concat(args.slice(++i));
++			out[dashdash ? '--' : '_'] = out[dashdash ? '--' : '_'].concat(args.slice(++i));
+ 			break;
+ 		}
+ 
+diff --git a/test/index.js b/test/index.js
+index 37abaa5..ab5bc64 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -328,3 +328,24 @@ test('flag boolean with default string & alias', t => {
+ 	t.is(typeof baz.two, 'boolean');
+ 	t.end();
+ });
++
++test('opts[--]: args after -- go to argv[--]', t => {
++	const args = ['a', '--foo', 'x', '--', 'b', '--bar', '-c'];
++	t.same(fn(args, { '--': true }), { _:['a'], foo:'x', '--':['b', '--bar', '-c'] });
++	t.same(fn(args), { _:['a', 'b', '--bar', '-c'], foo:'x' }, 'default behavior unchanged');
++	t.same(fn(args, { '--': false }), { _:['a', 'b', '--bar', '-c'], foo:'x' }, 'false is unchanged');
++	t.end();
++});
++
++test('opts[--]: empty array when no -- is present', t => {
++	t.same(fn(['a', '--foo'], { '--': true }), { _:['a'], foo:true, '--':[] });
++	t.same(fn([], { '--': true }), { _:[], '--':[] });
++	t.same(fn(['--'], { '--': true }), { _:[], '--':[] });
++	t.end();
++});
++
++test('opts[--]: works with alias, default, boolean', t => {
++	const res = fn(['-f', '--', 'x', 'y'], { '--': true, alias: { f:'foo' }, boolean: 'foo', default: { n:1 } });
++	t.same(res, { _:[], f:true, foo:true, n:1, '--':['x', 'y'] });
++	t.end();
++});

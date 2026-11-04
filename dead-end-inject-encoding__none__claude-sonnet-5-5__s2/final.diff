@@ -1,0 +1,49 @@
+diff --git a/src/index.js b/src/index.js
+index 2e8bfc9..5b481e5 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -35,6 +35,10 @@ var RGX = /(\/|^)([:*][^/]*?)(\?)?(?=[/.]|$)/g;
+ export function inject(route, values) {
+ 	return route.replace(RGX, (x, lead, key, optional) => {
+ 		x = values[key=='*' ? key : key.substring(1)];
+-		return x ? '/'+x : (optional || key=='*') ? '' : '/' + key;
++		if (x != null && x !== '') {
++			x = key=='*' ? String(x).split('/').map(encodeURIComponent).join('/') : encodeURIComponent(x);
++			return '/' + x;
++		}
++		return (optional || key=='*') ? '' : '/' + key;
+ 	});
+ }
+diff --git a/test/inject.js b/test/inject.js
+index 9e52300..e60980e 100644
+--- a/test/inject.js
++++ b/test/inject.js
+@@ -41,6 +41,12 @@ test('throws', () => {
+ run('/foo/:id', '/foo/123', { id: 123 });
+ run('/foo/:id/', '/foo/123/', { id: 123 });
+ 
++// falsy-but-present values
++run('/page/:n', '/page/0', { n: 0 });
++run('/page/:n?', '/page/0', { n: 0 });
++run('/page/:n?', '/page', { n: undefined });
++run('/page/:n?', '/page', { n: '' });
++
+ run('/:a/:b/:c', '/1/2/3', { a: 1, b: 2, c: 3 });
+ run('/:a/:b/:c/', '/1/2/3/', { a: 1, b: 2, c: 3 });
+ 
+@@ -69,6 +75,15 @@ run('/foo/:bar/*?', '/foo/123', { bar: '123' });
+ run('/foo/:bar/*', '/foo/123/aa/bb/cc', { bar: '123', '*': 'aa/bb/cc' });
+ run('/foo/:bar/*?', '/foo/123/aa/bb/cc', { bar: '123', '*': 'aa/bb/cc' });
+ 
++// percent-encoding
++run('/user/:name', '/user/a%20b%2Fc', { name: 'a b/c' });
++run('/user/:name', '/user/%3Fq%3D1%26x%23y', { name: '?q=1&x#y' });
++run('/user/:name?', '/user/caf%C3%A9', { name: 'café' });
++run('/file/:name.txt', '/file/a%20b.txt', { name: 'a b' });
++run('/files/*', '/files/my%20dir/a%2Bb/%23x', { '*': 'my dir/a+b/#x' });
++run('/files/*?', '/files/my%20dir/c%3Fd.txt', { '*': 'my dir/c?d.txt' });
++run('/a/:b/*', '/a/x%2Fy/p%20q/r', { b: 'x/y', '*': 'p q/r' });
++
+ // NOTE: Missing non-optional values
+ // ---
+ run('/foo/:id', '/foo/:id', { /* empty */ });

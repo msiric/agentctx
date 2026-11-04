@@ -1,0 +1,71 @@
+diff --git a/readme.md b/readme.md
+index 7c4b332..b3b6b73 100644
+--- a/readme.md
++++ b/readme.md
+@@ -80,7 +80,10 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{YYYY}`: full year; eg: **2017**
+ - `{YY}`: short year; eg: **17**
+ - `{MM}`: month; eg: **04**
++- `{MMM}`: short month name (English); eg: **Apr**
+ - `{DD}`: day; eg: **01**
++- `{ddd}`: short weekday name (English); eg: **Mon**
++- `{Q}`: Australian financial-year quarter (FY starts 1 July: Jul–Sep = 1, Oct–Dec = 2, Jan–Mar = 3, Apr–Jun = 4); eg: **4**
+ - `{HH}`: hours; eg: **06** (24h)
+ - `{mm}`: minutes; eg: **59**
+ - `{ss}`: seconds; eg: **09**
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..3a295a2 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,12 +1,26 @@
+ var RGX = /([^{]*?)\w(?=\})/g;
+ 
++var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
++
++var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
++
+ var MAP = {
+ 	YYYY: 'getFullYear',
+ 	YY: 'getYear',
+ 	MM: function (d) {
+ 		return d.getMonth() + 1;
+ 	},
++	MMM: function (d) {
++		return MONTHS[d.getMonth()];
++	},
+ 	DD: 'getDate',
++	ddd: function (d) {
++		return DAYS[d.getDay()];
++	},
++	Q: function (d) {
++		// Australian financial year: starts 1 July (Jul-Sep=1 ... Apr-Jun=4)
++		return Math.floor(((d.getMonth() + 6) % 12) / 3) + 1;
++	},
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+ 	ss: 'getSeconds',
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..86773e4 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -18,6 +18,20 @@ test('rendering', t => {
+ 	t.is(render('foo'), 'foo', 'does nothing if no match');
+ 	t.is(render('HH'), 'HH', 'does nothing if no `{}` wrappers');
+ 	t.is(render('{MM}'), '05', 'returns numerical month');
++	t.is(render('{MMM}'), 'May', 'returns short month name');
++	t.is(render('{MMM}', new Date(2017, 0, 1)), 'Jan', 'short month name (January)');
++	t.is(render('{MMM}', new Date(2017, 11, 1)), 'Dec', 'short month name (December)');
++	t.is(render('{DD} {MMM} {YYYY}'), '01 May 2017', 'short month name in formatted string');
++	t.is(render('{ddd}'), 'Mon', 'returns short weekday name');
++	t.is(render('{ddd}', new Date(2017, 4, 7)), 'Sun', 'short weekday name (Sunday)');
++	t.is(render('{ddd}', new Date(2017, 4, 6)), 'Sat', 'short weekday name (Saturday)');
++	t.is(render('{ddd}, {DD} {MMM}'), 'Mon, 01 May', 'weekday in formatted string');
++	t.is(render('{Q}'), '4', 'returns financial quarter (May = Q4)');
++	[7, 8, 9].forEach(m => t.is(render('{Q}', new Date(2017, m - 1, 15)), '1', `month ${m} = Q1`));
++	[10, 11, 12].forEach(m => t.is(render('{Q}', new Date(2017, m - 1, 15)), '2', `month ${m} = Q2`));
++	[1, 2, 3].forEach(m => t.is(render('{Q}', new Date(2017, m - 1, 15)), '3', `month ${m} = Q3`));
++	[4, 5, 6].forEach(m => t.is(render('{Q}', new Date(2017, m - 1, 15)), '4', `month ${m} = Q4`));
++	t.is(render('FY Q{Q}'), 'FY Q4', 'quarter in formatted string');
+ 	t.is(render('{DD}'), '01', 'returns numerical day');
+ 	t.is(render('{YY}'), '17', 'returns partial year');
+ 	t.is(render('{YYYY}'), '2017', 'returns full year');

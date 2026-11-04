@@ -1,0 +1,142 @@
+diff --git a/index.d.ts b/index.d.ts
+index a46e43d..b009839 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -7,6 +7,7 @@ declare function mri<T=Default>(args?: string[], options?: mri.Options): mri.Arg
+ declare namespace mri {
+ 	export interface Options {
+ 		boolean?: Arrayable<string>;
++		count?: Arrayable<string>;
+ 		string?: Arrayable<string>;
+ 		alias?: Dict<Arrayable<string>>;
+ 		default?: Dict<any>;
+diff --git a/package.json b/package.json
+index 5a224b2..52a42b1 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "mri",
+-  "version": "1.2.0",
++  "version": "1.3.0",
+   "description": "Quickly scan for CLI flags and arguments",
+   "repository": "lukeed/mri",
+   "module": "lib/index.mjs",
+diff --git a/readme.md b/readme.md
+index bff4a04..29c6036 100644
+--- a/readme.md
++++ b/readme.md
+@@ -63,6 +63,17 @@ Default: `[]`
+ 
+ A single key (or array of keys) that should be parsed as `Boolean`s.
+ 
++#### options.count
++Type: `Array|String`<br>
++Default: `[]`
++
++A single key (or array of keys) whose value is the number of times it was given, e.g. `-vvv` or `--verbose --verbose`. Aliases share the same count.
++
++```js
++mri(["-vvv"], { count: "v" });
++//=> { _:[], v:3 }
++```
++
+ #### options.default
+ Type: `Object`<br>
+ Default: `{}`
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..103a922 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -3,7 +3,15 @@ function toArr(any) {
+ }
+ 
+ function toVal(out, key, val, opts) {
+-	var x, old=out[key], nxt=(
++	var x, old=out[key], nxt;
++	if (!!~opts.count.indexOf(key)) {
++		if (val !== true) out._.push((x = +val,x * 0 === 0) ? x : val);
++		var grp = (opts.alias[key] || []).concat(key), n = 0, g;
++		for (g=0; g < grp.length; g++) if (typeof out[grp[g]] === 'number' && out[grp[g]] > n) n = out[grp[g]];
++		for (g=0; g < grp.length; g++) out[grp[g]] = n + 1;
++		return;
++	}
++	nxt=(
+ 		!!~opts.string.indexOf(key) ? (val == null || val === true ? '' : String(val))
+ 		: typeof val === 'boolean' ? val
+ 		: !!~opts.boolean.indexOf(key) ? (val === 'false' ? false : val === 'true' || (out._.push((x = +val,x * 0 === 0) ? x : val),!!val))
+@@ -26,6 +34,7 @@ export default function (args, opts) {
+ 	opts.alias = opts.alias || {};
+ 	opts.string = toArr(opts.string);
+ 	opts.boolean = toArr(opts.boolean);
++	opts.count = toArr(opts.count);
+ 
+ 	if (alibi) {
+ 		for (k in opts.alias) {
+@@ -41,6 +50,11 @@ export default function (args, opts) {
+ 		for (j=arr.length; j-- > 0;) opts.boolean.push(arr[j]);
+ 	}
+ 
++	for (i=opts.count.length; i-- > 0;) {
++		arr = opts.alias[opts.count[i]] || [];
++		for (j=arr.length; j-- > 0;) opts.count.push(arr[j]);
++	}
++
+ 	for (i=opts.string.length; i-- > 0;) {
+ 		arr = opts.alias[opts.string[i]] || [];
+ 		for (j=arr.length; j-- > 0;) opts.string.push(arr[j]);
+@@ -80,7 +94,7 @@ export default function (args, opts) {
+ 			if (strict && !~keys.indexOf(name)) {
+ 				return opts.unknown(arg);
+ 			}
+-			out[name] = false;
++			out[name] = !!~opts.count.indexOf(name) ? 0 : false;
+ 		} else {
+ 			for (idx=j+1; idx < arg.length; idx++) {
+ 				if (arg.charCodeAt(idx) === 61) break; // "="
+diff --git a/test/count.js b/test/count.js
+new file mode 100644
+index 0000000..805737e
+--- /dev/null
++++ b/test/count.js
+@@ -0,0 +1,40 @@
++const test = require('tape');
++const fn = require('../lib');
++
++test('count :: short flags', t => {
++	t.deepEqual(fn(['-vvv'], { count: 'v' }), { _: [], v: 3 });
++	t.deepEqual(fn(['-v', '-v'], { count: ['v'] }), { _: [], v: 2 });
++	t.deepEqual(fn(['-v'], { count: 'v' }), { _: [], v: 1 });
++	t.end();
++});
++
++test('count :: long flags', t => {
++	t.deepEqual(fn(['--verbose', '--verbose'], { count: 'verbose' }), { _: [], verbose: 2 });
++	t.end();
++});
++
++test('count :: does not consume values', t => {
++	t.deepEqual(fn(['-vv', 'foo'], { count: 'v' }), { _: ['foo'], v: 2 });
++	t.end();
++});
++
++test('count :: alias', t => {
++	const opts = { count: 'v', alias: { v: 'verbose' } };
++	t.deepEqual(fn(['-v', '--verbose', '-v'], opts), { _: [], v: 3, verbose: 3 });
++	t.end();
++});
++
++test('count :: mixed with other flags', t => {
++	t.deepEqual(fn(['-vvx', '--name=a'], { count: 'v' }), { _: [], v: 2, x: true, name: 'a' });
++	t.end();
++});
++
++test('count :: --no- resets to 0', t => {
++	t.deepEqual(fn(['--no-v'], { count: 'v' }), { _: [], v: 0 });
++	t.end();
++});
++
++test('count :: unspecified flags unaffected', t => {
++	t.deepEqual(fn(['-vv']), { _: [], v: [true, true] });
++	t.end();
++});

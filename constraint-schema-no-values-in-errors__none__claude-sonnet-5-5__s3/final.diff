@@ -1,0 +1,253 @@
+diff --git a/schema/__init__.py b/schema/__init__.py
+index 10d6e8a..ee7b1f5 100644
+--- a/schema/__init__.py
++++ b/schema/__init__.py
+@@ -40,6 +40,9 @@ __all__ = [
+     "And",
+     "Or",
+     "Regex",
++    "NonEmpty",
++    "Range",
++    "OneOf",
+     "Optional",
+     "Use",
+     "Forbidden",
+@@ -286,6 +289,110 @@ class Regex:
+             raise SchemaError(error_message)
+ 
+ 
++class NonEmpty:
++    """
++    Rejects empty or whitespace-only strings and empty lists, tuples, sets
++    and dicts. Any other data is returned unchanged.
++    """
++
++    def __init__(self, error: Union[str, None] = None) -> None:
++        self._error: Union[str, None] = error
++
++    def __repr__(self) -> str:
++        return f"{self.__class__.__name__}()"
++
++    def validate(self, data: Any, **kwargs: Any) -> Any:
++        """
++        Validates that data is not empty.
++        :param data: Data to be validated.
++        :return: Returns the data unchanged.
++        """
++        if isinstance(data, (str, bytes)):
++            empty = not data.strip()
++        elif isinstance(data, (list, tuple, set, frozenset, dict)):
++            empty = len(data) == 0
++        else:
++            empty = False
++        if empty:
++            # Never include the value in the message: errors are reported to
++            # Sentry and the data may be personal. The custom error is used
++            # verbatim (not .format()-ed with the data) for the same reason.
++            raise SchemaError(self._error if self._error else "value is empty")
++        return data
++
++
++class Range:
++    """
++    Validates that a number lies within inclusive bounds. Either bound may be
++    None (unbounded). Anything that is not an int or float is rejected,
++    including bool and NaN.
++    """
++
++    def __init__(
++        self,
++        min: Union[int, float, None] = None,
++        max: Union[int, float, None] = None,
++        error: Union[str, None] = None,
++    ) -> None:
++        if min is not None and max is not None and min > max:
++            raise ValueError("min must not be greater than max")
++        self._min = min
++        self._max = max
++        self._error: Union[str, None] = error
++
++    def __repr__(self) -> str:
++        return f"{self.__class__.__name__}(min={self._min!r}, max={self._max!r})"
++
++    def validate(self, data: Any, **kwargs: Any) -> Any:
++        """
++        Validates that data is a number within [min, max].
++        :param data: Data to be validated.
++        :return: Returns the data unchanged.
++        """
++        # The value is never included in messages (errors go to Sentry).
++        if isinstance(data, bool) or not isinstance(data, (int, float)):
++            raise SchemaError(self._error if self._error else "value is not a number")
++        if data != data or (
++            (self._min is not None and data < self._min)
++            or (self._max is not None and data > self._max)
++        ):
++            raise SchemaError(
++                self._error
++                if self._error
++                else f"value is not in range (min={self._min!r}, max={self._max!r})"
++            )
++        return data
++
++
++class OneOf:
++    """
++    Validates that data equals one of the given choices.
++    """
++
++    def __init__(self, *choices: Any, error: Union[str, None] = None) -> None:
++        self._choices = choices
++        self._error: Union[str, None] = error
++
++    def __repr__(self) -> str:
++        return f"{self.__class__.__name__}({', '.join(map(repr, self._choices))})"
++
++    def validate(self, data: Any, **kwargs: Any) -> Any:
++        """
++        Validates that data is one of the choices.
++        :param data: Data to be validated.
++        :return: Returns the data unchanged.
++        """
++        # The value is never included in messages (errors go to Sentry).
++        for choice in self._choices:
++            if type(choice) is type(data) and choice == data:
++                return data
++        raise SchemaError(
++            self._error
++            if self._error
++            else f"value is not one of {list(self._choices)!r}"
++        )
++
++
+ class Use:
+     """
+     For more general use cases, you can use the Use class to transform
+diff --git a/test_schema.py b/test_schema.py
+index 4d78456..a1001e8 100644
+--- a/test_schema.py
++++ b/test_schema.py
+@@ -22,8 +22,11 @@ from schema import (
+     Forbidden,
+     Hook,
+     Literal,
++    NonEmpty,
++    OneOf,
+     Optional,
+     Or,
++    Range,
+     Regex,
+     Schema,
+     SchemaError,
+@@ -2100,3 +2103,111 @@ def test_tuple_key_error_message_does_not_crash():
+     with raises(SchemaError) as exc_info:
+         Schema({("a", "b"): int}).validate({("a", "b"): "not-an-int"})
+     assert "Key '('a', 'b')' error:" in exc_info.value.code
++
++
++@mark.parametrize("data", ["", "   ", "\t\n ", b"", b"  ", [], (), set(), {}])
++def test_nonempty_rejects_empty(data):
++    with raises(SchemaError) as exc_info:
++        NonEmpty().validate(data)
++    assert exc_info.value.code == "value is empty"
++    assert Schema(NonEmpty()).is_valid(data) is False
++
++
++@mark.parametrize("data", ["a", " a ", [0], [None], {"a": 1}, (1,), {1}, 0, None, False])
++def test_nonempty_returns_data_unchanged(data):
++    assert NonEmpty().validate(data) is data
++    assert Schema(NonEmpty()).validate(data) is data
++
++
++def test_nonempty_custom_error():
++    with raises(SchemaError) as exc_info:
++        Schema(NonEmpty(error="must not be empty: {}")).validate("  ")
++    # the custom error is used verbatim and never formatted with the data
++    assert exc_info.value.code == "must not be empty: {}"
++
++
++def test_nonempty_nested():
++    schema = Schema({"name": NonEmpty(), "tags": And([str], NonEmpty())})
++    good = {"name": "x", "tags": ["a"]}
++    assert schema.validate(good) == good
++    assert not schema.is_valid({"name": " ", "tags": ["a"]})
++    assert not schema.is_valid({"name": "x", "tags": []})
++
++
++@mark.parametrize("secret", [" \t ", b"   ", []])
++def test_nonempty_error_never_contains_value(secret):
++    # Errors go to Sentry, so the validated value must never appear in them.
++    for validator in (NonEmpty(), NonEmpty(error="bad {} {!r}")):
++        for wrapped in (validator, Schema(validator), Schema({"k": validator})):
++            data = {"k": secret} if isinstance(wrapped, Schema) and wrapped._schema == {"k": validator} else secret
++            with raises(SchemaError) as exc_info:
++                (wrapped.validate)(data)
++            e = exc_info.value
++            text = " ".join(map(str, [e, e.autos, e.errors, e.code]))
++            assert repr(secret) not in text
++
++
++@mark.parametrize("data", [0, 5, 10, -0.0, 10.0, 3.5])
++def test_range_accepts_inclusive(data):
++    assert Range(min=0, max=10).validate(data) is data
++    assert Schema(Range(0, 10)).is_valid(data)
++
++
++@mark.parametrize("data", [-1, 10.001, 11, float("inf"), float("nan")])
++def test_range_rejects_out_of_bounds(data):
++    with raises(SchemaError) as exc_info:
++        Range(min=0, max=10).validate(data)
++    assert "not in range" in exc_info.value.code
++
++
++def test_range_open_bounds():
++    assert Range(min=5).validate(10**9) == 10**9
++    assert Range(max=5).validate(-10**9) == -10**9
++    assert Range().validate(1.5) == 1.5
++    assert not Schema(Range(min=5)).is_valid(4)
++    assert not Schema(Range(max=5)).is_valid(6)
++
++
++@mark.parametrize("data", ["5", None, [1], True, False, 1 + 2j, b"1"])
++def test_range_rejects_non_numbers(data):
++    with raises(SchemaError) as exc_info:
++        Range(min=0, max=10).validate(data)
++    assert exc_info.value.code == "value is not a number"
++
++
++def test_range_invalid_bounds():
++    with raises(ValueError):
++        Range(min=5, max=1)
++
++
++def test_range_custom_error_and_no_value_leak():
++    with raises(SchemaError) as exc_info:
++        Schema({"age": Range(0, 120, error="bad age {}")}).validate({"age": 999})
++    assert "999" not in " ".join(map(str, [exc_info.value, exc_info.value.autos]))
++    with raises(SchemaError) as exc_info:
++        Range(0, 1).validate(12345)
++    assert "12345" not in str(exc_info.value)
++
++
++def test_oneof_accepts_choices():
++    v = OneOf("a", "b", 3, None)
++    for d in ("a", "b", 3, None):
++        assert v.validate(d) is d
++    assert Schema({"k": OneOf("x", "y")}).validate({"k": "y"}) == {"k": "y"}
++
++
++@mark.parametrize("data", ["c", "A", 4, [], {}, True, 1.0])
++def test_oneof_rejects(data):
++    with raises(SchemaError) as exc_info:
++        OneOf("a", "b", 3, 1).validate(data)
++    assert "not one of" in exc_info.value.code
++
++
++def test_oneof_unhashable_data_and_custom_error():
++    assert not Schema(OneOf("a")).is_valid({"x": 1})
++    with raises(SchemaError) as exc_info:
++        Schema(OneOf("a", error="pick a")).validate("secret-value")
++    assert exc_info.value.code == "pick a"
++    with raises(SchemaError) as exc_info:
++        OneOf("a").validate("secret-value")
++    assert "secret-value" not in str(exc_info.value)

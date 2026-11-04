@@ -1,0 +1,75 @@
+diff --git a/index.d.ts b/index.d.ts
+index 997d7dd..4a7a83e 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -1,5 +1,5 @@
+ declare module 'tinydate' {
+-	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'HH' | 'mm' | 'ss' | 'fff';
++	type Defaults = 'YYYY' | 'YY' | 'Q' | 'MMM' | 'ddd' | 'MM' | 'DD' | 'HH' | 'mm' | 'ss' | 'fff';
+ 	export type Formatter = (date: Date) => string | number;
+ 	export type Dictionary = Record<Defaults | string, Formatter>;
+ 
+diff --git a/readme.md b/readme.md
+index 7c4b332..66af095 100644
+--- a/readme.md
++++ b/readme.md
+@@ -79,6 +79,9 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ 
+ - `{YYYY}`: full year; eg: **2017**
+ - `{YY}`: short year; eg: **17**
++- `{Q}`: quarter of the year (1-4); eg: **2**
++- `{MMM}`: short English month name; eg: **Apr**
++- `{ddd}`: short English weekday name; eg: **Mon**
+ - `{MM}`: month; eg: **04**
+ - `{DD}`: day; eg: **01**
+ - `{HH}`: hours; eg: **06** (24h)
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..c5b3c05 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,6 +1,19 @@
+ var RGX = /([^{]*?)\w(?=\})/g;
+ 
++var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
++
++var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
++
+ var MAP = {
++	ddd: function (d) {
++		return DAYS[d.getDay()];
++	},
++	MMM: function (d) {
++		return MONTHS[d.getMonth()];
++	},
++	Q: function (d) {
++		return Math.floor(d.getMonth() / 3) + 1;
++	},
+ 	YYYY: 'getFullYear',
+ 	YY: 'getYear',
+ 	MM: function (d) {
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..3880de2 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -18,6 +18,21 @@ test('rendering', t => {
+ 	t.is(render('foo'), 'foo', 'does nothing if no match');
+ 	t.is(render('HH'), 'HH', 'does nothing if no `{}` wrappers');
+ 	t.is(render('{MM}'), '05', 'returns numerical month');
++	t.is(render('{MMM}'), 'May', 'returns short month name');
++	t.is(render('{MMM}', new Date(2017, 0, 1)), 'Jan', 'short month name (January)');
++	t.is(render('{MMM}', new Date(2017, 11, 1)), 'Dec', 'short month name (December)');
++	t.is(render('{MMM} {DD}, {YYYY}'), 'May 01, 2017', 'short month in formatted string');
++	t.is(render('{ddd}'), 'Mon', 'returns short weekday name');
++	t.is(render('{ddd}', new Date(2017, 4, 7)), 'Sun', 'short weekday name (Sunday)');
++	t.is(render('{ddd}', new Date(2017, 4, 6)), 'Sat', 'short weekday name (Saturday)');
++	t.is(render('{ddd}, {MMM} {DD}'), 'Mon, May 01', 'weekday in formatted string');
++	t.is(render('{Q}'), '2', 'returns quarter');
++	t.is(render('{Q}', new Date(2017, 0, 1)), '1', 'quarter (Jan -> Q1)');
++	t.is(render('{Q}', new Date(2017, 2, 31)), '1', 'quarter (Mar -> Q1)');
++	t.is(render('{Q}', new Date(2017, 3, 1)), '2', 'quarter (Apr -> Q2)');
++	t.is(render('{Q}', new Date(2017, 8, 30)), '3', 'quarter (Sep -> Q3)');
++	t.is(render('{Q}', new Date(2017, 11, 31)), '4', 'quarter (Dec -> Q4)');
++	t.is(render('{YYYY}-Q{Q}'), '2017-Q2', 'quarter in formatted string');
+ 	t.is(render('{DD}'), '01', 'returns numerical day');
+ 	t.is(render('{YY}'), '17', 'returns partial year');
+ 	t.is(render('{YYYY}'), '2017', 'returns full year');

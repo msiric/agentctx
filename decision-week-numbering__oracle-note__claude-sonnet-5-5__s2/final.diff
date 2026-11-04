@@ -1,0 +1,80 @@
+diff --git a/index.d.ts b/index.d.ts
+index 997d7dd..4bdc954 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -1,5 +1,5 @@
+ declare module 'tinydate' {
+-	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'HH' | 'mm' | 'ss' | 'fff';
++	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'DDD' | 'WW' | 'HH' | 'mm' | 'ss' | 'fff';
+ 	export type Formatter = (date: Date) => string | number;
+ 	export type Dictionary = Record<Defaults | string, Formatter>;
+ 
+diff --git a/readme.md b/readme.md
+index 7c4b332..0b6dfb7 100644
+--- a/readme.md
++++ b/readme.md
+@@ -81,6 +81,8 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{YY}`: short year; eg: **17**
+ - `{MM}`: month; eg: **04**
+ - `{DD}`: day; eg: **01**
++- `{DDD}`: day of year; eg: **091** (001–366)
++- `{WW}`: week of year, matching Excel `WEEKNUM(date, 2)` (weeks start Monday; week 1 contains Jan 1, so not ISO 8601); eg: **18** (01–54)
+ - `{HH}`: hours; eg: **06** (24h)
+ - `{mm}`: minutes; eg: **59**
+ - `{ss}`: seconds; eg: **09**
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..781a81e 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -7,6 +7,17 @@ var MAP = {
+ 		return d.getMonth() + 1;
+ 	},
+ 	DD: 'getDate',
++	DDD: function (d) {
++		// day of year (1-366); UTC math keeps DST shifts from skewing the count
++		return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(d.getFullYear(), 0, 0)) / 864e5);
++	},
++	WW: function (d) {
++		// Excel WEEKNUM(date, 2): weeks start Monday, week 1 contains Jan 1 (1-54)
++		var y = d.getFullYear();
++		var doy = Math.round((Date.UTC(y, d.getMonth(), d.getDate()) - Date.UTC(y, 0, 0)) / 864e5);
++		var lead = (new Date(y, 0, 1).getDay() + 6) % 7; // Mon=0 .. Sun=6
++		return Math.floor((doy - 1 + lead) / 7) + 1;
++	},
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+ 	ss: 'getSeconds',
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..740277e 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -28,6 +28,29 @@ test('rendering', t => {
+ 	t.is(render('{fff}'), '000', 'returns milliseconds (default 000)');
+ 	t.is(render('{fff}', new Date(1559607289771)), '771', 'returns milliseconds');
+ 
++	// day of year
++	t.is(render('{DDD}'), '121', 'returns padded day of year');
++	t.is(render('{DDD}', new Date(2017, 0, 1)), '001', 'Jan 1 is day 001');
++	t.is(render('{DDD}', new Date(2017, 11, 31)), '365', 'Dec 31 of common year is 365');
++	t.is(render('{DDD}', new Date(2016, 11, 31)), '366', 'Dec 31 of leap year is 366');
++	t.is(render('{DDD}', new Date(2016, 2, 1)), '061', 'counts Feb 29 in leap years');
++	t.is(render('{DDD}', new Date(2017, 2, 1)), '060', 'no Feb 29 in common years');
++	t.is(render('{DDD}', new Date(2017, 2, 12, 0, 30)), '071', 'unaffected by DST start (US)');
++	t.is(render('{DDD}', new Date(2017, 10, 5, 23, 59, 59)), '309', 'unaffected by DST end (US) / late-day times');
++	t.is(render('{DDD}-{YYYY}', new Date(2021, 0, 1)), '001-2021', 'composes with other tokens');
++
++	// week of year (Excel WEEKNUM(date, 2))
++	t.is(render('{WW}'), '19', 'returns padded week number');
++	t.is(render('{WW}', new Date(2023, 0, 1)), '01', '2023-01-01 (Sun) is week 01');
++	t.is(render('{WW}', new Date(2023, 0, 2)), '02', '2023-01-02 (Mon) starts week 02');
++	t.is(render('{WW}', new Date(2021, 0, 3)), '01', '2021-01-03 (Sun) is week 01');
++	t.is(render('{WW}', new Date(2021, 0, 4)), '02', '2021-01-04 (Mon) is week 02');
++	t.is(render('{WW}', new Date(2012, 11, 31)), '54', '2012-12-31 is week 54');
++	t.is(render('{WW}', new Date(2018, 0, 1)), '01', '2018-01-01 (Mon) is week 01');
++	t.is(render('{WW}', new Date(2018, 11, 31)), '53', '2018-12-31 is week 53');
++	t.is(render('{WW}', new Date(2017, 2, 12, 0, 30)), '11', 'unaffected by DST start (US)');
++	t.is(render('{YYYY}-W{WW}', new Date(2021, 0, 3)), '2021-W01', 'composes with other tokens');
++
+ 	// formats
+ 	t.is(render('[{HH}:{mm}:{ss}]'), '[16:30:09]', 'returns formatted time string');
+ 	t.is(render('The date is {MM}/{DD}/{YYYY}!'), 'The date is 05/01/2017!', 'returns formatted date string');

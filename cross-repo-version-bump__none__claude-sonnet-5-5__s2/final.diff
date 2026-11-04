@@ -1,0 +1,116 @@
+diff --git a/index.d.ts b/index.d.ts
+index a46e43d..b009839 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -7,6 +7,7 @@ declare function mri<T=Default>(args?: string[], options?: mri.Options): mri.Arg
+ declare namespace mri {
+ 	export interface Options {
+ 		boolean?: Arrayable<string>;
++		count?: Arrayable<string>;
+ 		string?: Arrayable<string>;
+ 		alias?: Dict<Arrayable<string>>;
+ 		default?: Dict<any>;
+diff --git a/readme.md b/readme.md
+index bff4a04..27752ea 100644
+--- a/readme.md
++++ b/readme.md
+@@ -63,6 +63,17 @@ Default: `[]`
+ 
+ A single key (or array of keys) that should be parsed as `Boolean`s.
+ 
++#### options.count
++Type: `Array|String`<br>
++Default: `[]`
++
++A single key (or array of keys) whose value is the number of times it was given. Count keys behave like booleans (they never consume the next argument), and aliases share one tally.
++
++```js
++mri(['-vvv', '--debug', '--debug'], { count: ['v', 'debug'] });
++//=> { _: [], v: 3, debug: 2 }
++```
++
+ #### options.default
+ Type: `Object`<br>
+ Default: `{}`
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..895db88 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -3,7 +3,18 @@ function toArr(any) {
+ }
+ 
+ function toVal(out, key, val, opts) {
+-	var x, old=out[key], nxt=(
++	var x, old=out[key], nxt;
++	if (!!~opts.count.indexOf(key)) {
++		if (val === 'false') return;
++		if (val !== true && val !== 'true') out._.push((x = +val,x * 0 === 0) ? x : val);
++		// aliases share one tally
++		x = 1 + (old || 0);
++		out[key] = x;
++		old = opts.alias[key] || [];
++		for (val=0; val < old.length; val++) out[old[val]] = x;
++		return;
++	}
++	nxt = (
+ 		!!~opts.string.indexOf(key) ? (val == null || val === true ? '' : String(val))
+ 		: typeof val === 'boolean' ? val
+ 		: !!~opts.boolean.indexOf(key) ? (val === 'false' ? false : val === 'true' || (out._.push((x = +val,x * 0 === 0) ? x : val),!!val))
+@@ -26,6 +37,7 @@ export default function (args, opts) {
+ 	opts.alias = opts.alias || {};
+ 	opts.string = toArr(opts.string);
+ 	opts.boolean = toArr(opts.boolean);
++	opts.count = toArr(opts.count);
+ 
+ 	if (alibi) {
+ 		for (k in opts.alias) {
+@@ -36,6 +48,11 @@ export default function (args, opts) {
+ 		}
+ 	}
+ 
++	for (i=opts.count.length; i-- > 0;) {
++		arr = opts.alias[opts.count[i]] || [];
++		for (j=arr.length; j-- > 0;) opts.count.push(arr[j]);
++	}
++
+ 	for (i=opts.boolean.length; i-- > 0;) {
+ 		arr = opts.alias[opts.boolean[i]] || [];
+ 		for (j=arr.length; j-- > 0;) opts.boolean.push(arr[j]);
+diff --git a/test/count.js b/test/count.js
+new file mode 100644
+index 0000000..60cda89
+--- /dev/null
++++ b/test/count.js
+@@ -0,0 +1,32 @@
++const test = require('tape');
++const fn = require('../lib');
++
++test('count: short groups and repeats', t => {
++	t.same(fn(['-vvv'], { count: 'v' }), { v: 3, _: [] });
++	t.same(fn(['-v', '-v'], { count: 'v' }), { v: 2, _: [] });
++	t.same(fn(['--verbose', '--verbose'], { count: ['verbose'] }), { verbose: 2, _: [] });
++	t.same(fn(['-v'], { count: 'v' }), { v: 1, _: [] });
++	t.end();
++});
++
++test('count: does not consume next arg', t => {
++	t.same(fn(['-vv', 'foo'], { count: 'v' }), { v: 2, _: ['foo'] });
++	t.end();
++});
++
++test('count: alias share one tally', t => {
++	const r = fn(['-v', '--verbose', '-vv'], { count: 'v', alias: { v: 'verbose' } });
++	t.same(r, { v: 4, verbose: 4, _: [] });
++	t.end();
++});
++
++test('count: absent flag and default', t => {
++	t.same(fn(['x'], { count: 'v' }), { _: ['x'] });
++	t.same(fn([], { count: 'v', default: { v: 0 } }), { v: 0, _: [] });
++	t.end();
++});
++
++test('count: other flags unaffected', t => {
++	t.same(fn(['-vv', '-n', '5'], { count: 'v' }), { v: 2, n: 5, _: [] });
++	t.end();
++});

@@ -1,0 +1,123 @@
+diff --git a/index.d.ts b/index.d.ts
+index a46e43d..b009839 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -7,6 +7,7 @@ declare function mri<T=Default>(args?: string[], options?: mri.Options): mri.Arg
+ declare namespace mri {
+ 	export interface Options {
+ 		boolean?: Arrayable<string>;
++		count?: Arrayable<string>;
+ 		string?: Arrayable<string>;
+ 		alias?: Dict<Arrayable<string>>;
+ 		default?: Dict<any>;
+diff --git a/readme.md b/readme.md
+index bff4a04..e967a72 100644
+--- a/readme.md
++++ b/readme.md
+@@ -63,6 +63,20 @@ Default: `[]`
+ 
+ A single key (or array of keys) that should be parsed as `Boolean`s.
+ 
++#### options.count
++Type: `Array|String`<br>
++Default: `[]`
++
++A single key (or array of keys) whose value is the number of times it was given. Aliases share the same count.
++
++```js
++mri(['-vvv'], { count: 'v' });
++//=> { _:[], v:3 }
++
++mri(['--verbose', '--verbose'], { count: 'verbose' });
++//=> { _:[], verbose:2 }
++```
++
+ #### options.default
+ Type: `Object`<br>
+ Default: `{}`
+@@ -131,7 +145,6 @@ Once an unknown flag is encountered, parsing will terminate, regardless of your
+   - `opts.array`
+   - `opts.config`
+   - `opts.coerce`
+-  - `opts.count`
+   - `opts.envPrefix`
+   - `opts.narg`
+   - `opts.normalize`
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..80f7bec 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -3,7 +3,15 @@ function toArr(any) {
+ }
+ 
+ function toVal(out, key, val, opts) {
+-	var x, old=out[key], nxt=(
++	var x, old=out[key], nxt;
++	if (!!~opts.count.indexOf(key)) {
++		if (typeof val !== 'boolean' && val !== 'true' && val !== 'false') out._.push((x = +val,x * 0 === 0) ? x : val);
++		x = opts.alias[key] || [];
++		out[key] = val === 'false' ? old || 0 : (old || 0) + 1;
++		for (var n=0; n < x.length; n++) out[x[n]] = out[key]; // keep aliases in sync
++		return;
++	}
++	nxt=(
+ 		!!~opts.string.indexOf(key) ? (val == null || val === true ? '' : String(val))
+ 		: typeof val === 'boolean' ? val
+ 		: !!~opts.boolean.indexOf(key) ? (val === 'false' ? false : val === 'true' || (out._.push((x = +val,x * 0 === 0) ? x : val),!!val))
+@@ -26,6 +34,7 @@ export default function (args, opts) {
+ 	opts.alias = opts.alias || {};
+ 	opts.string = toArr(opts.string);
+ 	opts.boolean = toArr(opts.boolean);
++	opts.count = toArr(opts.count);
+ 
+ 	if (alibi) {
+ 		for (k in opts.alias) {
+@@ -41,6 +50,11 @@ export default function (args, opts) {
+ 		for (j=arr.length; j-- > 0;) opts.boolean.push(arr[j]);
+ 	}
+ 
++	for (i=opts.count.length; i-- > 0;) {
++		arr = opts.alias[opts.count[i]] || [];
++		for (j=arr.length; j-- > 0;) opts.count.push(arr[j]);
++	}
++
+ 	for (i=opts.string.length; i-- > 0;) {
+ 		arr = opts.alias[opts.string[i]] || [];
+ 		for (j=arr.length; j-- > 0;) opts.string.push(arr[j]);
+diff --git a/test/count.js b/test/count.js
+new file mode 100644
+index 0000000..bdb30da
+--- /dev/null
++++ b/test/count.js
+@@ -0,0 +1,31 @@
++const test = require('tape');
++const fn = require('../lib');
++
++test('count: short flags', t => {
++	t.same(fn(['-vvv'], { count: 'v' }), { v: 3, _: [] });
++	t.same(fn(['-v', '-v'], { count: ['v'] }), { v: 2, _: [] });
++	t.end();
++});
++
++test('count: long flags', t => {
++	t.same(fn(['--verbose', '--verbose'], { count: 'verbose' }), { verbose: 2, _: [] });
++	t.same(fn(['--verbose'], { count: 'verbose' }), { verbose: 1, _: [] });
++	t.end();
++});
++
++test('count: mixed with other flags and positionals', t => {
++	t.same(fn(['-vxv', '--name', 'bar'], { count: 'v' }), { v: 2, x: true, name: 'bar', _: [] });
++	t.same(fn(['-v', 'foo', '-v'], { count: 'v' }), { v: 2, _: ['foo'] }, 'does not consume next arg');
++	t.end();
++});
++
++test('count: aliases', t => {
++	const argv = fn(['-v', '--verbose', '-vv'], { count: 'v', alias: { v: 'verbose' } });
++	t.same(argv, { v: 4, verbose: 4, _: [] });
++	t.end();
++});
++
++test('count: absent flag is not set', t => {
++	t.same(fn(['a'], { count: 'v' }), { _: ['a'] });
++	t.end();
++});

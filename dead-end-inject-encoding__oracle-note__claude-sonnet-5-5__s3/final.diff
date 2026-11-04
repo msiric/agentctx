@@ -1,0 +1,51 @@
+diff --git a/src/index.js b/src/index.js
+index 2e8bfc9..572aaa5 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -31,10 +31,19 @@ export function parse(input, loose) {
+ 
+ var RGX = /(\/|^)([:*][^/]*?)(\?)?(?=[/.]|$)/g;
+ 
++// RFC 3986: encodeURIComponent leaves ! ' ( ) * unescaped
++function enc(str) {
++	return encodeURIComponent(str).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
++}
++
+ // error if key missing?
+ export function inject(route, values) {
+ 	return route.replace(RGX, (x, lead, key, optional) => {
+ 		x = values[key=='*' ? key : key.substring(1)];
+-		return x ? '/'+x : (optional || key=='*') ? '' : '/' + key;
++		if (x || x === 0) {
++			x = ''+x;
++			return '/' + (key=='*' ? x.split('/').map(enc).join('/') : enc(x));
++		}
++		return (optional || key=='*') ? '' : '/' + key;
+ 	});
+ }
+diff --git a/test/inject.js b/test/inject.js
+index 9e52300..1236543 100644
+--- a/test/inject.js
++++ b/test/inject.js
+@@ -69,6 +69,21 @@ run('/foo/:bar/*?', '/foo/123', { bar: '123' });
+ run('/foo/:bar/*', '/foo/123/aa/bb/cc', { bar: '123', '*': 'aa/bb/cc' });
+ run('/foo/:bar/*?', '/foo/123/aa/bb/cc', { bar: '123', '*': 'aa/bb/cc' });
+ 
++// NOTE: Falsy-but-valid values
++run('/page/:n', '/page/0', { n: 0 });
++run('/page/:n?', '/page/0', { n: 0 });
++
++// NOTE: Percent-encoding (RFC 3986)
++run('/foo/:id', '/foo/a%20b%2Fc', { id: 'a b/c' });
++run('/foo/:id', '/foo/%27%28%29%21%2A', { id: "'()!*" });
++run('/foo/:id', '/foo/%3F%23%26%25', { id: '?#&%' });
++run('/foo/:id', '/foo/caf%C3%A9', { id: 'café' });
++run('/foo/:id?', '/foo/a%20b', { id: 'a b' });
++run('/assets/:video.mp4', '/assets/my%20clip.mp4', { video: 'my clip' });
++run('/foo/*', '/foo/aa/b%20b/c%27d', { '*': "aa/b b/c'd" });
++run('/foo/*?', '/foo/a%28b%29/%21', { '*': 'a(b)/!' });
++run('/foo/:bar/*', '/foo/a%2Fb/c%20d/e', { bar: 'a/b', '*': 'c d/e' });
++
+ // NOTE: Missing non-optional values
+ // ---
+ run('/foo/:id', '/foo/:id', { /* empty */ });

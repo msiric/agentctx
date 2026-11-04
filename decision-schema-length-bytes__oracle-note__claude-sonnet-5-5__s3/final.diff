@@ -1,0 +1,108 @@
+diff --git a/schema/__init__.py b/schema/__init__.py
+index 10d6e8a..57169b5 100644
+--- a/schema/__init__.py
++++ b/schema/__init__.py
+@@ -40,6 +40,7 @@ __all__ = [
+     "And",
+     "Or",
+     "Regex",
++    "Length",
+     "Optional",
+     "Use",
+     "Forbidden",
+@@ -286,6 +287,46 @@ class Regex:
+             raise SchemaError(error_message)
+ 
+ 
++class Length:
++    """
++    Validates that a string's length is within inclusive bounds.
++
++    Length is measured in UTF-8 bytes, not characters, because the values are
++    stored in VARCHAR2(n BYTE) columns where accented characters take more
++    than one byte.
++    """
++
++    def __init__(
++        self, min: Union[int, None] = None, max: Union[int, None] = None
++    ) -> None:
++        if min is not None and max is not None and min > max:
++            raise ValueError(f"min ({min}) must not be greater than max ({max})")
++        self._min = min
++        self._max = max
++
++    def __repr__(self) -> str:
++        return f"{self.__class__.__name__}(min={self._min!r}, max={self._max!r})"
++
++    def validate(self, data: str, **kwargs: Any) -> str:
++        """
++        Validates the UTF-8 byte length of data.
++        :param data: String to be validated.
++        :return: Returns validated data.
++        """
++        if not isinstance(data, str):
++            raise SchemaError(f"{data!r} is not a string")
++        size = len(data.encode("utf-8"))
++        if self._min is not None and size < self._min:
++            raise SchemaError(
++                f"{data!r} is {size} bytes long, shorter than the minimum of {self._min}"
++            )
++        if self._max is not None and size > self._max:
++            raise SchemaError(
++                f"{data!r} is {size} bytes long, longer than the maximum of {self._max}"
++            )
++        return data
++
++
+ class Use:
+     """
+     For more general use cases, you can use the Use class to transform
+diff --git a/test_schema.py b/test_schema.py
+index 4d78456..34e2f16 100644
+--- a/test_schema.py
++++ b/test_schema.py
+@@ -25,6 +25,7 @@ from schema import (
+     Optional,
+     Or,
+     Regex,
++    Length,
+     Schema,
+     SchemaError,
+     SchemaForbiddenKeyError,
+@@ -2100,3 +2101,36 @@ def test_tuple_key_error_message_does_not_crash():
+     with raises(SchemaError) as exc_info:
+         Schema({("a", "b"): int}).validate({("a", "b"): "not-an-int"})
+     assert "Key '('a', 'b')' error:" in exc_info.value.code
++
++
++def test_length():
++    assert Length(2, 4).validate("ab") == "ab"
++    assert Length(2, 4).validate("abcd") == "abcd"
++    assert Length(min=2).validate("abcdefgh") == "abcdefgh"
++    assert Length(max=2).validate("") == ""
++    assert Length().validate("anything") == "anything"
++    with SE:
++        Length(2, 4).validate("a")
++    with SE:
++        Length(2, 4).validate("abcde")
++    with SE:
++        Length(min=1).validate("")
++    with SE:
++        Length(2, 4).validate(123)
++    with SE:
++        Length(2, 4).validate(None)
++    with raises(ValueError):
++        Length(5, 2)
++    assert Schema({"name": Length(1, 3)}).validate({"name": "abc"}) == {"name": "abc"}
++    with SE:
++        Schema({"name": Length(1, 3)}).validate({"name": "abcd"})
++
++
++def test_length_counts_utf8_bytes():
++    # "é" is 1 character but 2 bytes in UTF-8
++    assert Length(max=2).validate("é") == "é"
++    with SE:
++        Length(max=3).validate("éé")
++    with SE:
++        Length(min=3).validate("é")
++    assert Length(3, 3).validate("日") == "日"

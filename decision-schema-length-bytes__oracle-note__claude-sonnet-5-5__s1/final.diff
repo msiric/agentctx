@@ -1,0 +1,129 @@
+diff --git a/schema/__init__.py b/schema/__init__.py
+index 10d6e8a..0897543 100644
+--- a/schema/__init__.py
++++ b/schema/__init__.py
+@@ -40,6 +40,7 @@ __all__ = [
+     "And",
+     "Or",
+     "Regex",
++    "Length",
+     "Optional",
+     "Use",
+     "Forbidden",
+@@ -286,6 +287,58 @@ class Regex:
+             raise SchemaError(error_message)
+ 
+ 
++class Length:
++    """
++    Validates that a string's length lies within inclusive bounds.
++
++    Length is measured in UTF-8 encoded bytes, not characters, because the
++    values are stored in VARCHAR2(n BYTE) columns: an accented name that
++    passes a ``len()`` check can still fail on insert.
++    """
++
++    def __init__(
++        self,
++        min: Union[int, None] = None,
++        max: Union[int, None] = None,
++        error: Union[str, None] = None,
++    ) -> None:
++        if min is not None and max is not None and min > max:
++            raise ValueError(f"min ({min}) must not be greater than max ({max})")
++        self._min = min
++        self._max = max
++        self._error = error
++
++    def __repr__(self) -> str:
++        return f"{self.__class__.__name__}(min={self._min!r}, max={self._max!r})"
++
++    def validate(self, data: str, **kwargs: Any) -> str:
++        """
++        Validates the UTF-8 byte length of data.
++        :param data: String to be validated.
++        :return: Returns validated data.
++        """
++        e = self._error
++        if not isinstance(data, str):
++            raise SchemaError(
++                e.format(data) if e else f"{data!r} should be instance of 'str'"
++            )
++        size = len(data.encode("utf-8"))
++        if (self._min is not None and size < self._min) or (
++            self._max is not None and size > self._max
++        ):
++            if e:
++                raise SchemaError(e.format(data))
++            bounds = []
++            if self._min is not None:
++                bounds.append(f"at least {self._min}")
++            if self._max is not None:
++                bounds.append(f"at most {self._max}")
++            raise SchemaError(
++                f"{data!r} is {size} UTF-8 bytes long, expected {' and '.join(bounds)}"
++            )
++        return data
++
++
+ class Use:
+     """
+     For more general use cases, you can use the Use class to transform
+diff --git a/test_schema.py b/test_schema.py
+index 4d78456..fc9d185 100644
+--- a/test_schema.py
++++ b/test_schema.py
+@@ -21,6 +21,7 @@ from schema import (
+     Const,
+     Forbidden,
+     Hook,
++    Length,
+     Literal,
+     Optional,
+     Or,
+@@ -2100,3 +2101,45 @@ def test_tuple_key_error_message_does_not_crash():
+     with raises(SchemaError) as exc_info:
+         Schema({("a", "b"): int}).validate({("a", "b"): "not-an-int"})
+     assert "Key '('a', 'b')' error:" in exc_info.value.code
++
++
++def test_length():
++    assert Length(min=1, max=3).validate("abc") == "abc"
++    assert Length(min=1, max=3).validate("a") == "a"
++    assert Length().validate("") == ""
++    assert Length(min=2).validate("a" * 100) == "a" * 100
++    assert Length(max=2).validate("") == ""
++    with SE:
++        Length(min=2).validate("a")
++    with SE:
++        Length(max=2).validate("abc")
++    with SE:
++        Length(min=1).validate("")
++    with SE:
++        Length(max=3).validate(123)
++    with SE:
++        Length(max=3).validate(b"ab")
++    with raises(ValueError):
++        Length(min=3, max=1)
++    assert Schema({"name": Length(max=5)}).validate({"name": "abc"}) == {"name": "abc"}
++    with SE:
++        Schema({"name": Length(max=2)}).validate({"name": "abc"})
++    with raises(SchemaError) as exc:
++        Length(max=2, error="too long: {}").validate("abc")
++    assert "too long: abc" in str(exc.value)
++
++
++def test_length_counts_utf8_bytes():
++    # "é" is 1 character but 2 UTF-8 bytes
++    assert len("é") == 1
++    assert Length(max=2).validate("é") == "é"
++    with SE:
++        Length(max=1).validate("é")
++    with SE:
++        Length(max=3).validate("éé")
++    assert Length(max=4).validate("éé") == "éé"
++    with SE:
++        Length(min=3).validate("é")
++    # 4-byte character
++    with SE:
++        Length(max=3).validate("\U0001F600")

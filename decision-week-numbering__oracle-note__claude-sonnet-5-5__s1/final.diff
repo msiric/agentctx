@@ -1,0 +1,87 @@
+diff --git a/index.d.ts b/index.d.ts
+index 997d7dd..4bdc954 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -1,5 +1,5 @@
+ declare module 'tinydate' {
+-	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'HH' | 'mm' | 'ss' | 'fff';
++	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'DDD' | 'WW' | 'HH' | 'mm' | 'ss' | 'fff';
+ 	export type Formatter = (date: Date) => string | number;
+ 	export type Dictionary = Record<Defaults | string, Formatter>;
+ 
+diff --git a/readme.md b/readme.md
+index 7c4b332..53e6730 100644
+--- a/readme.md
++++ b/readme.md
+@@ -81,6 +81,8 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{YY}`: short year; eg: **17**
+ - `{MM}`: month; eg: **04**
+ - `{DD}`: day; eg: **01**
++- `{DDD}`: day of year; eg: **091** (001–366)
++- `{WW}`: week of year, like Excel `WEEKNUM(date, 2)` (weeks start Monday; week 1 contains Jan 1, so not ISO 8601); eg: **18** (01–54)
+ - `{HH}`: hours; eg: **06** (24h)
+ - `{mm}`: minutes; eg: **59**
+ - `{ss}`: seconds; eg: **09**
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..773943c 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,5 +1,11 @@
+ var RGX = /([^{]*?)\w(?=\})/g;
+ 
++function doy(d) {
++	// day of year (1-366); diff in UTC so DST shifts can't skew the count
++	var y = d.getFullYear();
++	return (Date.UTC(y, d.getMonth(), d.getDate()) - Date.UTC(y, 0, 0)) / 864e5;
++}
++
+ var MAP = {
+ 	YYYY: 'getFullYear',
+ 	YY: 'getYear',
+@@ -7,6 +13,12 @@ var MAP = {
+ 		return d.getMonth() + 1;
+ 	},
+ 	DD: 'getDate',
++	DDD: doy,
++	WW: function (d) {
++		// Excel WEEKNUM(date, 2): weeks start Monday, week 1 contains Jan 1
++		var jan1 = (new Date(d.getFullYear(), 0, 1).getDay() + 6) % 7; // Mon=0
++		return Math.floor((doy(d) - 1 + jan1) / 7) + 1;
++	},
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+ 	ss: 'getSeconds',
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..4c72980 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -28,6 +28,29 @@ test('rendering', t => {
+ 	t.is(render('{fff}'), '000', 'returns milliseconds (default 000)');
+ 	t.is(render('{fff}', new Date(1559607289771)), '771', 'returns milliseconds');
+ 
++	// day of year
++	t.is(render('{DDD}', new Date(2017, 0, 1)), '001', 'returns day of year (first day, padded)');
++	t.is(render('{DDD}'), '121', 'returns day of year');
++	t.is(render('{DDD}', new Date(2017, 11, 31)), '365', 'returns day of year (last day, non-leap)');
++	t.is(render('{DDD}', new Date(2016, 11, 31)), '366', 'returns day of year (last day, leap)');
++	t.is(render('{DDD}', new Date(2016, 1, 29)), '060', 'returns day of year (leap day)');
++	t.is(render('{DDD}', new Date(2017, 2, 1)), '060', 'returns day of year (Mar 1, non-leap)');
++	t.is(render('{DDD}', new Date(2017, 2, 12, 12)), '071', 'returns day of year (across US DST start)');
++	t.is(render('{DDD}', new Date(2017, 10, 6, 0, 30)), '310', 'returns day of year (across US DST end)');
++	t.is(render('{DDD}', new Date(2017, 11, 31, 23, 59, 59, 999)), '365', 'ignores time of day');
++
++	// week of year (Excel WEEKNUM(date, 2))
++	t.is(render('{WW}'), '19', 'returns week of year');
++	t.is(render('{WW}', new Date(2023, 0, 1)), '01', 'Sunday Jan 1 is week 01');
++	t.is(render('{WW}', new Date(2023, 0, 2)), '02', 'first Monday after Sunday Jan 1 starts week 02');
++	t.is(render('{WW}', new Date(2021, 0, 3)), '01', 'Sunday ends week 01 (Jan 1 is Friday)');
++	t.is(render('{WW}', new Date(2021, 0, 4)), '02', 'Monday starts new week');
++	t.is(render('{WW}', new Date(2018, 0, 1)), '01', 'Jan 1 on Monday is week 01');
++	t.is(render('{WW}', new Date(2018, 0, 7)), '01', 'Sunday after Monday Jan 1 is week 01');
++	t.is(render('{WW}', new Date(2018, 0, 8)), '02', 'second Monday is week 02');
++	t.is(render('{WW}', new Date(2012, 11, 31)), '54', 'returns week 54 (leap year starting Sunday)');
++	t.is(render('{WW}', new Date(2017, 11, 31)), '53', 'returns week 53');
++
+ 	// formats
+ 	t.is(render('[{HH}:{mm}:{ss}]'), '[16:30:09]', 'returns formatted time string');
+ 	t.is(render('The date is {MM}/{DD}/{YYYY}!'), 'The date is 05/01/2017!', 'returns formatted date string');

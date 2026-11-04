@@ -1,0 +1,95 @@
+diff --git a/index.d.ts b/index.d.ts
+index 997d7dd..7b871f0 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -1,5 +1,5 @@
+ declare module 'tinydate' {
+-	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'HH' | 'mm' | 'ss' | 'fff';
++	type Defaults = 'YYYY' | 'YY' | 'MM' | 'MMM' | 'Q' | 'DD' | 'ddd' | 'HH' | 'mm' | 'ss' | 'fff';
+ 	export type Formatter = (date: Date) => string | number;
+ 	export type Dictionary = Record<Defaults | string, Formatter>;
+ 
+diff --git a/readme.md b/readme.md
+index 7c4b332..5ab5b56 100644
+--- a/readme.md
++++ b/readme.md
+@@ -80,6 +80,9 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{YYYY}`: full year; eg: **2017**
+ - `{YY}`: short year; eg: **17**
+ - `{MM}`: month; eg: **04**
++- `{MMM}`: short month name (English); eg: **Apr**
++- `{ddd}`: short weekday name (English); eg: **Mon**
++- `{Q}`: Australian financial-year quarter (FY starts 1 July: Jul-Sep is 1, Oct-Dec is 2, Jan-Mar is 3, Apr-Jun is 4); eg: **3**
+ - `{DD}`: day; eg: **01**
+ - `{HH}`: hours; eg: **06** (24h)
+ - `{mm}`: minutes; eg: **59**
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..523e172 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,11 +1,25 @@
+ var RGX = /([^{]*?)\w(?=\})/g;
+ 
++var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
++
++var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
++
+ var MAP = {
+ 	YYYY: 'getFullYear',
+ 	YY: 'getYear',
+ 	MM: function (d) {
+ 		return d.getMonth() + 1;
+ 	},
++	MMM: function (d) {
++		return MONTHS[d.getMonth()];
++	},
++	ddd: function (d) {
++		return DAYS[d.getDay()];
++	},
++	Q: function (d) {
++		// Australian financial year: starts 1 July (Jul-Sep=1 ... Apr-Jun=4)
++		return Math.floor(((d.getMonth() + 6) % 12) / 3) + 1;
++	},
+ 	DD: 'getDate',
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..8876e3a 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -18,6 +18,7 @@ test('rendering', t => {
+ 	t.is(render('foo'), 'foo', 'does nothing if no match');
+ 	t.is(render('HH'), 'HH', 'does nothing if no `{}` wrappers');
+ 	t.is(render('{MM}'), '05', 'returns numerical month');
++	t.is(render('{MMM}'), 'May', 'returns short month name');
+ 	t.is(render('{DD}'), '01', 'returns numerical day');
+ 	t.is(render('{YY}'), '17', 'returns partial year');
+ 	t.is(render('{YYYY}'), '2017', 'returns full year');
+@@ -28,6 +29,27 @@ test('rendering', t => {
+ 	t.is(render('{fff}'), '000', 'returns milliseconds (default 000)');
+ 	t.is(render('{fff}', new Date(1559607289771)), '771', 'returns milliseconds');
+ 
++	const names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
++	names.forEach((name, i) => {
++		t.is(render('{MMM}', new Date(2017, i, 15)), name, `{MMM} => ${name}`);
++	});
++	t.is(render('{MMM} {DD}, {YYYY}'), 'May 01, 2017', 'works alongside other tokens');
++
++	t.is(render('{ddd}'), 'Mon', 'returns short weekday name');
++	['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach((name, i) => {
++		t.is(render('{ddd}', new Date(2017, 4, 7 + i)), name, `{ddd} => ${name}`);
++	});
++	t.is(render('{ddd}, {MMM} {DD}'), 'Mon, May 01', 'works alongside other tokens');
++
++	// Australian financial-year quarter (FY starts 1 July)
++	const quarters = [3,3,3,4,4,4,1,1,1,2,2,2];
++	quarters.forEach((q, i) => {
++		t.is(render('{Q}', new Date(2017, i, 15)), String(q), `{Q} month ${i + 1} => ${q}`);
++	});
++	t.is(render('{Q}', new Date(2017, 5, 30)), '4', '{Q} last day of FY is 4');
++	t.is(render('{Q}', new Date(2017, 6, 1)), '1', '{Q} first day of FY is 1');
++	t.is(render('FY Q{Q}'), 'FY Q4', 'works alongside other text');
++
+ 	// formats
+ 	t.is(render('[{HH}:{mm}:{ss}]'), '[16:30:09]', 'returns formatted time string');
+ 	t.is(render('The date is {MM}/{DD}/{YYYY}!'), 'The date is 05/01/2017!', 'returns formatted date string');
