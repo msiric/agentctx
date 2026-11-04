@@ -1,0 +1,113 @@
+diff --git a/schema/__init__.py b/schema/__init__.py
+index 10d6e8a..ae989bb 100644
+--- a/schema/__init__.py
++++ b/schema/__init__.py
+@@ -40,6 +40,7 @@ __all__ = [
+     "And",
+     "Or",
+     "Regex",
++    "Length",
+     "Optional",
+     "Use",
+     "Forbidden",
+@@ -286,6 +287,51 @@ class Regex:
+             raise SchemaError(error_message)
+ 
+ 
++class Length:
++    """
++    Validates that a string's length is within inclusive bounds.
++    """
++
++    def __init__(
++        self,
++        min: Union[int, None] = None,
++        max: Union[int, None] = None,
++        error: Union[str, None] = None,
++    ) -> None:
++        if min is not None and max is not None and min > max:
++            raise ValueError(f"min ({min}) must not be greater than max ({max})")
++        self._min: Union[int, None] = min
++        self._max: Union[int, None] = max
++        self._error: Union[str, None] = error
++
++    def __repr__(self) -> str:
++        return f"{self.__class__.__name__}(min={self._min!r}, max={self._max!r})"
++
++    def validate(self, data: str, **kwargs: Any) -> str:
++        """
++        Validates the length of data.
++        :param data: Data to be validated.
++        :return: Returns validated data.
++        """
++        e = self._error
++
++        if not isinstance(data, str):
++            raise SchemaError(e.format(data) if e else f"{data!r} is not a string")
++        if (self._min is not None and len(data) < self._min) or (
++            self._max is not None and len(data) > self._max
++        ):
++            if e:
++                raise SchemaError(e.format(data))
++            if self._min is not None and self._max is not None:
++                bounds = f"between {self._min} and {self._max}"
++            elif self._min is not None:
++                bounds = f"at least {self._min}"
++            else:
++                bounds = f"at most {self._max}"
++            raise SchemaError(f"length of {data!r} must be {bounds}, got {len(data)}")
++        return data
++
++
+ class Use:
+     """
+     For more general use cases, you can use the Use class to transform
+diff --git a/test_schema.py b/test_schema.py
+index 4d78456..6e2724a 100644
+--- a/test_schema.py
++++ b/test_schema.py
+@@ -25,6 +25,7 @@ from schema import (
+     Optional,
+     Or,
+     Regex,
++    Length,
+     Schema,
+     SchemaError,
+     SchemaForbiddenKeyError,
+@@ -215,6 +216,36 @@ def test_regex():
+         Regex(None).validate("bar")
+ 
+ 
++def test_length():
++    assert Length(min=2, max=4).validate("ab") == "ab"
++    assert Length(min=2, max=4).validate("abcd") == "abcd"
++    with SE:
++        Length(min=2, max=4).validate("a")
++    with SE:
++        Length(min=2, max=4).validate("abcde")
++    assert Length(min=2).validate("a" * 100) == "a" * 100
++    with SE:
++        Length(min=2).validate("a")
++    assert Length(max=2).validate("") == ""
++    with SE:
++        Length(max=2).validate("abc")
++    assert Length().validate("anything") == "anything"
++    # Non-strings are rejected
++    for bad in (1, None, [], {}, b"ab"):
++        with SE:
++            Length(min=0).validate(bad)
++    with raises(ValueError):
++        Length(min=3, max=2)
++    # Custom error and use inside a Schema
++    with raises(SchemaError, match="too short: a"):
++        Length(min=2, error="too short: {}").validate("a")
++    assert Schema({"name": Length(min=1, max=3)}).validate({"name": "bob"}) == {
++        "name": "bob"
++    }
++    with SE:
++        Schema({"name": Length(min=1, max=3)}).validate({"name": "bobby"})
++
++
+ def test_validate_list():
+     assert Schema([1, 0]).validate([1, 0, 1, 1]) == [1, 0, 1, 1]
+     assert Schema([1, 0]).validate([]) == []
