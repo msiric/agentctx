@@ -134,3 +134,17 @@ through Hindsight's own MCP tool, which needs no LLM, so the check missed it.
   silently again. A one-episode smoke check confirms storage before the
   held-out run continues. No other arm is affected; pass rates were not
   looked at.
+
+## 2026-11-04: held-out set 2, `none` reused its gate cells by mistake
+
+- **What happened:** The addendum says `none` runs again in the held-out run
+  rather than reusing its gate cells. The matrix skips cells that already
+  exist, and the gate's `none` cells have the same names, so the held-out run
+  (runs 41854116419 and 41876995757) only ran `trailkeep` and `handoff`.
+- **Fix:** `none` ran again under the label `none@rerun` (plan
+  `heldout2-none`, run 41881104226, same frozen branch and versions). H1-2
+  uses `none@rerun`. The gate-cell `none` result is reported alongside for
+  reference only.
+- **Effect:** none on H2b-2, which doesn't involve `none`. This was found
+  when the analysis listed two trailkeep commits in the version line, before
+  `none@rerun` results existed.
