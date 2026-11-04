@@ -196,3 +196,33 @@ set 2 mixes trailkeep versions, so any pooled result is exploratory.
 
 No trap is edited after the gate unless it is broken (logged in
 `DEVIATIONS.md`). Set 2 runs once and is reported whatever it shows.
+
+## Addendum: held-out set 3 (committed 2026-11-05, before its traps exist)
+
+Set 2 tied trailkeep 0.5.0 with the handoff file (79% each, p = 0.62).
+trailkeep 0.5.1 was changed after reading set 2's failures (the capture rule
+now asks the agent to check before finishing that nothing is left
+unrecorded), so set 2 is no longer unseen. Set 3 is a fresh test of 0.5.1.
+
+**Traps.** 12 new traps from two new blind authors (6 Python, 6
+TypeScript/JavaScript), 2 per fact family, same spec and blindness as set 2,
+with set 2's gate lessons added to the brief. They use repos that no earlier
+trap used. Every trap is held-out.
+
+**Gate.** Same rule: `none` and `oracle-note`, 3 seeds. Drop a trap if `none`
+passes 2 or more of 3, or `oracle-note` fails 2 or more of 3.
+
+**Run.** On the kept traps: `trailkeep` (0.5.1), `handoff` and `none`, 3
+seeds, frozen versions (`PINS.env`), dispatched from a frozen branch. `none`
+runs under a fresh label (`none@rerun`) so the gate cells are not reused.
+
+**Primary.** Same method as set 2, on set 3 only, Holm-corrected at α = 0.05:
+- **H2b-3:** trailkeep has a higher pass rate than handoff.
+- **H1-3:** trailkeep has a higher pass rate than no memory.
+
+**Secondary.** Tokens added at session start, H5 on the superseded traps,
+failure labels for every trailkeep and handoff failure. Any pooling with
+earlier sets is exploratory.
+
+No trap is edited after the gate unless it is broken (logged in
+`DEVIATIONS.md`). Set 3 runs once and is reported whatever it shows.
