@@ -177,3 +177,33 @@ From the held-out failure labels (`heldout.md`):
 Validated on the dev traps as arm `trailkeep@scope` (plan `dev-scope`). The
 held-out traps are no longer unseen, so they aren't used to tune this; a
 fresh held-out set comes next.
+
+## 6. `trailkeep@scope` on the dev traps: 31 of 33 (2026-11-04)
+
+Run 41819878467, pinned versions, 12 dev traps × 3 seeds.
+
+| | `trailkeep@capture` (0.4.0) | `trailkeep@scope` |
+|---|---|---|
+| Fact traps passed | 30/33 (91%) | 31/33 (94%) |
+| Branch-isolation traps | 6/6 | 6/6 |
+| xrepo-error-prefix | 0/3 | 2/3 |
+| deadend-sortkeys | 3/3 | 2/3 |
+| Control | 3/3 | 3/3 |
+
+No regression on branch isolation: the other-branch list only appears on a
+branch with no notes, and both branch traps' last sessions had their own.
+
+Failures, both **use failures** (the note was captured and injected in the
+last session):
+- xrepo-error-prefix s1: the `--all` note was injected under the new
+  "preferences for every repo" heading; the agent still wrote an unprefixed
+  message. The note carried a qualifier ("applied to new messages only in
+  pretty-bytes") that may have read as narrowing it.
+- deadend-sortkeys s1: the dead end was injected; the agent chose a
+  different fix (fall back to unsorted) than the one the checker requires.
+
+Bug found: agents sometimes write their own date, giving
+"2026-11-04: 2026-11-04: ...". `note` now drops a leading date.
+
+Small sample (one seed per difference); read as "no regression", not as an
+improvement. Released as 0.5.0.

@@ -638,7 +638,8 @@ cmd_note() {
     -h|--help|help|"") die 'usage: trailkeep note [--repo|--all] "what and why"' ;;
   esac
   [ $# -ge 1 ] || die 'usage: trailkeep note [--repo|--all] "what and why"'
-  text=$(printf '%s' "$*" | one_line)
+  # drop a date the agent wrote itself; the note gets today's date below
+  text=$(printf '%s' "$*" | one_line | sed 's/^[-* ]*[0-9]\{4\}-[0-9][0-9]-[0-9][0-9]:\{0,1\}[[:space:]]*//')
   [ -n "$text" ] || die "note: empty text"
   case $scope in
     branch)

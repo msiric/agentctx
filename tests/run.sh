@@ -468,8 +468,9 @@ test_note() {
   git checkout -q -b feat/cache
   out=$(ax note 2>&1); status $? 1 "note needs text"
   ax note "Use the file cache, not Redis: no Redis in prod" >/dev/null; status $? 0 "branch note"
-  ax note "Dead end: mmap fails on NFS" >/dev/null
+  ax note "2026-01-02: Dead end: mmap fails on NFS" >/dev/null
   f=$(ax path); is_file "$f"
+  case $(cat "$f") in *"2026-01-02"*) flunk "a date the agent wrote is dropped" ;; *) pass ;; esac
   out=$(ax context --for claude </dev/null)
   contains "$out" "decisions recorded for branch feat/cache" "notes-only file injected as decisions"
   contains "$out" "no Redis in prod"; contains "$out" "mmap fails on NFS"
