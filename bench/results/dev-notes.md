@@ -219,3 +219,32 @@ session is left unrecorded."
 Validated as arm `trailkeep@finish` (plan `dev-finish`) on the 12 dev traps
 and set 2's 11 traps. Set 2 has now been seen, so it counts as dev from here
 on. Any claim about this change needs a fresh held-out set.
+
+Result (runs 41890600356 and 41926296914, 69 cells; the first paused at the
+usage limit):
+
+| Traps | trailkeep@finish | Before | Capture misses (no note written) |
+|---|---|---|---|
+| Set 2, 11 traps | 30/33 | 26/33 (trailkeep 0.5.0) | 0, was 6 |
+| Dev, 11 fact traps | 30/33 | 31/33 (trailkeep@scope) | 0, was 0 |
+| Control | 3/3 | 3/3 | |
+
+Biggest gains: branch-isolation-semver-silent-deprecation 3/3 (was 1/3),
+dead-end-inject-encoding 3/3 (was 1/3), decision-week-numbering and
+superseded-test-runner 3/3 (were 2/3).
+
+The 6 failures:
+
+- dead-end-humanize-half-up s1, s2: capture too narrow. The user said
+  everything rendered must match billing's rounding. The note said only that
+  percent() rounds half up, so session 2 read it as not covering gigabytes().
+- deadend-sortkeys-mixed-keys s2, s3: use failure. The note recorded the dead
+  end. The agent chose an unsorted fallback anyway (2/3 before as well).
+- cross-repo-version-bump s2, xrepo-version-bump-cookie-to-ms s1: other. The
+  version bump (the fact) was right both times. The task itself was left
+  incomplete.
+
+Reading: the change removes the failure it targeted and costs nothing
+measurable on the dev traps (30 vs 31 of 33 is one run). Released as 0.5.1
+and frozen for held-out set 3. A candidate for later, not part of 0.5.1:
+ask notes to keep a rule as broad as the user stated it.
