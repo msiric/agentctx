@@ -1,0 +1,166 @@
+diff --git a/src/utils.ts b/src/utils.ts
+index ea98aba..2b6d580 100644
+--- a/src/utils.ts
++++ b/src/utils.ts
+@@ -433,7 +433,16 @@ export function joinURL(base: string, ...input: string[]): string {
+     if (url) {
+       // TODO: Handle .. when joining
+       const _segment = segment.replace(JOIN_LEADING_SLASH_RE, "");
+-      url = withTrailingSlash(url) + _segment;
++      const suffixIndex = url.search(/[#?]/);
++      if (suffixIndex === -1 || /[#?]/.test(_segment)) {
++        url = withTrailingSlash(url) + _segment;
++      } else {
++        // Keep the query string and fragment of the base at the end
++        url =
++          withTrailingSlash(url.slice(0, suffixIndex)) +
++          _segment +
++          url.slice(suffixIndex);
++      }
+     } else {
+       url = segment;
+     }
+@@ -773,3 +782,23 @@ export function withoutHost(input: string) {
+   const parsed = parseURL(input);
+   return (parsed.pathname || "/") + parsed.search + parsed.hash;
+ }
++
++/**
++ * Checks if two URLs have the same origin (protocol, host and port).
++ *
++ * Default ports are normalized (`https://a.com` equals `https://a.com:443`).
++ * Relative, protocol-relative and opaque-origin URLs (e.g. `mailto:`, `data:`) never match.
++ */
++export function isSameOrigin(a: string, b: string): boolean {
++  const originA = _getOrigin(a);
++  return originA !== undefined && originA === _getOrigin(b);
++}
++
++function _getOrigin(input: string): string | undefined {
++  try {
++    const { origin } = new URL(input);
++    return origin === "null" ? undefined : origin;
++  } catch {
++    return undefined;
++  }
++}
+diff --git a/test/join.test.ts b/test/join.test.ts
+index 39bdb2e..ac779ce 100644
+--- a/test/join.test.ts
++++ b/test/join.test.ts
+@@ -34,6 +34,20 @@ describe("joinURL", () => {
+   }
+ });
+ 
++describe("joinURL with query and fragment", () => {
++  const tests = [
++    { input: ["/api?v=2", "users"], out: "/api/users?v=2" },
++    { input: ["/api/?v=2", "/users"], out: "/api/users?v=2" },
++    { input: ["/api#top", "users"], out: "/api/users#top" },
++    { input: ["/api?v=2#top", "a", "b"], out: "/api/a/b?v=2#top" },
++  ] as const;
++  for (const t of tests) {
++    test(`joinURL(${t.input.map((i) => JSON.stringify(i)).join(", ")}) === ${JSON.stringify(t.out)}`, () => {
++      expect(joinURL(...(t.input as [string, ...string[]]))).toBe(t.out);
++    });
++  }
++});
++
+ describe("joinRelativeURL", () => {
+   const relativeTests = [
+     ...joinURLTests,
+diff --git a/test/same-origin.test.ts b/test/same-origin.test.ts
+new file mode 100644
+index 0000000..a9e3514
+--- /dev/null
++++ b/test/same-origin.test.ts
+@@ -0,0 +1,89 @@
++import { describe, expect, test } from "vitest";
++import { isSameOrigin } from "../src";
++
++describe("isSameOrigin", () => {
++  const sameOrigin = [
++    // Identical
++    ["https://example.com", "https://example.com"],
++    // Path, query and hash are ignored
++    ["https://example.com", "https://example.com/"],
++    ["https://example.com/foo", "https://example.com/bar"],
++    ["https://example.com/?a=1", "https://example.com/?b=2"],
++    ["https://example.com/#a", "https://example.com/#b"],
++    // Protocol and host are case-insensitive
++    ["HTTPS://EXAMPLE.COM", "https://example.com"],
++    // Identical explicit ports match
++    ["http://localhost:3000/a", "http://localhost:3000/b"],
++    ["https://example.com:443", "https://example.com:443"],
++    // Default ports are normalized (an explicit default port equals an omitted one)
++    ["https://example.com", "https://example.com:443"],
++    ["http://example.com", "http://example.com:80"],
++    ["wss://example.com", "wss://example.com:443"],
++    ["ws://example.com", "ws://example.com:80"],
++    // Credentials are not part of the origin
++    ["https://user:pass@example.com", "https://example.com"],
++    // IDN / punycode hosts are equivalent
++    ["https://тест.рф", "https://xn--e1aybc.xn--p1ai"],
++    // IPv4 / IPv6 hosts
++    ["http://127.0.0.1:8080/a", "http://127.0.0.1:8080/b"],
++    ["http://[::1]:8080/a", "http://[::1]:8080/b"],
++  ];
++
++  const differentOrigin = [
++    // Different protocol
++    ["http://example.com", "https://example.com"],
++    ["ws://example.com", "wss://example.com"],
++    // Different host
++    ["https://example.com", "https://example.org"],
++    // Subdomains are different origins
++    ["https://example.com", "https://www.example.com"],
++    ["https://a.example.com", "https://b.example.com"],
++    // Different port
++    ["https://example.com:8443", "https://example.com"],
++    ["http://localhost:3000", "http://localhost:4000"],
++    // A default port of another protocol is not the default here
++    ["http://example.com:443", "http://example.com"],
++    ["https://example.com:80", "https://example.com"],
++    // Lookalike hosts (credentials trick)
++    ["https://example.com@evil.com", "https://example.com"],
++    ["https://example.com.evil.com", "https://example.com"],
++  ];
++
++  // Without an origin we can't claim equality, so these are never "same"
++  const noOrigin = [
++    // Relative / path-only inputs
++    ["/foo", "/foo"],
++    ["foo/bar", "foo/bar"],
++    ["", ""],
++    // Protocol-relative (no protocol to compare)
++    ["//example.com", "//example.com"],
++    ["//example.com", "https://example.com"],
++    // Relative vs absolute
++    ["/foo", "https://example.com/foo"],
++    // Opaque origins
++    ["mailto:a@example.com", "mailto:a@example.com"],
++    ["data:text/plain,hi", "data:text/plain,hi"],
++    ["javascript:void(0)", "javascript:void(0)"],
++  ];
++
++  for (const [u1, u2] of sameOrigin) {
++    test(`"${u1}" == "${u2}"`, () => {
++      expect(isSameOrigin(u1, u2)).toBe(true);
++      expect(isSameOrigin(u2, u1)).toBe(true);
++    });
++  }
++
++  for (const [u1, u2] of differentOrigin) {
++    test(`"${u1}" != "${u2}"`, () => {
++      expect(isSameOrigin(u1, u2)).toBe(false);
++      expect(isSameOrigin(u2, u1)).toBe(false);
++    });
++  }
++
++  for (const [u1, u2] of noOrigin) {
++    test(`"${u1}" has no comparable origin vs "${u2}"`, () => {
++      expect(isSameOrigin(u1, u2)).toBe(false);
++      expect(isSameOrigin(u2, u1)).toBe(false);
++    });
++  }
++});

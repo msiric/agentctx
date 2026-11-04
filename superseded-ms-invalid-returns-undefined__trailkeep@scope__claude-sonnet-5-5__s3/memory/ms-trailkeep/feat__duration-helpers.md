@@ -1,0 +1,8 @@
+# feat/duration-helpers
+
+Branch: feat/duration-helpers · Repo: local__ms-1803446531 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: parseCompound throws TypeError (with JSON-quoted input) on any bad input, never returns NaN — user once had NaN reach setTimeout and it was hard to track down. Differs from parse(), which returns NaN.
+

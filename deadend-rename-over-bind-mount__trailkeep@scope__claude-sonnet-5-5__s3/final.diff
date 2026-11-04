@@ -1,0 +1,175 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..a58f423 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,77 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def _crash_during_write(storage, data, keep_bytes):
++    """Simulate a process dying after ``keep_bytes`` of the in-place write."""
++    real = storage._handle
++
++    class Boom(BaseException):
++        pass
++
++    class Proxy:
++        def __getattr__(self, name):
++            return getattr(real, name)
++
++        def write(self, text):
++            real.write(text[:keep_bytes])
++            real.flush()
++            raise Boom
++
++    storage._handle = Proxy()
++    with pytest.raises(Boom):
++        storage.write(data)
++    real.close()
++
++
++def test_json_crash_mid_write_recovers_new_state(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    old = {'_default': {'1': {'a': 1}}}
++    new = {'_default': {'9': {'zzzz': 'x' * 100}}}
++
++    storage = JSONStorage(path)
++    storage.write(old)
++    _crash_during_write(storage, new, keep_bytes=25)
++
++    # File on disk is now truncated garbage
++    with pytest.raises(ValueError):
++        json.load(open(path))
++
++    db = TinyDB(path, storage=JSONStorage)
++    assert db.storage.read() == new
++    db.close()
++    assert not os.path.exists(path + '.journal')
++
++
++def test_json_crash_during_journal_keeps_old_state(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    old = {'_default': {'1': {'a': 1}}}
++
++    storage = JSONStorage(path)
++    storage.write(old)
++    storage.close()
++
++    # Half-written journal (no valid checksum): db file was never touched
++    with open(path + '.journal', 'wb') as f:
++        f.write(b'deadbeef\n{"_default": {"1"')
++
++    storage = JSONStorage(path)
++    assert storage.read() == old
++    storage.close()
++    assert not os.path.exists(path + '.journal')
++
++
++def test_json_write_leaves_no_journal_and_never_renames(tmpdir, monkeypatch):
++    def no_rename(*a, **k):
++        raise OSError(16, 'Device or resource busy')
++
++    monkeypatch.setattr(os, 'rename', no_rename)
++    monkeypatch.setattr(os, 'replace', no_rename)
++
++    path = str(tmpdir.join('db.json'))
++    with TinyDB(path, storage=JSONStorage) as db:
++        db.insert({'a': 1})
++    assert not os.path.exists(path + '.journal')
++    with TinyDB(path, storage=JSONStorage) as db:
++        assert db.all() == [{'a': 1}]
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..38f2645 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -3,6 +3,7 @@ Contains the :class:`base class <tinydb.storages.Storage>` for storages and
+ implementations.
+ """
+ 
++import hashlib
+ import io
+ import json
+ import os
+@@ -119,6 +120,42 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Crash safety: finish or discard a write that was interrupted
++        self._journal_path = os.fspath(path) + '.journal'
++        if self._writable:
++            self._recover()
++
++    @property
++    def _writable(self) -> bool:
++        return any(c in self._mode for c in ('+', 'w', 'a'))
++
++    def _recover(self) -> None:
++        """
++        Replay a write-ahead journal left behind by a crashed write.
++
++        A journal is only trusted if its checksum matches. An incomplete
++        journal means the crash happened before the database file was touched,
++        so the old state is intact and the journal is simply discarded.
++        """
++        try:
++            with open(self._journal_path, 'rb') as f:
++                raw = f.read()
++        except FileNotFoundError:
++            return
++
++        digest, _, payload = raw.partition(b'\n')
++        if digest == hashlib.sha256(payload).hexdigest().encode():
++            self._write_in_place(payload.decode('utf-8'))
++        os.remove(self._journal_path)
++
++    def _write_journal(self, serialized: str) -> None:
++        payload = serialized.encode('utf-8')
++        digest = hashlib.sha256(payload).hexdigest().encode()
++        with open(self._journal_path, 'wb') as f:
++            f.write(digest + b'\n' + payload)
++            f.flush()
++            os.fsync(f.fileno())
++
+     def close(self) -> None:
+         self._handle.close()
+ 
+@@ -140,13 +177,24 @@ class JSONStorage(Storage):
+             return json.load(self._handle)
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
+-        # Move the cursor to the beginning of the file just in case
+-        self._handle.seek(0)
+-
+         # Serialize the database state using the user-provided arguments
+         serialized = json.dumps(data, **self.kwargs)
+ 
+-        # Write the serialized data to the file
++        if not self._writable:
++            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
++
++        # Write-ahead journal: the new state is made durable in a separate
++        # file first, so a crash in the middle of the in-place write below can
++        # be repaired on the next open. (No rename is used on purpose, the
++        # database file may be a bind mount that cannot be replaced.)
++        self._write_journal(serialized)
++        self._write_in_place(serialized)
++        os.remove(self._journal_path)
++
++    def _write_in_place(self, serialized: str) -> None:
++        # Move the cursor to the beginning of the file just in case
++        self._handle.seek(0)
++
+         try:
+             self._handle.write(serialized)
+         except io.UnsupportedOperation:
+@@ -159,6 +207,8 @@ class JSONStorage(Storage):
+         # Remove data that is behind the new cursor in case the file has
+         # gotten shorter
+         self._handle.truncate()
++        self._handle.flush()
++        os.fsync(self._handle.fileno())
+ 
+ 
+ class MemoryStorage(Storage):

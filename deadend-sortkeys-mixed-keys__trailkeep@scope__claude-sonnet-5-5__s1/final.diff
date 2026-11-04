@@ -1,0 +1,89 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..7a9a8da 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -49,6 +49,41 @@ def test_json_kwargs(tmpdir):
+     db.close()
+ 
+ 
++def test_json_sort_keys_default(tmpdir):
++    path = str(tmpdir.join('test.db'))
++    storage = JSONStorage(path)
++    storage.write({'b': 1, 'a': {'d': 1, 'c': 2}})
++    storage.close()
++
++    assert open(path).read() == '{"a": {"c": 2, "d": 1}, "b": 1}'
++
++
++def test_json_sort_keys_disabled(tmpdir):
++    path = str(tmpdir.join('test.db'))
++    storage = JSONStorage(path, sort_keys=False)
++    storage.write({'b': 1, 'a': 2})
++    storage.close()
++
++    assert open(path).read() == '{"b": 1, "a": 2}'
++
++
++def test_json_sort_keys_mixed_key_types(tmpdir):
++    data = {'hits': {200: 1520, 'other': 3}}
++
++    # Default: falls back to unsorted instead of raising
++    path = str(tmpdir.join('a.db'))
++    storage = JSONStorage(path)
++    storage.write(data)
++    storage.close()
++    assert json.load(open(path)) == {'hits': {'200': 1520, 'other': 3}}
++
++    # Explicit sort_keys=True keeps json's behaviour
++    storage = JSONStorage(str(tmpdir.join('b.db')), sort_keys=True)
++    with pytest.raises(TypeError):
++        storage.write(data)
++    storage.close()
++
++
+ def test_json_readwrite(tmpdir):
+     """
+     Regression test for issue #1
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..56489dc 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -95,6 +95,9 @@ class JSONStorage(Storage):
+         members like ``cls`` or ``default`` will be called on every write
+         operation.
+ 
++        **Note:** Keys are written sorted by default; pass ``sort_keys=False``
++        to keep insertion order.
++
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
+@@ -103,7 +106,10 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
+-        self.kwargs = kwargs
++        # Sort keys by default for stable, diff-friendly output. Remember
++        # whether the user chose this explicitly (see ``write``).
++        self._sort_keys_implicit = 'sort_keys' not in kwargs
++        self.kwargs = {'sort_keys': True, **kwargs}
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+             warnings.warn(
+@@ -144,7 +150,15 @@ class JSONStorage(Storage):
+         self._handle.seek(0)
+ 
+         # Serialize the database state using the user-provided arguments
+-        serialized = json.dumps(data, **self.kwargs)
++        try:
++            serialized = json.dumps(data, **self.kwargs)
++        except TypeError:
++            # Keys of mixed types (e.g. int and str) can't be sorted. If
++            # sorting was only our default, fall back to insertion order
++            # rather than failing; an explicit ``sort_keys=True`` still raises.
++            if not (self._sort_keys_implicit and self.kwargs['sort_keys']):
++                raise
++            serialized = json.dumps(data, **{**self.kwargs, 'sort_keys': False})
+ 
+         # Write the serialized data to the file
+         try:

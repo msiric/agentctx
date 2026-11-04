@@ -1,0 +1,147 @@
+diff --git a/README.md b/README.md
+index d752132..16d418c 100644
+--- a/README.md
++++ b/README.md
+@@ -54,7 +54,8 @@ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h'
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm'
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's'
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms'
+-type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'us'
++type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds | Microseconds
+ ```
+ 
+ These formats can be lowercase (`minutes`), uppercase (`MINUTES`), or capitalized (`Minutes`). There can be a space (`2 minutes`) or not (`2minutes`).
+diff --git a/src/index.test.ts b/src/index.test.ts
+index 5035ab9..47d2a15 100644
+--- a/src/index.test.ts
++++ b/src/index.test.ts
+@@ -1,5 +1,5 @@
+-import { describe, expect, it } from '@jest/globals';
+-import { ms } from './index';
++import { describe, expect, it, test } from '@jest/globals';
++import { ms, type StringValue } from './index';
+ 
+ describe('ms(string)', () => {
+   it('should not throw an error', () => {
+@@ -384,4 +384,17 @@ describe('ms(invalid inputs)', () => {
+       ms(-Infinity);
+     }).toThrow();
+   });
++
++  test.each([
++    ['500us', 0.5],
++    ['500µs', 0.5],
++    ['500 µS', 0.5],
++    ['1500US', 1.5],
++    ['1 microsecond', 0.001],
++    ['2500 Microseconds', 2.5],
++    ['-500us', -0.5],
++    ['.5us', 0.0005],
++  ])('should convert microseconds: %s -> %d', (input, expected) => {
++    expect(ms(input as StringValue)).toBe(expected);
++  });
+ });
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..f0cec6c 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -14,6 +14,7 @@ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h';
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm';
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's';
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms';
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'us';
+ type Unit =
+   | Years
+   | Months
+@@ -22,7 +23,8 @@ type Unit =
+   | Hours
+   | Minutes
+   | Seconds
+-  | Milliseconds;
++  | Milliseconds
++  | Microseconds;
+ 
+ type UnitAnyCase = Capitalize<Unit> | Uppercase<Unit> | Unit;
+ 
+@@ -75,7 +77,7 @@ export function parse(str: string): number {
+     );
+   }
+   const match =
+-    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
++    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|microseconds?|µs|us|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
+       str,
+     );
+ 
+@@ -138,6 +140,11 @@ export function parse(str: string): number {
+     case 'msec':
+     case 'ms':
+       return n;
++    case 'microseconds':
++    case 'microsecond':
++    case 'µs':
++    case 'us':
++      return n / 1000;
+     default:
+       matchUnit satisfies never;
+       throw new Error(
+diff --git a/src/parse-strict.test.ts b/src/parse-strict.test.ts
+index 9c30a5e..57a3f36 100644
+--- a/src/parse-strict.test.ts
++++ b/src/parse-strict.test.ts
+@@ -1,5 +1,5 @@
+-import { describe, expect, it } from '@jest/globals';
+-import { parseStrict } from './index';
++import { describe, expect, it, test } from '@jest/globals';
++import { parseStrict, type StringValue } from './index';
+ 
+ describe('parseStrict(string)', () => {
+   it('should not throw an error', () => {
+@@ -218,4 +218,17 @@ describe('parseStrict(invalid inputs)', () => {
+       parseStrict(-Infinity);
+     }).toThrow();
+   });
++
++  test.each([
++    ['500us', 0.5],
++    ['500µs', 0.5],
++    ['500 µS', 0.5],
++    ['1500US', 1.5],
++    ['1 microsecond', 0.001],
++    ['2500 Microseconds', 2.5],
++    ['-500us', -0.5],
++    ['.5us', 0.0005],
++  ])('should convert microseconds: %s -> %d', (input, expected) => {
++    expect(parseStrict(input as StringValue)).toBe(expected);
++  });
+ });
+diff --git a/src/parse.test.ts b/src/parse.test.ts
+index 9182411..79f536e 100644
+--- a/src/parse.test.ts
++++ b/src/parse.test.ts
+@@ -1,5 +1,5 @@
+-import { describe, expect, it } from '@jest/globals';
+-import { parse } from './index';
++import { describe, expect, it, test } from '@jest/globals';
++import { parse, type StringValue } from './index';
+ 
+ describe('parse(string)', () => {
+   it('should not throw an error', () => {
+@@ -205,4 +205,17 @@ describe('parse(invalid inputs)', () => {
+       parse(-Infinity);
+     }).toThrow();
+   });
++
++  test.each([
++    ['500us', 0.5],
++    ['500µs', 0.5],
++    ['500 µS', 0.5],
++    ['1500US', 1.5],
++    ['1 microsecond', 0.001],
++    ['2500 Microseconds', 2.5],
++    ['-500us', -0.5],
++    ['.5us', 0.0005],
++  ])('should convert microseconds: %s -> %d', (input, expected) => {
++    expect(parse(input as StringValue)).toBe(expected);
++  });
+ });

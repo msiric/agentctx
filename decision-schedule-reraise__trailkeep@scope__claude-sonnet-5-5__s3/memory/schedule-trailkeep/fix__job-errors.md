@@ -1,0 +1,9 @@
+# fix/job-errors
+
+Branch: fix/job-errors · Repo: local__schedule-1928374443 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: Decision for job-errors fix: run_pending should keep running the other due jobs when one raises, then re-raise the FIRST exception after all have run. Do NOT log-and-swallow: the supervisor restarts the worker and pages someone on crash, so errors must still propagate. Open detail: reschedule the failed job (e.g. in a finally) so it doesn't re-fire every tick; not yet decided. Not built yet; implement next session.
+- 2026-11-04: run_pending implemented: collects first Exception, runs rest, re-raises first. Job.run reschedules in finally (decided). Note: run_all also reschedules on failure now. Tests for this still to add.
+

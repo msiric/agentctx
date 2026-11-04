@@ -1,0 +1,100 @@
+diff --git a/README.md b/README.md
+index 0e4d7d7..0773f66 100644
+--- a/README.md
++++ b/README.md
+@@ -69,6 +69,18 @@ snakeCase("foo-barBaz");
+ // foo_bar_baz
+ ```
+ 
++### `constantCase`
++
++Splits string and joins by CONSTANT_CASE (SCREAMING_SNAKE_CASE) convention:
++
++```ts
++constantCase("fooBar");
++// FOO_BAR
++
++constantCase("foo-bar_baz");
++// FOO_BAR_BAZ
++```
++
+ ### `flatCase`
+ 
+ Splits string and joins by flatcase convention:
+diff --git a/src/index.ts b/src/index.ts
+index f1983fd..be30d35 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -1,5 +1,6 @@
+ import type {
+   CamelCase,
++  ConstantCase,
+   KebabCase,
+   PascalCase,
+   SnakeCase,
+@@ -146,6 +147,14 @@ export function snakeCase<T extends string | readonly string[]>(str?: T) {
+   return kebabCase(str || "", "_") as SnakeCase<T>;
+ }
+ 
++export function constantCase(): "";
++export function constantCase<T extends string | readonly string[]>(
++  str: T,
++): ConstantCase<T>;
++export function constantCase<T extends string | readonly string[]>(str?: T) {
++  return snakeCase(str || "").toUpperCase() as ConstantCase<T>;
++}
++
+ export function flatCase(): "";
+ export function flatCase<T extends string | readonly string[]>(
+   str: T,
+diff --git a/src/types.ts b/src/types.ts
+index 9e7f1dd..72a679b 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -145,6 +145,10 @@ export type SnakeCase<T extends string | readonly string[]> = JoinByCase<
+   "_"
+ >;
+ 
++export type ConstantCase<T extends string | readonly string[]> = Uppercase<
++  JoinByCase<T, "_">
++>;
++
+ export type TrainCase<
+   T,
+   Normalize extends boolean | undefined = false,
+diff --git a/test/scule.test.ts b/test/scule.test.ts
+index bd5ec3b..f8ae4c8 100644
+--- a/test/scule.test.ts
++++ b/test/scule.test.ts
+@@ -7,6 +7,7 @@ import {
+   upperFirst,
+   lowerFirst,
+   snakeCase,
++  constantCase,
+   trainCase,
+   flatCase,
+   titleCase,
+@@ -88,6 +89,23 @@ describe("snakeCase", () => {
+   });
+ });
+ 
++describe("constantCase", () => {
++  test.each([
++    ["", ""],
++    ["foo", "FOO"],
++    ["fooBar", "FOO_BAR"],
++    ["foo-bar_baz", "FOO_BAR_BAZ"],
++    ["FOO_BAR", "FOO_BAR"],
++    ["FooBarBaz", "FOO_BAR_BAZ"],
++  ])("%s => %s", (input, expected) => {
++    expect(constantCase(input)).toBe(expected);
++  });
++
++  test("no argument", () => {
++    expect(constantCase()).toBe("");
++  });
++});
++
+ describe("upperFirst", () => {
+   test.each([
+     ["", ""],

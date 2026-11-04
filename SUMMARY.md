@@ -23,6 +23,8 @@
 | trailkeep (control) | claude-sonnet-5-5 | 1 | 3 | 100% (100%-100%) | 201954 | 16399 | - |
 | trailkeep@capture | claude-sonnet-5-5 | 11 | 33 | 91% (73%-100%) | 140380 | 16655 | 1 |
 | trailkeep@capture (control) | claude-sonnet-5-5 | 1 | 3 | 100% (100%-100%) | 104994 | 16424 | - |
+| trailkeep@scope | claude-sonnet-5-5 | 11 | 33 | 94% (85%-100%) | 127794 | 16667 | 2 |
+| trailkeep@scope (control) | claude-sonnet-5-5 | 1 | 3 | 100% (100%-100%) | 106535 | 16448 | - |
 
 Paired difference in pass rate vs `none` (same trap and seed, non-control traps):
 
@@ -39,3 +41,4 @@ Paired difference in pass rate vs `none` (same trap and seed, non-control traps)
 | resume | claude-sonnet-5-5 | 51 | +69% (+47% to +88%) |
 | trailkeep | claude-sonnet-5-5 | 27 | +56% (+32% to +74%) |
 | trailkeep@capture | claude-sonnet-5-5 | 33 | +88% (+70% to +100%) |
+| trailkeep@scope | claude-sonnet-5-5 | 33 | +91% (+82% to +100%) |

@@ -1,0 +1,108 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..79a6254 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,43 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_sort_keys_default(tmpdir):
++    path = str(tmpdir.join('db.json'))
++
++    with TinyDB(path) as db:
++        db.insert({'b': 1, 'a': 2, 'c': {'z': 1, 'y': 2}})
++
++    with open(path) as f:
++        raw = f.read()
++
++    assert raw.index('"a"') < raw.index('"b"') < raw.index('"c"')
++    assert raw.index('"y"') < raw.index('"z"')
++
++
++def test_json_sort_keys_disabled(tmpdir):
++    path = str(tmpdir.join('db.json'))
++
++    with TinyDB(path, sort_keys=False) as db:
++        db.insert({'b': 1, 'a': 2})
++
++    with open(path) as f:
++        raw = f.read()
++
++    assert raw.index('"b"') < raw.index('"a"')
++
++
++def test_json_sort_keys_mixed_key_types(tmpdir):
++    path = str(tmpdir.join('db.json'))
++
++    with TinyDB(path) as db:
++        db.insert({'hits': {200: 1, 'other': 3, 'a': {'z': 1, 10: 2}}})
++
++    with open(path) as f:
++        raw = f.read()
++
++    assert raw.index('"200"') < raw.index('"a"') < raw.index('"other"')
++
++    with TinyDB(path) as db:
++        assert db.all() == [{'hits': {'200': 1, 'other': 3, 'a': {'z': 1, '10': 2}}}]
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..3188a66 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -33,6 +33,22 @@ def touch(path: str, create_dirs: bool):
+         pass
+ 
+ 
++def _sort_keys_recursive(obj: Any) -> Any:
++    """
++    Return a copy of ``obj`` with all dict keys ordered by their string form.
++
++    ``json.dumps(sort_keys=True)`` raises ``TypeError`` for dicts that mix key
++    types (e.g. ``int`` and ``str``). JSON object keys end up as strings
++    anyway, so ordering by ``str(key)`` is stable and gives the same result
++    for homogeneous keys of ``str`` type.
++    """
++    if isinstance(obj, dict):
++        return {k: _sort_keys_recursive(obj[k]) for k in sorted(obj, key=str)}
++    if isinstance(obj, (list, tuple)):
++        return [_sort_keys_recursive(v) for v in obj]
++    return obj
++
++
+ class Storage(ABC):
+     """
+     The abstract base class for all Storages.
+@@ -98,12 +114,16 @@ class JSONStorage(Storage):
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
++
++        Keys are written sorted by default to keep files diff-friendly. Pass
++        ``sort_keys=False`` to keep insertion order.
+         """
+ 
+         super().__init__()
+ 
+         self._mode = access_mode
+         self.kwargs = kwargs
++        self.kwargs.setdefault('sort_keys', True)
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+             warnings.warn(
+@@ -144,7 +164,14 @@ class JSONStorage(Storage):
+         self._handle.seek(0)
+ 
+         # Serialize the database state using the user-provided arguments
+-        serialized = json.dumps(data, **self.kwargs)
++        try:
++            serialized = json.dumps(data, **self.kwargs)
++        except TypeError:
++            if not self.kwargs.get('sort_keys'):
++                raise
++            # Mixed key types can't be sorted by json; order them by str(key)
++            kwargs = dict(self.kwargs, sort_keys=False)
++            serialized = json.dumps(_sort_keys_recursive(data), **kwargs)
+ 
+         # Write the serialized data to the file
+         try:

@@ -1,0 +1,1 @@
+- 2026-11-04: Release rule: the version bump ships in the same change/commit as the feature or fix, because the release script publishes whatever version on main isn't on npm yet. Minor bump for features, patch for fixes.

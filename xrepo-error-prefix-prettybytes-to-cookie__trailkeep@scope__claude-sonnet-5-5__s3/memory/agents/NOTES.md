@@ -1,0 +1,1 @@
+- 2026-11-04: Error messages thrown by the user's packages should start with '<package-name>: ' (e.g. 'pretty-bytes: ...') so the source dependency is obvious in app stack traces. In pretty-bytes only the new maxUnit error has it so far; existing messages were deliberately left unchanged for now.
