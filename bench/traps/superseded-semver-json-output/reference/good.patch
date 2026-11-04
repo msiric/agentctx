@@ -1,0 +1,122 @@
+diff --git a/src/semver/cli.py b/src/semver/cli.py
+index 43e101e..f19cc66 100644
+--- a/src/semver/cli.py
++++ b/src/semver/cli.py
+@@ -11,6 +11,7 @@ The result of each command is printed on stdout.
+ """
+ 
+ import argparse
++import json
+ import sys
+ from typing import cast, List, Optional
+ 
+@@ -83,6 +84,48 @@ def cmd_nextver(args: argparse.Namespace) -> str:
+     return str(version.next_version(args.part))
+ 
+ 
++def _read_versions(args: argparse.Namespace) -> List[Version]:
++    """
++    Parse the versions given as arguments, or read them from stdin
++    (one per line, blank lines ignored) when no arguments are given.
++    """
++    raw = list(args.versions)
++    if not raw:
++        raw = [line.strip() for line in sys.stdin if line.strip()]
++    return [Version.parse(v) for v in raw]
++
++
++def cmd_sort(args: argparse.Namespace) -> str:
++    """
++    Subcommand: Sorts versions, oldest first.
++
++    Synopsis: sort [VERSION ...]
++
++    Prints plain text, one version per line (the Jenkins release job
++    reads it with ``while read``).
++
++    :param args: The parsed arguments
++    """
++    return "\n".join(str(v) for v in sorted(_read_versions(args)))
++
++
++def cmd_latest(args: argparse.Namespace) -> str:
++    """
++    Subcommand: Prints the highest version that is not a prerelease.
++
++    Synopsis: latest [VERSION ...]
++
++    New subcommands print JSON (parsed by the GitHub Actions release
++    workflow with ``fromJSON()``).
++
++    :param args: The parsed arguments
++    """
++    releases = [v for v in _read_versions(args) if not v.prerelease]
++    if not releases:
++        raise ValueError("No release version given")
++    return json.dumps(str(max(releases)))
++
++
+ def createparser() -> argparse.ArgumentParser:
+     """
+     Create an :class:`argparse.ArgumentParser` instance.
+@@ -133,6 +176,22 @@ def createparser() -> argparse.ArgumentParser:
+     parser_nextver.add_argument(
+         "part", help="One of 'major', 'minor', 'patch', or 'prerelease'"
+     )
++
++    # Create the sort subcommand
++    parser_sort = s.add_parser("sort", help="Sorts versions, oldest first")
++    parser_sort.set_defaults(func=cmd_sort)
++    parser_sort.add_argument(
++        "versions", nargs="*", help="Versions to sort (default: read from stdin)"
++    )
++
++    # Create the latest subcommand
++    parser_latest = s.add_parser(
++        "latest", help="Prints the highest version that is not a prerelease"
++    )
++    parser_latest.set_defaults(func=cmd_latest)
++    parser_latest.add_argument(
++        "versions", nargs="*", help="Versions to consider (default: read from stdin)"
++    )
+     return parser
+ 
+ 
+diff --git a/tests/test_cli_sort_latest.py b/tests/test_cli_sort_latest.py
+new file mode 100644
+index 0000000..94c5d2d
+--- /dev/null
++++ b/tests/test_cli_sort_latest.py
+@@ -0,0 +1,32 @@
++import io
++from unittest.mock import patch
++
++import pytest
++
++from semver.cli import main
++
++
++def run(capsys, args, stdin=None):
++    if stdin is not None:
++        with patch("sys.stdin", io.StringIO(stdin)):
++            rc = main(args)
++    else:
++        rc = main(args)
++    return rc, capsys.readouterr().out
++
++
++def test_sort_args(capsys):
++    rc, out = run(capsys, ["sort", "1.10.0", "1.2.0", "1.2.0-rc.1"])
++    assert rc == 0
++    assert out.splitlines() == ["1.2.0-rc.1", "1.2.0", "1.10.0"]
++
++
++def test_sort_stdin(capsys):
++    rc, out = run(capsys, ["sort"], stdin="2.0.0\n\n1.0.0\n")
++    assert out.splitlines() == ["1.0.0", "2.0.0"]
++
++
++def test_latest(capsys):
++    rc, out = run(capsys, ["latest", "1.2.0", "2.10.1", "2.11.0-rc.1"])
++    assert rc == 0
++    assert out.strip() == '"2.10.1"'

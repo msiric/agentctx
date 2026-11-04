@@ -1,0 +1,59 @@
+diff --git a/index.d.ts b/index.d.ts
+index a46e43d..60ab2d1 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -11,6 +11,7 @@ declare namespace mri {
+ 		alias?: Dict<Arrayable<string>>;
+ 		default?: Dict<any>;
+ 		unknown?(flag: string): void;
++		'--'?: boolean;
+ 	}
+ 
+ 	export type Argv<T=Default> = T & {
+diff --git a/readme.md b/readme.md
+index bff4a04..e888737 100644
+--- a/readme.md
++++ b/readme.md
+@@ -87,6 +87,12 @@ Default: `[]`
+ 
+ A single key (or array of keys) that should be parsed as `String`s.
+ 
++#### options['--']
++Type: `Boolean`<br>
++Default: `false`
++
++When `true`, arguments after a bare `--` are collected into `argv['--']` instead of being appended to `argv._`, like `minimist`.
++
+ #### options.unknown
+ Type: `Function`<br>
+ Default: `undefined`
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..96ef050 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -65,7 +65,8 @@ export default function (args, opts) {
+ 		arg = args[i];
+ 
+ 		if (arg === '--') {
+-			out._ = out._.concat(args.slice(++i));
++			if (opts['--']) out['--'] = args.slice(++i);
++			else out._ = out._.concat(args.slice(++i));
+ 			break;
+ 		}
+ 
+diff --git a/test/index.js b/test/index.js
+index 37abaa5..fddcc44 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -328,3 +328,11 @@ test('flag boolean with default string & alias', t => {
+ 	t.is(typeof baz.two, 'boolean');
+ 	t.end();
+ });
++
++test('opts["--"]', t => {
++	const argv = fn(['--name', 'x', 'build', '--', 'a', '-b', '--c=1'], { '--': true });
++	t.deepEqual(argv._, ['build']);
++	t.deepEqual(argv['--'], ['a', '-b', '--c=1']);
++	t.deepEqual(fn(['a', '--', 'b', '-c']), { _: ['a', 'b', '-c'] });
++	t.end();
++});

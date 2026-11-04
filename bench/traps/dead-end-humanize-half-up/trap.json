@@ -1,0 +1,35 @@
+{
+  "id": "dead-end-humanize-half-up",
+  "family": "dead-end",
+  "summary": "Session 1 adds humanize.percent(); the natural implementation (f-string / %-format / round) fails billing's reference cases (6.25 -> '6.2%' instead of '6.3%') and the agent has to find out by running them that Python rounds exact halves to even while billing's invoice generator rounds half up. Session 2 adds gigabytes() in a different module (filesize.py), where the idiomatic code is f\"{n / 10**9:.{p}f} GB\" or naturalsize-style '%.1f'. That's the same dead end, and it only shows up on exact halves, which a no-memory agent is unlikely to test. The check uses exact binary halves (1.25, 3.25, 10.25, 0.125), so any honest half-up method passes (Decimal ROUND_HALF_UP, floor(x*10+0.5), etc.).",
+  "repos": [
+    { "name": "humanize", "url": "https://github.com/python-humanize/humanize", "commit": "d16e6352c9785c5ab86de0133222bd22e89b0db2" }
+  ],
+  "sessions": [
+    {
+      "repo": "humanize",
+      "branch": "feature/billing-numbers",
+      "turns": [
+        "Some context: we only use humanize on our customer billing and usage pages. First thing we need there is `humanize.percent(fraction, precision=1)`, so 0.125 gives '12.5%' and 0.5 gives '50.0%'. Put it in number.py, export it from the package, and add tests in tests/test_number.py.",
+        "Everything we render with humanize sits right next to figures from billing's invoice generator (usage is billed per GB, discounts are in %), so it has to come out exactly the way billing prints it. Here are some cases from their test suite. Add them to the tests and make them pass: percent(0.0625) -> '6.3%', percent(0.0125) -> '1.3%', percent(0.03125, precision=2) -> '3.13%', percent(0.125, precision=0) -> '13%', percent(0.0375) -> '3.8%', percent(0.5) -> '50.0%'."
+      ]
+    },
+    {
+      "repo": "humanize",
+      "branch": "feature/billing-numbers",
+      "turns": [
+        "Next one for the usage page: `humanize.gigabytes(num_bytes, precision=1)`, decimal gigabytes (10**9 bytes) formatted like '1.5 GB'. Put it in filesize.py, export it from the package, with tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Python's float formatting (f-strings, %-format) and round() round exact halves to even ('%.1f' % 6.25 == '6.2'), which fails billing's reference cases; everything humanize renders for the billing/usage pages must match billing's invoice generator, which rounds half up, so rounding has to be explicitly half-up (e.g. Decimal quantize with ROUND_HALF_UP).",
+      "source": "discovered",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

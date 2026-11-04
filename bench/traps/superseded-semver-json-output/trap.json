@@ -1,0 +1,49 @@
+{
+  "id": "superseded-semver-json-output",
+  "family": "superseded",
+  "summary": "Session 1 adds `pysemver sort` and the user fixes its output as plain text, one version per line, because the Jenkins job reads it with `while read`. Session 2 adds stdin support to sort. At its end the user reverses the output rule for everything new: the release workflow is moving to GitHub Actions, which parses output with fromJSON(), so new subcommands print JSON, but `sort` must stay as it is because Jenkins still calls it. Session 3 adds `pysemver latest`. The existing sort command (plain lines) and the CLI's other commands all print bare strings, so the natural `latest` prints `2.10.1`. The newer rule requires JSON (\"2.10.1\", [\"2.10.1\"] or {\"version\": \"2.10.1\"} all accepted) and leaves sort's output unchanged.",
+  "repos": [
+    { "name": "semver", "url": "https://github.com/python-semver/python-semver", "commit": "f3c7138120d7f49e190bd7c555c6e7eb155b482d" }
+  ],
+  "sessions": [
+    {
+      "repo": "semver",
+      "branch": "feature/release-commands",
+      "turns": [
+        "Our release scripts need a `pysemver sort` subcommand: it takes versions as arguments and prints them sorted, oldest first. Plain text, one version per line, no JSON or anything else, because the Jenkins release job reads it with a `while read v` loop. Add it in cli.py next to the other commands, with tests, and mention it in docs/pysemver.rst."
+      ]
+    },
+    {
+      "repo": "semver",
+      "branch": "feature/release-commands",
+      "turns": [
+        "`pysemver sort` should also read versions from stdin when no arguments are given (one per line, ignore blank lines) so we can pipe a list into it. An invalid version should still be an error. Tests too.",
+        "Thanks. Heads-up for the next commands: we're moving the release workflow from Jenkins to GitHub Actions, and the new workflow parses our output with `fromJSON()`. So from now on any new pysemver subcommand prints its result as JSON on stdout. Leave `sort` as it is, though: the old Jenkins job keeps calling it until the migration is finished."
+      ]
+    },
+    {
+      "repo": "semver",
+      "branch": "feature/release-commands",
+      "turns": [
+        "Next command: `pysemver latest`. Given versions (as arguments, or from stdin like sort), it prints the highest one that isn't a prerelease. With tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "pysemver subcommands we add print plain text, one version per line, no JSON (the Jenkins release job reads output with `while read`).",
+      "source": "user",
+      "session": 1,
+      "superseded_by": "f2"
+    },
+    {
+      "id": "f2",
+      "text": "From session 2 on, new pysemver subcommands print their result as JSON on stdout (the GitHub Actions release workflow parses it with fromJSON()); the existing `sort` command keeps its plain-lines output because the old Jenkins job still calls it.",
+      "source": "user",
+      "session": 2,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

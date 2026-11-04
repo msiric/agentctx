@@ -1,0 +1,35 @@
+{
+  "id": "dead-end-inject-encoding",
+  "family": "dead-end",
+  "summary": "Session 1: the user asks the agent to check, before touching regexparam, whether running inject() values through encodeURIComponent reproduces the path their object-storage service signs, giving one logged example. The agent runs it and finds it does not: encodeURIComponent leaves ' ( ) ! (and *) alone, while the service signs strictly RFC 3986-encoded paths (%27 %28 %29 %21). Encoding is shelved and the agent fixes an unrelated inject() bug (a value of 0 is treated as missing). Session 2 asks to make inject() percent-encode values. The natural implementation (encodeURIComponent per value, per segment for wildcards) is the approach that already failed; RFC 3986 itself allows those characters unencoded in paths, so nothing pushes a no-memory agent to encode them.",
+  "repos": [
+    { "name": "regexparam", "url": "https://github.com/lukeed/regexparam", "commit": "d05da2631beb7c5620774dae207cb09c7cbf24cc" }
+  ],
+  "sessions": [
+    {
+      "repo": "regexparam",
+      "branch": "inject-encoding",
+      "turns": [
+        "Our uploader builds object-storage paths with regexparam's `inject()`, and file names with spaces etc. currently go in raw, which the storage service rejects. Before changing anything in here: can you check in node whether simply running each value through `encodeURIComponent` would give the exact path the storage service signs? From their request log, for `inject('/files/:name', { name: \"Tom's Q3 report (final)!.pdf\" })` the service signed `/files/Tom%27s%20Q3%20report%20%28final%29%21.pdf`.",
+        "Annoying. OK, hold off on encoding for now, I need to decide whether it belongs in regexparam or in our client. Meanwhile, can you fix this: `inject('/page/:n', { n: 0 })` returns `/page/:n` instead of `/page/0`. Add a test."
+      ]
+    },
+    {
+      "repo": "regexparam",
+      "branch": "inject-encoding",
+      "turns": [
+        "Let's pick the inject() encoding back up. Make `inject()` percent-encode the values it substitutes. Wildcard values are paths, so keep their slashes there. Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Plain encodeURIComponent is a dead end for inject(): the storage service signs strictly RFC 3986-encoded paths, so ' ( ) ! must also be percent-encoded (%27 %28 %29 %21; * too under RFC 3986, though the check only tests the characters seen in session 1). Discovered in session 1 by running encodeURIComponent against the service's logged signed path.",
+      "source": "discovered",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

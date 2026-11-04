@@ -1,0 +1,35 @@
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..96ef050 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -65,7 +65,8 @@ export default function (args, opts) {
+ 		arg = args[i];
+ 
+ 		if (arg === '--') {
+-			out._ = out._.concat(args.slice(++i));
++			if (opts['--']) out['--'] = args.slice(++i);
++			else out._ = out._.concat(args.slice(++i));
+ 			break;
+ 		}
+ 
+diff --git a/test/dashdash.js b/test/dashdash.js
+new file mode 100644
+index 0000000..fc3ecff
+--- /dev/null
++++ b/test/dashdash.js
+@@ -0,0 +1,15 @@
++const test = require('tape');
++const fn = require('../lib');
++
++test('opts["--"] collects args after a bare --', t => {
++	const argv = fn(['--name', 'x', 'build', '--', 'a', '-b', '--c=1'], { '--': true });
++	t.deepEqual(argv._, ['build']);
++	t.deepEqual(argv['--'], ['a', '-b', '--c=1']);
++	t.is(argv.name, 'x');
++	t.end();
++});
++
++test('without opts["--"] args after -- stay in _', t => {
++	t.deepEqual(fn(['a', '--', 'b', '-c']), { _: ['a', 'b', '-c'] });
++	t.end();
++});

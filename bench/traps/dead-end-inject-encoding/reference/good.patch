@@ -1,0 +1,44 @@
+diff --git a/src/index.js b/src/index.js
+index 2e8bfc9..781d387 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -31,10 +31,17 @@ export function parse(input, loose) {
+ 
+ var RGX = /(\/|^)([:*][^/]*?)(\?)?(?=[/.]|$)/g;
+ 
++// Strict RFC 3986 encoding: encodeURIComponent leaves !'()* alone,
++// but the storage service signs paths with those escaped too.
++function encode(str) {
++	return encodeURIComponent(str).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
++}
++
+ // error if key missing?
+ export function inject(route, values) {
+ 	return route.replace(RGX, (x, lead, key, optional) => {
+ 		x = values[key=='*' ? key : key.substring(1)];
+-		return x ? '/'+x : (optional || key=='*') ? '' : '/' + key;
++		if (x == null || x === '') return (optional || key=='*') ? '' : '/' + key;
++		return '/' + (key=='*' ? String(x).split('/').map(encode).join('/') : encode(x));
+ 	});
+ }
+diff --git a/test/inject.js b/test/inject.js
+index 9e52300..fac2ae5 100644
+--- a/test/inject.js
++++ b/test/inject.js
+@@ -69,6 +69,16 @@ run('/foo/:bar/*?', '/foo/123', { bar: '123' });
+ run('/foo/:bar/*', '/foo/123/aa/bb/cc', { bar: '123', '*': 'aa/bb/cc' });
+ run('/foo/:bar/*?', '/foo/123/aa/bb/cc', { bar: '123', '*': 'aa/bb/cc' });
+ 
++run('/page/:n', '/page/0', { n: 0 });
++
++// Encoding
++// ---
++run('/files/:name', '/files/a%20b%3Fc%23d', { name: 'a b?c#d' });
++run('/files/:name', '/files/dir%2Ffile', { name: 'dir/file' });
++run('/files/:name', '/files/Q3%20report%20%28final%29%21.pdf', { name: 'Q3 report (final)!.pdf' });
++run('/files/:name', '/files/it%27s%2A', { name: "it's*" });
++run('/files/*', '/files/my%20docs/a%20%28b%29.txt', { '*': 'my docs/a (b).txt' });
++
+ // NOTE: Missing non-optional values
+ // ---
+ run('/foo/:id', '/foo/:id', { /* empty */ });

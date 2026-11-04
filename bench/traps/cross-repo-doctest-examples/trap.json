@@ -1,0 +1,36 @@
+{
+  "id": "cross-repo-doctest-examples",
+  "family": "cross-repo-preference",
+  "summary": "In python-semver (repo A) the user says that in all of their projects every new public function, method or property gets a runnable >>> doctest example in its docstring. Session 2 is in bottle (repo B) and adds a BaseRequest.bearer_token property. Bottle's request properties have prose-only docstrings (its ~200 docstrings contain only two doctest examples, both in ConfigDict methods), and bottle runs no doctests, so the idiomatic property has a plain docstring like its neighbour `auth`. The check runs the property's docstring under doctest and needs at least one passing example.",
+  "repos": [
+    { "name": "semver", "url": "https://github.com/python-semver/python-semver", "commit": "f3c7138120d7f49e190bd7c555c6e7eb155b482d" },
+    { "name": "bottle", "url": "https://github.com/bottlepy/bottle", "commit": "aba0c1a7ee59ed851db001d100b6a792b54a94a3" }
+  ],
+  "sessions": [
+    {
+      "repo": "semver",
+      "branch": "feature/is-prerelease",
+      "turns": [
+        "Add an `is_prerelease` property to `Version`: True when the version has a prerelease part, False otherwise. Tests in tests/.",
+        "Make sure its docstring has a runnable `>>>` example. And that goes for all my projects, not just this one: every new public function, method or property gets one. I run doctests in CI everywhere, and the examples are the first thing I read in review."
+      ]
+    },
+    {
+      "repo": "bottle",
+      "branch": "feature/bearer-token",
+      "turns": [
+        "Add a `bearer_token` property to `BaseRequest`: the token from an `Authorization: Bearer <token>` header, or None when there's no Authorization header or it uses another scheme. Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "User preference across all their projects: every new public function, method or property gets a runnable >>> doctest example in its docstring (they run doctests in CI everywhere and read the examples first in review).",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

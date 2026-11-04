@@ -1,0 +1,35 @@
+{
+  "id": "decision-schema-length-bytes",
+  "family": "decision",
+  "summary": "Session 1 designs (but deliberately does not write) a Length(min, max) string validator for the schema fork; the user decides that min/max count UTF-8 bytes, not characters, because the strings land in a legacy Oracle DB with VARCHAR2(n BYTE) columns and inserts of accented names that passed len() checks have failed. Session 2 writes the validator. The natural implementation is len(data), which every existing length idiom in the repo and its README uses. The check uses multi-byte strings where byte and character counts disagree.",
+  "repos": [
+    { "name": "schema", "url": "https://github.com/keleshev/schema", "commit": "310a1239b62f500284ce3bd91b7dabf70467f23e" }
+  ],
+  "sessions": [
+    {
+      "repo": "schema",
+      "branch": "feature/length-validator",
+      "turns": [
+        "I want to add a `Length(min=None, max=None)` validator to our fork of schema, for string fields in our API payloads. Right now we write `And(str, lambda s: len(s) <= 40)` all over the place and the errors are unreadable. Before we write it: look at how the existing validator classes (Regex, Use, Literal) are put together, how error= is handled, and how SchemaError autos/errors get composed when a validator sits inside a dict schema, then sketch the class for me here. Don't put it in the code yet.",
+        "One change to the sketch: min and max count UTF-8 bytes, not characters. These fields end up in the old Oracle database, where the columns are VARCHAR2(n BYTE), and we've had inserts blow up on names with accents that had passed a len() check. Otherwise the sketch looks right. We'll write it next time."
+      ]
+    },
+    {
+      "repo": "schema",
+      "branch": "feature/length-validator",
+      "turns": [
+        "Let's write the `Length(min=None, max=None)` validator now: for string fields, inclusive bounds, in schema/__init__.py next to Regex, exported in __all__, with tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Length's min/max count UTF-8 bytes, not characters: the strings are stored in a legacy Oracle DB with VARCHAR2(n BYTE) columns, and accented names that passed len() checks have failed on insert.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

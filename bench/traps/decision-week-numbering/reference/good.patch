@@ -1,0 +1,65 @@
+diff --git a/readme.md b/readme.md
+index 7c4b332..40d0bf9 100644
+--- a/readme.md
++++ b/readme.md
+@@ -85,6 +85,8 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{mm}`: minutes; eg: **59**
+ - `{ss}`: seconds; eg: **09**
+ - `{fff}`: milliseconds; eg: **555**
++- `{DDD}`: day of the year; eg: **032**
++- `{WW}`: week of the year, as Excel's `WEEKNUM(date, 2)` (weeks start on Monday, week 1 contains January 1st); eg: **05**
+ 
+ 
+ ## Benchmarks
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..1edc083 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,5 +1,11 @@
+ var RGX = /([^{]*?)\w(?=\})/g;
+ 
++// 1-based day of the year (DST-safe: compares calendar days, not hours)
++function dayOfYear(d) {
++	var y = d.getFullYear();
++	return Math.round((new Date(y, d.getMonth(), d.getDate()) - new Date(y, 0, 1)) / 864e5) + 1;
++}
++
+ var MAP = {
+ 	YYYY: 'getFullYear',
+ 	YY: 'getYear',
+@@ -10,7 +16,13 @@ var MAP = {
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+ 	ss: 'getSeconds',
+-	fff: 'getMilliseconds'
++	fff: 'getMilliseconds',
++	DDD: dayOfYear,
++	// Excel WEEKNUM(date, 2): weeks start on Monday, week 1 contains Jan 1st
++	WW: function (d) {
++		var offset = (new Date(d.getFullYear(), 0, 1).getDay() + 6) % 7;
++		return Math.floor((dayOfYear(d) - 1 + offset) / 7) + 1;
++	}
+ };
+ 
+ export default function (str, custom) {
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..57a9d0e 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -28,6 +28,16 @@ test('rendering', t => {
+ 	t.is(render('{fff}'), '000', 'returns milliseconds (default 000)');
+ 	t.is(render('{fff}', new Date(1559607289771)), '771', 'returns milliseconds');
+ 
++	t.is(render('{DDD}'), '121', 'returns day of the year');
++	t.is(render('{DDD}', new Date(2017, 0, 5)), '005', 'pads day of the year');
++	t.is(render('{DDD}', new Date(2016, 11, 31)), '366', 'handles leap years');
++
++	t.is(render('{WW}'), '19', 'returns week of the year');
++	t.is(render('{WW}', new Date(2023, 0, 1)), '01', 'Jan 1st is always week 1');
++	t.is(render('{WW}', new Date(2023, 0, 2)), '02', 'weeks start on Monday');
++	t.is(render('{WW}', new Date(2021, 0, 3)), '01', 'not ISO week 53');
++	t.is(render('{WW}', new Date(2012, 11, 31)), '54', 'can reach week 54');
++
+ 	// formats
+ 	t.is(render('[{HH}:{mm}:{ss}]'), '[16:30:09]', 'returns formatted time string');
+ 	t.is(render('The date is {MM}/{DD}/{YYYY}!'), 'The date is 05/01/2017!', 'returns formatted date string');

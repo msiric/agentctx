@@ -1,0 +1,38 @@
+diff --git a/bottle.py b/bottle.py
+index 2a4b1ac..8f5e5f5 100755
+--- a/bottle.py
++++ b/bottle.py
+@@ -1468,6 +1468,16 @@ class BaseRequest:
+         if ruser: return (ruser, None)
+         return None
+ 
++    @property
++    def bearer_token(self):
++        """ The token from an ``Authorization: Bearer <token>`` header, or
++            None if there is no Authorization header or it uses another
++            scheme. """
++        scheme, _, token = self.environ.get('HTTP_AUTHORIZATION', '').strip().partition(' ')
++        if scheme.lower() != 'bearer':
++            return None
++        return token.strip() or None
++
+     @property
+     def remote_route(self):
+         """ A list of all IPs that were involved in this request, starting with
+diff --git a/test/test_environ.py b/test/test_environ.py
+index c9f2940..b03ac66 100755
+--- a/test/test_environ.py
++++ b/test/test_environ.py
+@@ -36,6 +36,12 @@ class TestRequest(unittest.TestCase):
+         e.update({'route.url_args': {'a': 5}})
+         self.assertEqual(r.url_args, {'a': 5})
+ 
++    def test_bearer_token(self):
++        r = BaseRequest({'HTTP_AUTHORIZATION': 'Bearer abc123'})
++        self.assertEqual(r.bearer_token, 'abc123')
++        self.assertIsNone(BaseRequest({'HTTP_AUTHORIZATION': 'Basic dXNlcjpwYXNz'}).bearer_token)
++        self.assertIsNone(BaseRequest({}).bearer_token)
++
+     def test_path(self):
+         """ PATH_INFO normalization. """
+         # Legal paths

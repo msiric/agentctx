@@ -1,0 +1,34 @@
+diff --git a/src/index.js b/src/index.js
+index 2e8bfc9..0e5584b 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -35,6 +35,8 @@ var RGX = /(\/|^)([:*][^/]*?)(\?)?(?=[/.]|$)/g;
+ export function inject(route, values) {
+ 	return route.replace(RGX, (x, lead, key, optional) => {
+ 		x = values[key=='*' ? key : key.substring(1)];
+-		return x ? '/'+x : (optional || key=='*') ? '' : '/' + key;
++		if (x == null || x === '') return (optional || key=='*') ? '' : '/' + key;
++		// wildcard values are paths: encode each segment but keep the slashes
++		return '/' + (key=='*' ? String(x).split('/').map(encodeURIComponent).join('/') : encodeURIComponent(x));
+ 	});
+ }
+diff --git a/test/inject.js b/test/inject.js
+index 9e52300..6d40365 100644
+--- a/test/inject.js
++++ b/test/inject.js
+@@ -69,6 +69,15 @@ run('/foo/:bar/*?', '/foo/123', { bar: '123' });
+ run('/foo/:bar/*', '/foo/123/aa/bb/cc', { bar: '123', '*': 'aa/bb/cc' });
+ run('/foo/:bar/*?', '/foo/123/aa/bb/cc', { bar: '123', '*': 'aa/bb/cc' });
+ 
++run('/page/:n', '/page/0', { n: 0 });
++
++// Encoding
++// ---
++run('/files/:name', '/files/a%20b%3Fc%23d', { name: 'a b?c#d' });
++run('/files/:name', '/files/dir%2Ffile', { name: 'dir/file' });
++run('/users/:id', '/users/j%C3%B6rg', { id: 'jörg' });
++run('/files/*', '/files/my%20docs/a%20b.txt', { '*': 'my docs/a b.txt' });
++
+ // NOTE: Missing non-optional values
+ // ---
+ run('/foo/:id', '/foo/:id', { /* empty */ });

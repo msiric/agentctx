@@ -1,0 +1,35 @@
+{
+  "id": "constraint-fork-upstream-files",
+  "family": "constraint",
+  "summary": "Session 1: asked to modernise mri's CI matrix, the agent edits .github/workflows/ci.yml; the user stops it: the repo is their fork, rebased weekly onto upstream, so upstream files must not be touched. src/index.js is the only upstream file they patch; new tests go in new files; readme, types and package.json stay as upstream has them. Session 2 asks for minimist's `--` option with tests. A strong no-memory agent edits src/index.js and also adds tests to test/index.js, documents the option in readme.md and adds it to index.d.ts, which breaks the rule.",
+  "repos": [
+    { "name": "mri", "url": "https://github.com/lukeed/mri", "commit": "62b9ce4f25e1f7b476c99858c20882d86c010085" }
+  ],
+  "sessions": [
+    {
+      "repo": "mri",
+      "branch": "fork",
+      "turns": [
+        "mri's CI only runs on Node 6. Can you make it test on Node 18, 20, 22 and 24 instead?",
+        "Hmm, actually don't edit lukeed's files. This is our fork and we rebase it onto upstream every week, so every change to an upstream file turns into a conflict. Please revert ci.yml and put our matrix in a separate workflow file. That goes for the whole repo: src/index.js is the only upstream file we patch. Anything else of ours goes in new files (new tests in their own test file), and the readme, the types and package.json stay exactly as upstream has them."
+      ]
+    },
+    {
+      "repo": "mri",
+      "branch": "fork",
+      "turns": [
+        "Let's add minimist's `--` option to mri: when `opts['--']` is set, everything after a bare `--` goes into `argv['--']` instead of `argv._`. Include tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "This repo is a fork rebased weekly onto upstream: src/index.js is the only upstream file that may be modified. New tests go in new files; readme.md, index.d.ts, package.json and the existing test files must stay byte-identical to upstream.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

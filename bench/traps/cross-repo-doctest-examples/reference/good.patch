@@ -1,0 +1,45 @@
+diff --git a/bottle.py b/bottle.py
+index 2a4b1ac..b02aadd 100755
+--- a/bottle.py
++++ b/bottle.py
+@@ -1468,6 +1468,24 @@ class BaseRequest:
+         if ruser: return (ruser, None)
+         return None
+ 
++    @property
++    def bearer_token(self):
++        """ The token from an ``Authorization: Bearer <token>`` header, or
++            None if there is no Authorization header or it uses another
++            scheme.
++
++            >>> BaseRequest({'HTTP_AUTHORIZATION': 'Bearer abc.def-123'}).bearer_token
++            'abc.def-123'
++            >>> BaseRequest({'HTTP_AUTHORIZATION': 'Basic dXNlcjpwYXNz'}).bearer_token is None
++            True
++            >>> BaseRequest({}).bearer_token is None
++            True
++        """
++        scheme, _, token = self.environ.get('HTTP_AUTHORIZATION', '').strip().partition(' ')
++        if scheme.lower() != 'bearer':
++            return None
++        return token.strip() or None
++
+     @property
+     def remote_route(self):
+         """ A list of all IPs that were involved in this request, starting with
+diff --git a/test/test_environ.py b/test/test_environ.py
+index c9f2940..cdb7a9b 100755
+--- a/test/test_environ.py
++++ b/test/test_environ.py
+@@ -905,3 +905,11 @@ class TestWSGIHeaderDict(unittest.TestCase):
+             self.assertTrue(key in self.headers)
+             self.assertEqual(self.headers.get(key), 'test')
+             self.assertEqual(self.headers.get(key, 5), 'test')
++
++
++def test_bearer_token():
++    assert BaseRequest({'HTTP_AUTHORIZATION': 'Bearer abc123'}).bearer_token == 'abc123'
++    assert BaseRequest({'HTTP_AUTHORIZATION': 'bearer abc123'}).bearer_token == 'abc123'
++    assert BaseRequest({'HTTP_AUTHORIZATION': 'Basic dXNlcjpwYXNz'}).bearer_token is None
++    assert BaseRequest({'HTTP_AUTHORIZATION': 'Bearer'}).bearer_token is None
++    assert BaseRequest({}).bearer_token is None

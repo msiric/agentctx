@@ -1,0 +1,48 @@
+{
+  "id": "branch-isolation-semver-silent-deprecation",
+  "family": "branch-isolation",
+  "summary": "Two branches of python-semver carry opposite deprecation rules. vendor/deploy-tools (session 1) is the copy vendored into deploy-tools, whose CI runs with -W error, so nothing on that branch may emit a warning and renamed things keep working quietly. upstream/compare-dict-deprecation (session 2) is an upstream PR, and upstream's rule is that every deprecation warns at runtime. Session 3 is back on the vendor branch and asks to rename next_version's `prerelease_token` keyword to `token`, with the old keyword still working \"but deprecated\". The repo's own policy docs, its `deprecated` helper, and the most recent session's rule all point to a DeprecationWarning; only the vendor branch's rule forbids it. Sessions 1 and 2 touch different files (cli.py, and compare() in version.py) from session 3's next_version(), so the check doesn't depend on whether earlier work was committed or carried across checkouts.",
+  "repos": [
+    { "name": "semver", "url": "https://github.com/python-semver/python-semver", "commit": "f3c7138120d7f49e190bd7c555c6e7eb155b482d" }
+  ],
+  "sessions": [
+    {
+      "repo": "semver",
+      "branch": "vendor/deploy-tools",
+      "turns": [
+        "Some context for this branch: it's the copy of semver we vendor into deploy-tools. Their CI runs the whole test suite with `-W error`, and back in March a DeprecationWarning from a vendored library broke their release pipeline for a day. So nothing on this branch is allowed to emit a warning, ever; if we rename or retire something here, the old spelling just keeps working quietly. Today's job: deploy-tools passes git tags like `v1.4.2` straight to the CLI. Make every pysemver subcommand accept an optional leading `v`/`V` on its version arguments (output stays without the v). Tests too."
+      ]
+    },
+    {
+      "repo": "semver",
+      "branch": "upstream/compare-dict-deprecation",
+      "turns": [
+        "This branch is for a PR to upstream python-semver. They want to deprecate passing a dict to `Version.compare()`; str, tuple/list and Version arguments stay as they are. Upstream's rule is that every deprecation warns at runtime with a DeprecationWarning, through the `deprecated` helper in `_deprecated.py` if it fits or `warnings.warn` if not, and comes with a changelog.d fragment. Please add it, with tests."
+      ]
+    },
+    {
+      "repo": "semver",
+      "branch": "vendor/deploy-tools",
+      "turns": [
+        "`next_version` calls its keyword `prerelease_token`, but `bump_prerelease` and `bump_build` call theirs `token`. Rename it to `token` in `next_version`. `prerelease_token=` should keep working for existing callers but count as deprecated."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Branch vendor/deploy-tools: nothing may emit a warning (deploy-tools' CI runs with -W error; a DeprecationWarning from a vendored lib broke their pipeline). Renamed or retired names keep working silently, so any deprecation there is documentation-only.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    },
+    {
+      "id": "f2",
+      "text": "Branch upstream/compare-dict-deprecation (upstream PR): every deprecation must warn at runtime with a DeprecationWarning (via the `deprecated` helper or warnings.warn) and get a changelog.d fragment. Does not apply on vendor/deploy-tools.",
+      "source": "user",
+      "session": 2,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

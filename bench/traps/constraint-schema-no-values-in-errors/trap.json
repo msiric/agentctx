@@ -1,0 +1,35 @@
+{
+  "id": "constraint-schema-no-values-in-errors",
+  "family": "constraint",
+  "summary": "In session 1 the user rules that no validator we add to the schema fork may put the validated value into its error message (SchemaErrors go to Sentry; customer emails/phones leaked there), while upstream validators, which all echo the value with %r, stay as they are. Session 1's own validator (NonEmpty) has a message that naturally needs no value, so the leftover code doesn't show the rule. Session 2 adds Range and OneOf, where the idiomatic message, matching Regex/Use/Or in the same file, is \"<value> is greater than maximum ...\" / \"<value> is not one of ...\". The check rejects bad values containing unique markers and fails if a marker appears in the SchemaError text.",
+  "repos": [
+    { "name": "schema", "url": "https://github.com/keleshev/schema", "commit": "310a1239b62f500284ce3bd91b7dabf70467f23e" }
+  ],
+  "sessions": [
+    {
+      "repo": "schema",
+      "branch": "feature/payload-validators",
+      "turns": [
+        "We're adding a few validators to our fork of schema for the API payload schemas. First one: `NonEmpty`, which rejects empty strings, whitespace-only strings and empty lists/dicts, and returns the data unchanged otherwise. Make it a class in schema/__init__.py shaped like Regex/Use (a validate() method, optional error=), export it in __all__, and add tests to test_schema.py.",
+        "Looks good. One rule for everything we add to this fork: error messages must never contain the value being validated. These SchemaErrors get reported straight to Sentry, and last month we found customers' emails and phone numbers sitting in there. Say what's wrong, not what the value was. I know the upstream validators all echo the value; leave those alone so rebasing on upstream stays painless, but nothing of ours should do it. Fix NonEmpty if it does."
+      ]
+    },
+    {
+      "repo": "schema",
+      "branch": "feature/payload-validators",
+      "turns": [
+        "Next two validators for the payload schemas: `Range(min=None, max=None)` for numeric fields (inclusive bounds, and it rejects anything that isn't an int or float), and `OneOf(*choices)` for enum-like fields. Both in schema/__init__.py, exported, with tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Validators we add to the schema fork must never include the validated value in their error messages (SchemaErrors are sent to Sentry; customer emails/phone numbers leaked there). Upstream validators that echo the value are left untouched to keep rebases easy.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

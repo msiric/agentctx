@@ -1,0 +1,54 @@
+diff --git a/readme.md b/readme.md
+index 7c4b332..6a63d70 100644
+--- a/readme.md
++++ b/readme.md
+@@ -85,6 +85,8 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{mm}`: minutes; eg: **59**
+ - `{ss}`: seconds; eg: **09**
+ - `{fff}`: milliseconds; eg: **555**
++- `{DDD}`: day of the year; eg: **032**
++- `{WW}`: ISO 8601 week of the year; eg: **05**
+ 
+ 
+ ## Benchmarks
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..709cf18 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -10,7 +10,19 @@ var MAP = {
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+ 	ss: 'getSeconds',
+-	fff: 'getMilliseconds'
++	fff: 'getMilliseconds',
++	DDD: function (d) {
++		var start = new Date(d.getFullYear(), 0, 1);
++		var today = new Date(d.getFullYear(), d.getMonth(), d.getDate());
++		return Math.round((today - start) / 864e5) + 1;
++	},
++	// ISO 8601 week number (weeks start on Monday, week 1 contains the first Thursday)
++	WW: function (d) {
++		var t = new Date(d.getFullYear(), d.getMonth(), d.getDate());
++		t.setDate(t.getDate() + 3 - (t.getDay() + 6) % 7);
++		var week1 = new Date(t.getFullYear(), 0, 4);
++		return 1 + Math.round(((t - week1) / 864e5 - 3 + (week1.getDay() + 6) % 7) / 7);
++	}
+ };
+ 
+ export default function (str, custom) {
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..eff3031 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -28,6 +28,11 @@ test('rendering', t => {
+ 	t.is(render('{fff}'), '000', 'returns milliseconds (default 000)');
+ 	t.is(render('{fff}', new Date(1559607289771)), '771', 'returns milliseconds');
+ 
++	t.is(render('{DDD}'), '121', 'returns day of the year');
++	t.is(render('{WW}'), '18', 'returns ISO week of the year');
++	t.is(render('{WW}', new Date(2021, 0, 3)), '53', 'early January can belong to the previous ISO year');
++	t.is(render('{WW}', new Date(2019, 11, 30)), '01', 'late December can belong to the next ISO year');
++
+ 	// formats
+ 	t.is(render('[{HH}:{mm}:{ss}]'), '[16:30:09]', 'returns formatted time string');
+ 	t.is(render('The date is {MM}/{DD}/{YYYY}!'), 'The date is 05/01/2017!', 'returns formatted date string');

@@ -1,0 +1,50 @@
+{
+  "id": "branch-isolation-fiscal-quarter",
+  "family": "branch-isolation",
+  "summary": "tinydate is vendored into two products, each built from its own branch. On `payroll` (session 1) the user says the upcoming quarter token must give Australian financial-year quarters (FY starts 1 July, Jul-Sep = Q1). On `grants` (session 2, more recent) the user says the same token must give US federal fiscal quarters (FY starts 1 October, Oct-Dec = Q1). Session 3 is back on `payroll` and adds {Q}. A memory that ignores branches tends to apply the newer October rule; no memory gives calendar quarters (Jan-Mar = Q1). Uncommitted MMM/ddd work may carry between branches; the check ignores it.",
+  "repos": [
+    { "name": "tinydate", "url": "https://github.com/lukeed/tinydate", "commit": "a5780e69748fc0f902480ad129438cfee4c1ae3f" }
+  ],
+  "sessions": [
+    {
+      "repo": "tinydate",
+      "branch": "payroll",
+      "turns": [
+        "This branch is the tinydate build we vendor into the payroll app. Can you add `{MMM}` for short English month names (Jan, Feb, ...) with tests?",
+        "Thanks. Heads-up for later: payroll will also need a quarter token, and in this build quarters are Australian financial-year quarters. The year starts on 1 July, so Jul-Sep is Q1. Don't add it yet, I'll do the quarter token as its own change."
+      ]
+    },
+    {
+      "repo": "tinydate",
+      "branch": "grants",
+      "turns": [
+        "This branch is the tinydate build that ships with the grants portal. Please add `{ddd}` for short English weekday names (Mon, Tue, ...) with tests.",
+        "Also for later: the grants portal needs a quarter token as well, but grants follow the US federal fiscal year, which starts on 1 October, so Oct-Dec is Q1 here. Not today though, just the weekday names."
+      ]
+    },
+    {
+      "repo": "tinydate",
+      "branch": "payroll",
+      "turns": [
+        "Let's add the quarter token now: `{Q}`, a single digit 1-4. Tests and a readme line too, please."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "On the payroll branch, {Q} is the Australian financial-year quarter: FY starts 1 July, so Jul-Sep=1, Oct-Dec=2, Jan-Mar=3, Apr-Jun=4.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    },
+    {
+      "id": "f2",
+      "text": "On the grants branch (not the payroll branch), {Q} is the US federal fiscal quarter: FY starts 1 October, so Oct-Dec=1. This must NOT be applied on payroll.",
+      "source": "user",
+      "session": 2,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

@@ -1,0 +1,36 @@
+{
+  "id": "cross-repo-version-bump",
+  "family": "cross-repo-preference",
+  "summary": "Session 1 (tinydate): after a bug fix, the user says that across all their packages they publish straight from main, so every change bumps package.json's version itself: patch for fixes, minor for features. Session 2 (mri) asks for a new `count` option. Contributors normally leave versioning to release time, and mri's history has separate version commits, so a no-memory agent leaves the version at 1.2.0 instead of bumping it to 1.3.0.",
+  "repos": [
+    { "name": "tinydate", "url": "https://github.com/lukeed/tinydate", "commit": "a5780e69748fc0f902480ad129438cfee4c1ae3f" },
+    { "name": "mri", "url": "https://github.com/lukeed/mri", "commit": "62b9ce4f25e1f7b476c99858c20882d86c010085" }
+  ],
+  "sessions": [
+    {
+      "repo": "tinydate",
+      "branch": "fix/unknown-tokens",
+      "turns": [
+        "tinydate blows up with `MAP[key] is not a function` when a template has a token it doesn't know, e.g. `tinydate('{foo} {HH}')(new Date())`. Unknown tokens should just stay in the output as written. Can you fix that?",
+        "Thanks. One thing about how I work, for all my packages: I publish straight from main once a change is merged, so every change bumps the version in package.json itself. Patch for fixes, minor for new features. Please do that here too."
+      ]
+    },
+    {
+      "repo": "mri",
+      "branch": "feat/count",
+      "turns": [
+        "Let's add a `count` option to mri: flags listed in `opts.count` come out as the number of times they were given, so `-vvv` gives `v: 3` and `--verbose --verbose` gives `verbose: 2`. Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "User's preference across all their packages: every change bumps the version in package.json in the same change (patch for fixes, minor for new features), because they publish straight from main. In mri, the new `count` option is a feature, so 1.2.0 -> 1.3.0.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

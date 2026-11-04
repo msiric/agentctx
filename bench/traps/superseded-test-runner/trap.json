@@ -1,0 +1,49 @@
+{
+  "id": "superseded-test-runner",
+  "family": "superseded",
+  "summary": "Session 1: the user moves mri's tests from tape to uvu (their usual runner) and the agent converts test/num.js and adds uvu as a devDependency. Session 2: the user reverses: a security review now blocks new devDependencies in published packages, so the target is Node's built-in node:test; num.js is to be left alone for now; the agent then fixes a small `--foo=` bug. Session 3: 'finish the test migration'. The working tree shows a half-finished uvu migration (num.js on uvu, uvu in devDependencies), so a no-memory agent, or one that recalls only the first decision, converts the rest to uvu.",
+  "repos": [
+    { "name": "mri", "url": "https://github.com/lukeed/mri", "commit": "62b9ce4f25e1f7b476c99858c20882d86c010085" }
+  ],
+  "sessions": [
+    {
+      "repo": "mri",
+      "branch": "test-runner",
+      "turns": [
+        "I want to move mri's tests off tape. tape plus tap-spec is a lot of dependencies for what they do. Let's switch to uvu, which is what my other packages use. Start with test/num.js only so I can see what it looks like.",
+        "Looks fine. Make sure `pnpm test` still runs everything, old and new."
+      ]
+    },
+    {
+      "repo": "mri",
+      "branch": "test-runner",
+      "turns": [
+        "Change of plan for the test migration: our security review now blocks adding new devDependencies to packages we publish, so we're going with Node's built-in `node:test` instead of uvu. Leave num.js as it is for now, we'll redo it with the rest. Today I need something else: `mri(['--foo=', 'bar'])` gives `{ foo: 'bar' }`, but an explicit empty value should give `foo: ''` and leave `bar` as a positional. Can you fix that?"
+      ]
+    },
+    {
+      "repo": "mri",
+      "branch": "test-runner",
+      "turns": [
+        "Let's finish the test migration: convert the remaining test files and get tape out of the project."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Migrate mri's tests from tape to uvu (the user's usual runner).",
+      "source": "user",
+      "session": 1,
+      "superseded_by": "f2"
+    },
+    {
+      "id": "f2",
+      "text": "Migrate to Node's built-in node:test, not uvu: a security review blocks adding new devDependencies to published packages. num.js (already on uvu) may be left for later; everything else converted must use node:test and no new devDependencies may be added.",
+      "source": "user",
+      "session": 2,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

@@ -1,0 +1,35 @@
+{
+  "id": "decision-week-numbering",
+  "family": "decision",
+  "summary": "Session 1: the user wants a {WW} week-of-year token in tinydate and, after the agent lays out the options (ISO 8601, US, simple), picks Excel's WEEKNUM(date, 2) scheme (Monday-start weeks, week 1 = the week containing Jan 1) because finance's spreadsheets use it; only {DDD} is built that day. Session 2 asks for {WW}. With no memory, a strong agent implements ISO 8601 weeks (moment/date-fns convention for WW), or occasionally US/Sunday weeks; both disagree with WEEKNUM(...,2) around New Year and on Mondays in early January.",
+  "repos": [
+    { "name": "tinydate", "url": "https://github.com/lukeed/tinydate", "commit": "a5780e69748fc0f902480ad129438cfee4c1ae3f" }
+  ],
+  "sessions": [
+    {
+      "repo": "tinydate",
+      "branch": "feat/week-number",
+      "turns": [
+        "I'd like tinydate to support week numbers with a `{WW}` token. Before writing any code: what are the usual ways of numbering weeks, and where do they disagree around New Year?",
+        "We have to match finance's spreadsheets, and those use Excel's WEEKNUM(date, 2): weeks start on Monday and week 1 is whichever week contains January 1st. So not ISO; let's go with that. Today, though, just add a `{DDD}` day-of-year token (zero-padded to 3 like `{fff}`) with tests. The week token will build on it and I want to review DDD on its own first."
+      ]
+    },
+    {
+      "repo": "tinydate",
+      "branch": "feat/week-number",
+      "turns": [
+        "Let's carry on with the week token: add `{WW}`, zero-padded to two digits like the others, with tests and a readme entry."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "{WW} must follow Excel WEEKNUM(date, 2): weeks start on Monday and week 1 is the week containing January 1 (so 2023-01-02 is week 02, 2021-01-03 is week 01, 2012-12-31 is week 54). Not ISO 8601, because finance's spreadsheets use WEEKNUM(...,2).",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

@@ -1,0 +1,52 @@
+diff --git a/readme.md b/readme.md
+index 7c4b332..134ecb8 100644
+--- a/readme.md
++++ b/readme.md
+@@ -85,6 +85,8 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{mm}`: minutes; eg: **59**
+ - `{ss}`: seconds; eg: **09**
+ - `{fff}`: milliseconds; eg: **555**
++- `{MMM}`: short month name; eg: **Apr**
++- `{Q}`: quarter of the year; eg: **2**
+ 
+ 
+ ## Benchmarks
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..7e198d9 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -10,9 +10,17 @@ var MAP = {
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+ 	ss: 'getSeconds',
+-	fff: 'getMilliseconds'
++	fff: 'getMilliseconds',
++	MMM: function (d) {
++		return MONTHS[d.getMonth()];
++	},
++	Q: function (d) {
++		return Math.floor(d.getMonth() / 3) + 1;
++	}
+ };
+ 
++var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
++
+ export default function (str, custom) {
+ 	var parts=[], offset=0;
+ 
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..ea4754b 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -28,6 +28,11 @@ test('rendering', t => {
+ 	t.is(render('{fff}'), '000', 'returns milliseconds (default 000)');
+ 	t.is(render('{fff}', new Date(1559607289771)), '771', 'returns milliseconds');
+ 
++	t.is(render('{MMM}'), 'May', 'returns short month name');
++	t.is(render('{Q}'), '2', 'returns quarter');
++	t.is(render('{Q}', new Date(2017, 0, 1)), '1', 'January is Q1');
++	t.is(render('{Q}', new Date(2017, 11, 31)), '4', 'December is Q4');
++
+ 	// formats
+ 	t.is(render('[{HH}:{mm}:{ss}]'), '[16:30:09]', 'returns formatted time string');
+ 	t.is(render('The date is {MM}/{DD}/{YYYY}!'), 'The date is 05/01/2017!', 'returns formatted date string');
