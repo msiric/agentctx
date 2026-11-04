@@ -1,0 +1,1 @@
+- 2026-11-04: Error messages thrown by a package start with '<package-name>: ' (e.g. 'pretty-bytes: ...') so a throw deep in an app shows which dependency it came from. Applies to every package of the user's. In pretty-bytes only the new maxUnit message has it; existing messages are deliberately left unprefixed for now.

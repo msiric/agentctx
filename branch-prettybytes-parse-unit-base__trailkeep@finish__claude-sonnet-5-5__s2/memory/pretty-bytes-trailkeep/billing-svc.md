@@ -1,0 +1,9 @@
+# billing-svc
+
+Branch: billing-svc · Repo: local__pretty-bytes-396907641 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: billing-svc: parseBytes() (plain numbers + KiB..YiB, case-sensitive; kB/MB/GB throw) is already committed in dfcc822 with tests and types; verified npm test passes. Billing service pins this branch, so keep decimal units unsupported here until the storage team decides 1000 vs 1024 (see storage-app log).
+- 2026-11-04: billing-svc: when decimal units are added on this branch, they are strict SI: 1 kB = 1000, 1 MB = 1,000,000 bytes, matching prettyBytes output. Reason: billing quotes in strict SI. Deliberately differs from storage-app's plan to read KB/MB as 1024; do not merge that reading here.
+

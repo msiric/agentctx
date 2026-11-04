@@ -1,0 +1,9 @@
+# feat/week-number
+
+Branch: feat/week-number · Repo: local__tinydate-120360435 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: {DDD} day-of-year token added (uncommitted) and left for the user to review on its own before the week token. Next: {WW} built on DDD: floor((doy - 1 + jan1OffsetFromMonday) / 7) + 1. Bundle size claim (349B) in package.json/readme is stale and should be refreshed after {WW}.
+- 2026-11-04: {WW} added in src/index.js (Excel WEEKNUM(date,2), shares doy helper with DDD). Dec 31 = 54 only in a leap year starting Sunday (e.g. 2012); 2017 gives 53. Not yet verified against finance's sheets. Bundle-size claim (349B) still stale.
+

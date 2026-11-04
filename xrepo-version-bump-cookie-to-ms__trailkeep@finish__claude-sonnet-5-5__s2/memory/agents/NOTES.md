@@ -1,0 +1,1 @@
+- 2026-11-04: Bump package version in the same commit as the change (minor for features, patch for fixes): the user's release script publishes whatever version on main isn't yet on npm.

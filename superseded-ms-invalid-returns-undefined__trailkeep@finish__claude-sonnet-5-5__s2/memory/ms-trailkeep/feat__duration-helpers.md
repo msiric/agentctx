@@ -1,0 +1,9 @@
+# feat/duration-helpers
+
+Branch: feat/duration-helpers · Repo: local__ms-1341188097 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: parseCompound throws TypeError (with the JSON-quoted input) on any invalid input instead of returning NaN, because a NaN once reached setTimeout and was hard to track down. parse/parseStrict still return NaN; user was aware. Every piece must carry a unit.
+- 2026-11-04: parseClock(str) returns number | undefined (undefined on bad input) per repo convention for new helpers; m:ss and h:mm:ss only, later fields two digits and <60, optional fractional seconds, leading field any digits
+

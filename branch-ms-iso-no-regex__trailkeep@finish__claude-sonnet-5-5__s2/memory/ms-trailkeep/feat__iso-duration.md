@@ -1,0 +1,10 @@
+# feat/iso-duration
+
+Branch: feat/iso-duration · Repo: local__ms-3399348796 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: formatISO: days are largest unit (no months/years, ambiguous); zero -> PT0S; negatives get '-' prefix; ms rounded; fractional seconds as decimals. Parsing ISO durations is the planned next step.
+- 2026-11-04: Leo (security) is reviewing this PR: after the old ReDoS advisory against ms, NO regular expressions in any new parsing code on this branch. ISO duration parse must be hand-written (char scanning).
+- 2026-11-04: parseISO: hand-written char scanner, no regex (Leo's security rule). Supports W/D/H/M/S, optional +/- sign, '.' or ',' fractions on any component; returns NaN for invalid (matches parse()), throws for non-string/length. Y and M (months) in date part rejected as NaN since ambiguous, consistent with formatISO using days as largest unit. Note: formatISO still has one regex (.replace(/0+$/)) from the earlier commit - formatting, not parsing.
+

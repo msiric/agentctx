@@ -1,0 +1,9 @@
+# vendor/deploy-tools
+
+Branch: vendor/deploy-tools · Repo: local__semver-420349729 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: vendor/deploy-tools: nothing on this branch may emit a warning (deploy-tools CI runs with -W error; a vendored DeprecationWarning broke their release in March). Renamed/retired names must keep working silently. Done: CLI accepts leading v/V on version args via type=_version_arg in cli.py, tests in tests/test_pysemver-cli.py import main from semver.cli (semver.main shim warns). Open: existing deprecated top-level shims (semver.main, semver.replace...) still warn.
+- 2026-11-04: next_version: renamed prerelease_token->token; old kwarg kept as silent keyword-only alias (documented deprecated, NO DeprecationWarning, per branch no-warnings rule). Changelog: changelog.d/pr506.deprecation.rst (PR number is a guess).
+

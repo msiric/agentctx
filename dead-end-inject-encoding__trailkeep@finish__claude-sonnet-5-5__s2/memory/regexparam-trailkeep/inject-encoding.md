@@ -1,0 +1,10 @@
+# inject-encoding
+
+Branch: inject-encoding · Repo: local__regexparam-334582286 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: Encoding for inject() values undecided (regexparam vs client). Plain encodeURIComponent does NOT match the storage service's signed path: it leaves ! ' ( ) * raw, the service wants them percent-encoded (e.g. %27 %28 %29 %21). Extra .replace(/[!'()*]/g, c => '%'+c.charCodeAt(0).toString(16).toUpperCase()) matched the one logged example.
+- 2026-11-04: inject() fix for n: 0 (treated as missing) done in src/index.js with tests in test/inject.js; uncommitted. '' / false / NaN deliberately still count as missing.
+- 2026-11-04: inject() now encodes in regexparam (decided by user): encodeURIComponent + extra %-encoding of ! ' ( ) * to match storage service signed path; wildcard '*' values encoded per-segment so '/' is kept. Tests in test/inject.js. Uncommitted.
+

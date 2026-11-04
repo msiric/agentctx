@@ -1,0 +1,2 @@
+2026-11-04: Deferred: JSONStorage sort_keys-by-default (for diff-friendly db.json fixtures). Backed out before release. Plain sort_keys=True crashes on mixed int/str keys, e.g. ingest docs {'hits': {200: 1, 'other': 3}}. Plan: stringify keys then sort, plus test with that shape.
+2026-11-04: JSONStorage now sorts keys by default (done): implemented via _sort_keys that stringifies keys json-style then sorts, since plain sort_keys=True crashes on mixed int/str keys. Known limit: keys 1 and '1' collapse in same dict. Tests added in tests/test_storages.py.

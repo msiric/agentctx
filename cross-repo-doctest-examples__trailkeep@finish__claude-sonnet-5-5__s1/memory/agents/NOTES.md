@@ -1,0 +1,1 @@
+- 2026-11-04: Every new public function, method or property needs a docstring with a runnable '>>>' example. Reason: user runs doctests in CI on all projects and reads the examples first in review.

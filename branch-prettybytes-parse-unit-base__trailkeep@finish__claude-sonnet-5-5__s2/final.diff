@@ -1,0 +1,229 @@
+diff --git a/index.d.ts b/index.d.ts
+index 4fac6e9..9e7276e 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -216,3 +216,28 @@ export default function prettyBytes(
+ 	number: number | bigint,
+ 	options?: Options
+ ): string;
++
++/**
++Convert a human readable byte string to a number of bytes: `1.5 KiB` → `1536`. The reverse of `prettyBytes`.
++
++Supports plain numbers, the binary units `B`, `KiB`, `MiB`, `GiB`, `TiB`, `PiB`, `EiB`, `ZiB`, and `YiB`, and the units without the `i`: `kB` (or `KB`), `MB`, `GB`, `TB`, `PB`, `EB`, `ZB`, and `YB`. Units are case-sensitive, a fraction is allowed, and the space before the unit is optional. A number without a unit is read as bytes.
++
++Units without the `i` are read as powers of 1024, not 1000, because that is how sizes in tools like Windows Explorer are written: `'1 KB'` is `1024` and `'1 MB'` is `1048576`. This differs from `prettyBytes`, which uses powers of 1000 for these units unless `binary` is set.
++
++The result is not rounded, so `'1.5 B'` is `1.5`. Above `Number.MAX_SAFE_INTEGER` bytes the result may not be exact.
++
++@param string - The string to parse.
++@throws A `TypeError` if the input is not a string, and a `SyntaxError` if it is not a valid byte string or uses an unsupported unit.
++
++@example
++```
++import {parseBytes} from 'pretty-bytes';
++
++parseBytes('512');
++//=> 512
++
++parseBytes('1.5 KiB');
++//=> 1536
++```
++*/
++export function parseBytes(string: string): number;
+diff --git a/index.js b/index.js
+index c5f37ab..f395748 100644
+--- a/index.js
++++ b/index.js
+@@ -285,3 +285,39 @@ export default function prettyBytes(number, options) {
+ 	const result = prefix + numberString + separator + UNITS[exponent];
+ 	return result.padStart(options.fixedWidth ?? 0);
+ }
++
++// Units without the `i` (`kB`, `KB`, `MB` …) are read as powers of 1024, not 1000, because that is what Windows Explorer and similar tools show and what users paste in.
++const PARSE_UNITS = new Map([
++	...BIBYTE_UNITS.map((unit, index) => [unit, 1024 ** index]),
++	...BYTE_UNITS.map((unit, index) => [unit, 1024 ** index]),
++	['KB', 1024],
++]);
++
++// Optional sign, a decimal number with an optional fraction, then an optional unit separated by optional (non-breaking) whitespace.
++const PARSE_PATTERN = /^(?<sign>[+-]?)(?<number>(?:\d+(?:\.\d*)?|\.\d+))(?:\s*(?<unit>[A-Za-z]+))?$/;
++
++/*
++The reverse of `prettyBytes` for plain numbers, the binary units (`B`, `KiB` … `YiB`), and the units without the `i` (`kB`/`KB`, `MB` … `YB`), which are read as powers of 1024. Units are case-sensitive.
++*/
++export function parseBytes(string) {
++	if (typeof string !== 'string') {
++		throw new TypeError(`Expected a string, got ${typeof string}: ${string}`);
++	}
++
++	const match = PARSE_PATTERN.exec(string.trim());
++
++	if (!match) {
++		throw new SyntaxError(`Invalid byte string: ${JSON.stringify(string)}`);
++	}
++
++	const {sign, number, unit = 'B'} = match.groups;
++	const multiplier = PARSE_UNITS.get(unit);
++
++	if (multiplier === undefined) {
++		throw new SyntaxError(`Unsupported unit ${JSON.stringify(unit)} in ${JSON.stringify(string)}, expected one of: ${[...PARSE_UNITS.keys()].join(', ')}`);
++	}
++
++	const result = Number(number) * multiplier;
++
++	return sign === '-' && result !== 0 ? -result : result;
++}
+diff --git a/index.test-d.ts b/index.test-d.ts
+index 7f56f9c..fc5f1a6 100644
+--- a/index.test-d.ts
++++ b/index.test-d.ts
+@@ -1,5 +1,5 @@
+ import {expectType} from 'tsd';
+-import prettyBytes from './index.js';
++import prettyBytes, {parseBytes} from './index.js';
+ 
+ expectType<string>(prettyBytes(1337));
+ expectType<string>(prettyBytes(42, {signed: true}));
+@@ -8,3 +8,5 @@ expectType<string>(prettyBytes(1337, {locale: true}));
+ expectType<string>(prettyBytes(1337, {bits: true}));
+ expectType<string>(prettyBytes(1337, {binary: true}));
+ expectType<string>(prettyBytes(1337, {space: true}));
++
++expectType<number>(parseBytes('1.5 KiB'));
+diff --git a/readme.md b/readme.md
+index 48aa7b7..910a201 100644
+--- a/readme.md
++++ b/readme.md
+@@ -240,6 +240,27 @@ prettyBytes(100_000, {fixedWidth: 10});
+ //=> ['    1 kB', '   10 kB', '  100 kB']
+ ```
+ 
++### parseBytes(string)
++
++The reverse of `prettyBytes`: convert a byte string to a number of bytes.
++
++Supports plain numbers, the binary units `B`, `KiB`, `MiB`, `GiB`, `TiB`, `PiB`, `EiB`, `ZiB`, and `YiB`, and the units without the `i`: `kB` (or `KB`), `MB`, `GB`, `TB`, `PB`, `EB`, `ZB`, and `YB`. Units are case-sensitive and fractions are allowed. Anything else throws a `SyntaxError`.
++
++Units without the `i` are read as powers of 1024, not 1000, because that is how sizes in tools like Windows Explorer are written: `1 KB` is `1024` and `1 MB` is `1048576`. This differs from `prettyBytes`, which uses powers of 1000 for these units unless `binary` is set.
++
++```js
++import {parseBytes} from 'pretty-bytes';
++
++parseBytes('512');
++//=> 512
++
++parseBytes('1.5 KiB');
++//=> 1536
++
++parseBytes('1 MB');
++//=> 1048576
++```
++
+ ## FAQ
+ 
+ ### Why kB and not KB?
+diff --git a/test.js b/test.js
+index cf4a4d9..6b2730f 100644
+--- a/test.js
++++ b/test.js
+@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
+ import process from 'node:process';
+ import {promisify} from 'node:util';
+ import test from 'ava';
+-import prettyBytes from './index.js';
++import prettyBytes, {parseBytes} from './index.js';
+ 
+ const DECIMAL_UNITS = ['B', 'kB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+ const BINARY_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'];
+@@ -701,15 +701,15 @@ test('documented examples are accurate', t => {
+ 		t.is(examples.length, markers, `${fileName}: only ${examples.length} of ${markers} documented examples were found`);
+ 
+ 		for (const block of blocks) {
+-			if (/\bprettyBytes\s*\(/.test(block)) {
++			if (/\b(?:prettyBytes|parseBytes)\s*\(/.test(block)) {
+ 				t.regex(block, /\/\/\s*=>/, `${fileName}: a fence that calls prettyBytes has no //=> example`);
+ 			}
+ 		}
+ 
+ 		for (const [code, expected] of examples) {
+ 			// eslint-disable-next-line no-new-func
+-			const evaluate = new Function('prettyBytes', `return (${code.replaceAll(/;$/gm, '')});`);
+-			t.deepEqual(evaluate(prettyBytes), JSON.parse(expected.replaceAll('\'', '"')), `${fileName}: ${code.trim()}`);
++			const evaluate = new Function('prettyBytes', 'parseBytes', `return (${code.replaceAll(/;$/gm, '')});`);
++			t.deepEqual(evaluate(prettyBytes, parseBytes), JSON.parse(expected.replaceAll('\'', '"')), `${fileName}: ${code.trim()}`);
+ 		}
+ 	}
+ });
+@@ -1147,3 +1147,70 @@ test('the options shape the output as documented', t => {
+ 		t.is(prettyBytes(value, {signed: true}), prefix + prettyBytes(Math.abs(value)));
+ 	}
+ });
++
++test('parseBytes() - plain numbers', t => {
++	t.is(parseBytes('512'), 512);
++	t.is(parseBytes('512 B'), 512);
++	t.is(parseBytes('512B'), 512);
++	t.is(parseBytes('0'), 0);
++	t.is(parseBytes('1.5'), 1.5);
++	t.is(parseBytes('.5 B'), 0.5);
++	t.is(parseBytes('  512 B  '), 512);
++	t.is(parseBytes('512\u00A0B'), 512);
++	t.is(parseBytes('512 B'), 512);
++});
++
++test('parseBytes() - binary units', t => {
++	for (const [index, unit] of BINARY_UNITS.entries()) {
++		t.is(parseBytes(`1 ${unit}`), 1024 ** index);
++		t.is(parseBytes(`2${unit}`), 2 * (1024 ** index));
++	}
++
++	t.is(parseBytes('1.5 KiB'), 1536);
++	t.is(parseBytes('0.5 MiB'), 524_288);
++});
++
++test('parseBytes() - signs', t => {
++	t.is(parseBytes('+1 KiB'), 1024);
++	t.is(parseBytes('-1 KiB'), -1024);
++	t.is(parseBytes('-0'), 0);
++	t.true(Object.is(parseBytes('-0 B'), 0));
++});
++
++test('parseBytes() - round trips prettyBytes in binary mode', t => {
++	for (const bytes of [0, 1, 512, 1024, 1536, 1024 ** 3, 5 * (1024 ** 4)]) {
++		t.is(parseBytes(prettyBytes(bytes, {binary: true})), bytes);
++	}
++});
++
++test('parseBytes() - units are case-sensitive', t => {
++	for (const unit of ['kib', 'KIB', 'kiB', 'b', 'mib', 'Mb', 'mB']) {
++		t.throws(() => parseBytes(`1 ${unit}`), {instanceOf: SyntaxError});
++	}
++});
++
++test('parseBytes() - units without the i are powers of 1024', t => {
++	for (const [index, unit] of DECIMAL_UNITS.entries()) {
++		t.is(parseBytes(`1 ${unit}`), 1024 ** index);
++		t.is(parseBytes(`2${unit}`), 2 * (1024 ** index));
++	}
++
++	t.is(parseBytes('1 KB'), 1024);
++	t.is(parseBytes('1.5 MB'), 1_572_864);
++});
++
++test('parseBytes() - bit and unknown units are not supported', t => {
++	for (const unit of [...BIT_UNITS, 'K', 'Ki', 'kb', 'mb', 'Kb', 'gB']) {
++		t.throws(() => parseBytes(`1 ${unit}`), {instanceOf: SyntaxError, message: /Unsupported unit/});
++	}
++});
++
++test('parseBytes() - invalid input', t => {
++	for (const string of ['', ' ', 'KiB', 'abc', '1..5 B', '1.5.2 B', '1 2 KiB', '1e3', '--1', '1 KiB B', 'Infinity', 'NaN', '0x10']) {
++		t.throws(() => parseBytes(string), {instanceOf: SyntaxError});
++	}
++
++	for (const value of [1, undefined, null, {}, 10n]) {
++		t.throws(() => parseBytes(value), {instanceOf: TypeError});
++	}
++});

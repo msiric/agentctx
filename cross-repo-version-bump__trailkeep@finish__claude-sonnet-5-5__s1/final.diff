@@ -1,0 +1,110 @@
+diff --git a/index.d.ts b/index.d.ts
+index a46e43d..b009839 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -7,6 +7,7 @@ declare function mri<T=Default>(args?: string[], options?: mri.Options): mri.Arg
+ declare namespace mri {
+ 	export interface Options {
+ 		boolean?: Arrayable<string>;
++		count?: Arrayable<string>;
+ 		string?: Arrayable<string>;
+ 		alias?: Dict<Arrayable<string>>;
+ 		default?: Dict<any>;
+diff --git a/package.json b/package.json
+index 5a224b2..52a42b1 100644
+--- a/package.json
++++ b/package.json
+@@ -1,6 +1,6 @@
+ {
+   "name": "mri",
+-  "version": "1.2.0",
++  "version": "1.3.0",
+   "description": "Quickly scan for CLI flags and arguments",
+   "repository": "lukeed/mri",
+   "module": "lib/index.mjs",
+diff --git a/readme.md b/readme.md
+index bff4a04..6347479 100644
+--- a/readme.md
++++ b/readme.md
+@@ -63,6 +63,12 @@ Default: `[]`
+ 
+ A single key (or array of keys) that should be parsed as `Boolean`s.
+ 
++#### options.count
++Type: `Array|String`<br>
++Default: `[]`
++
++A single key (or array of keys) whose value is the number of times it was given. For example, `-vvv` yields `v: 3` and `--verbose --verbose` yields `verbose: 2`. Count keys never consume the following argument, and `--no-<key>` resets the count to `0`.
++
+ #### options.default
+ Type: `Object`<br>
+ Default: `{}`
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..0d6c7c3 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -9,6 +9,12 @@ function toVal(out, key, val, opts) {
+ 		: !!~opts.boolean.indexOf(key) ? (val === 'false' ? false : val === 'true' || (out._.push((x = +val,x * 0 === 0) ? x : val),!!val))
+ 		: (x = +val,x * 0 === 0) ? x : val
+ 	);
++	if (!!~opts.count.indexOf(key)) {
++		x = (typeof old === 'number' ? old : 0) + 1;
++		out[key] = x;
++		for (var i=0, al=opts.alias[key] || []; i < al.length; i++) out[al[i]] = x;
++		return;
++	}
+ 	out[key] = old == null ? nxt : (Array.isArray(old) ? old.concat(nxt) : [old, nxt]);
+ }
+ 
+@@ -26,6 +32,7 @@ export default function (args, opts) {
+ 	opts.alias = opts.alias || {};
+ 	opts.string = toArr(opts.string);
+ 	opts.boolean = toArr(opts.boolean);
++	opts.count = toArr(opts.count);
+ 
+ 	if (alibi) {
+ 		for (k in opts.alias) {
+@@ -41,6 +48,14 @@ export default function (args, opts) {
+ 		for (j=arr.length; j-- > 0;) opts.boolean.push(arr[j]);
+ 	}
+ 
++	for (i=opts.count.length; i-- > 0;) {
++		arr = opts.alias[opts.count[i]] || [];
++		for (j=arr.length; j-- > 0;) opts.count.push(arr[j]);
++	}
++
++	// count flags never consume a value
++	for (i=opts.count.length; i-- > 0;) opts.boolean.push(opts.count[i]);
++
+ 	for (i=opts.string.length; i-- > 0;) {
+ 		arr = opts.alias[opts.string[i]] || [];
+ 		for (j=arr.length; j-- > 0;) opts.string.push(arr[j]);
+@@ -80,7 +95,7 @@ export default function (args, opts) {
+ 			if (strict && !~keys.indexOf(name)) {
+ 				return opts.unknown(arg);
+ 			}
+-			out[name] = false;
++			out[name] = !!~opts.count.indexOf(name) ? 0 : false;
+ 		} else {
+ 			for (idx=j+1; idx < arg.length; idx++) {
+ 				if (arg.charCodeAt(idx) === 61) break; // "="
+diff --git a/test/index.js b/test/index.js
+index 37abaa5..75b0562 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -328,3 +328,15 @@ test('flag boolean with default string & alias', t => {
+ 	t.is(typeof baz.two, 'boolean');
+ 	t.end();
+ });
++
++test('opts.count', t => {
++	t.deepEqual(fn(['-vvv'], { count: 'v' }), { v: 3, _: [] }, 'short group');
++	t.deepEqual(fn(['--verbose', '--verbose'], { count: ['verbose'] }), { verbose: 2, _: [] }, 'long repeated');
++	t.deepEqual(fn(['-v', '-v', '--verbose'], { count: 'v', alias: { v: 'verbose' } }), { v: 3, verbose: 3, _: [] }, 'aliases share count');
++	t.deepEqual(fn(['-v', 'foo'], { count: 'v' }), { v: 1, _: ['foo'] }, 'does not consume next arg');
++	t.deepEqual(fn(['-v'], { count: 'v' }), { v: 1, _: [] }, 'single');
++	t.deepEqual(fn(['a'], { count: 'v' }), { _: ['a'] }, 'absent when not given');
++	t.deepEqual(fn(['a'], { count: 'v', default: { v: 0 } }), { v: 0, _: ['a'] }, 'default');
++	t.deepEqual(fn(['-vv', '--no-v'], { count: 'v' }), { v: 0, _: [] }, 'no- resets');
++	t.end();
++});

@@ -1,0 +1,61 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..d3a10e3 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -97,8 +97,16 @@ class Scheduler:
+         between but only once.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        first_error: Optional[Exception] = None
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception as e:
++                logger.exception("Job %s raised an exception", job)
++                if first_error is None:
++                    first_error = e
++        if first_error is not None:
++            raise first_error
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +123,11 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
++        jobs = self.jobs[:]
++        for i, job in enumerate(jobs):
+             self._run_job(job)
+-            time.sleep(delay_seconds)
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..13dbf9f 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1278,6 +1278,20 @@ class SchedulerTests(TestCase):
+         schedule.run_all()
+         assert mock_job.call_count == 3
+ 
++    def test_run_pending_runs_all_then_raises_first_error(self):
++        ok = make_mock_job()
++        bad1 = mock.Mock(side_effect=ValueError("first"), __name__="bad1")
++        bad2 = mock.Mock(side_effect=KeyError("second"), __name__="bad2")
++        every().second.do(bad1)
++        every().second.do(bad2)
++        every().second.do(ok)
++        time.sleep(1.1)
++        with self.assertRaises(ValueError):
++            schedule.run_pending()
++        assert bad1.call_count == 1
++        assert bad2.call_count == 1
++        assert ok.call_count == 1
++
+     def test_run_all_with_decorator(self):
+         mock_job = make_mock_job()
+ 

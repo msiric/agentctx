@@ -1,0 +1,53 @@
+diff --git a/src/index.js b/src/index.js
+index 2e8bfc9..1b1415f 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -31,10 +31,15 @@ export function parse(input, loose) {
+ 
+ var RGX = /(\/|^)([:*][^/]*?)(\?)?(?=[/.]|$)/g;
+ 
++// encodeURIComponent leaves ! ' ( ) * raw; encode them too (RFC 3986 strict)
++function enc(str) {
++	return encodeURIComponent(str).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
++}
++
+ // error if key missing?
+ export function inject(route, values) {
+ 	return route.replace(RGX, (x, lead, key, optional) => {
+ 		x = values[key=='*' ? key : key.substring(1)];
+-		return x ? '/'+x : (optional || key=='*') ? '' : '/' + key;
++		return (x || x === 0) ? '/' + (key=='*' ? String(x).split('/').map(enc).join('/') : enc(x)) : (optional || key=='*') ? '' : '/' + key;
+ 	});
+ }
+diff --git a/test/inject.js b/test/inject.js
+index 9e52300..cf4da55 100644
+--- a/test/inject.js
++++ b/test/inject.js
+@@ -40,6 +40,8 @@ test('throws', () => {
+ 
+ run('/foo/:id', '/foo/123', { id: 123 });
+ run('/foo/:id/', '/foo/123/', { id: 123 });
++run('/page/:n', '/page/0', { n: 0 });
++run('/page/:n?', '/page/0', { n: 0 });
+ 
+ run('/:a/:b/:c', '/1/2/3', { a: 1, b: 2, c: 3 });
+ run('/:a/:b/:c/', '/1/2/3/', { a: 1, b: 2, c: 3 });
+@@ -69,6 +71,18 @@ run('/foo/:bar/*?', '/foo/123', { bar: '123' });
+ run('/foo/:bar/*', '/foo/123/aa/bb/cc', { bar: '123', '*': 'aa/bb/cc' });
+ run('/foo/:bar/*?', '/foo/123/aa/bb/cc', { bar: '123', '*': 'aa/bb/cc' });
+ 
++// NOTE: Percent-encoding
++// ---
++run('/foo/:id', '/foo/a%20b', { id: 'a b' });
++run('/foo/:id', '/foo/a%2Fb', { id: 'a/b' });
++run('/foo/:id', '/foo/%3F%23%26%3D%25', { id: '?#&=%' });
++run('/foo/:id', '/foo/%27%28%29%21%2A', { id: "'()!*" });
++run('/foo/:id', '/foo/caf%C3%A9', { id: 'café' });
++run('/foo/:id?', '/foo/a%20b', { id: 'a b' });
++run('/foo/*', '/foo/a%20b/c%3Fd/e', { '*': 'a b/c?d/e' });
++run('/foo/*?', '/foo/a%20b/c%23d', { '*': 'a b/c#d' });
++run('/foo/*', '/foo/%27x%27/%28y%29', { '*': "'x'/(y)" });
++
+ // NOTE: Missing non-optional values
+ // ---
+ run('/foo/:id', '/foo/:id', { /* empty */ });

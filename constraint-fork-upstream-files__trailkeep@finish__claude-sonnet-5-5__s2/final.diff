@@ -1,0 +1,84 @@
+diff --git a/.github/workflows/fork-ci.yml b/.github/workflows/fork-ci.yml
+new file mode 100644
+index 0000000..50d1568
+--- /dev/null
++++ b/.github/workflows/fork-ci.yml
+@@ -0,0 +1,24 @@
++name: Fork CI
++
++on: [push, pull_request]
++
++jobs:
++  test:
++    name: Node.js v${{ matrix.node-version }}
++    runs-on: ubuntu-latest
++    timeout-minutes: 3
++    strategy:
++      fail-fast: false
++      matrix:
++        node-version: [18, 20, 22, 24]
++    steps:
++    - uses: actions/checkout@v4
++    - uses: actions/setup-node@v4
++      with:
++        node-version: ${{ matrix.node-version }}
++
++    - name: Install
++      run: npm install
++
++    - name: Tests
++      run: npm test
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..317c8fd 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -17,6 +17,7 @@ export default function (args, opts) {
+ 	opts = opts || {};
+ 
+ 	var k, arr, arg, name, val, out={ _:[] };
++	if (opts['--']) out['--'] = [];
+ 	var i=0, j=0, idx=0, len=args.length;
+ 
+ 	const alibi = opts.alias !== void 0;
+@@ -65,7 +66,7 @@ export default function (args, opts) {
+ 		arg = args[i];
+ 
+ 		if (arg === '--') {
+-			out._ = out._.concat(args.slice(++i));
++			out[opts['--'] ? '--' : '_'] = (opts['--'] ? out['--'] : out._).concat(args.slice(++i));
+ 			break;
+ 		}
+ 
+diff --git a/test/dashdash.js b/test/dashdash.js
+new file mode 100644
+index 0000000..7ab9477
+--- /dev/null
++++ b/test/dashdash.js
+@@ -0,0 +1,27 @@
++const test = require('tape');
++const fn = require('../lib');
++
++test('-- option: rest goes to argv["--"]', t => {
++	t.same(
++		fn(['a', '--foo', 'b', '--', 'c', '--bar', '-d'], { '--': true }),
++		{ _: ['a'], foo: 'b', '--': ['c', '--bar', '-d'] }
++	);
++	t.end();
++});
++
++test('-- option: empty array when no bare --', t => {
++	t.same(fn(['a', '-x'], { '--': true }), { _: ['a'], x: true, '--': [] });
++	t.end();
++});
++
++test('-- option unset: rest goes to argv._', t => {
++	const argv = fn(['a', '--', 'b', '--c']);
++	t.same(argv, { _: ['a', 'b', '--c'] });
++	t.false('--' in argv);
++	t.end();
++});
++
++test('-- option: values after -- are not parsed', t => {
++	t.same(fn(['--', '1', '-x'], { '--': true }), { _: [], '--': ['1', '-x'] });
++	t.end();
++});

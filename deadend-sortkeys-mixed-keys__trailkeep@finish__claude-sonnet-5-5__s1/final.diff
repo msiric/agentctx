@@ -1,0 +1,126 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..b0d8f31 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,39 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_sort_keys_default(tmpdir):
++    path = str(tmpdir.join('db.json'))
++
++    with TinyDB(path) as db:
++        db.insert({'b': 1, 'a': {'z': 1, 'y': 2}})
++
++    with open(path) as f:
++        assert f.read() == '{"_default": {"1": {"a": {"y": 2, "z": 1}, "b": 1}}}'
++
++
++def test_json_sort_keys_disabled(tmpdir):
++    path = str(tmpdir.join('db.json'))
++
++    with TinyDB(path, sort_keys=False) as db:
++        db.insert({'b': 1, 'a': 2})
++
++    with open(path) as f:
++        assert f.read() == '{"_default": {"1": {"b": 1, "a": 2}}}'
++
++
++def test_json_sort_keys_mixed_key_types(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    doc = {'hits': {200: 1, 'other': 3, 404: 2}}
++
++    for kwargs in ({}, {'sort_keys': True}):
++        with TinyDB(path, **kwargs) as db:
++            db.truncate()
++            db.insert(doc)
++
++        with open(path) as f:
++            assert '{"200": 1, "404": 2, "other": 3}' in f.read()
++
++        with TinyDB(path) as db:
++            assert db.all() == [{'hits': {'200': 1, '404': 2, 'other': 3}}]
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..6c57b70 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -76,6 +76,47 @@ class Storage(ABC):
+         pass
+ 
+ 
++def _json_key(key):
++    """
++    Convert a dict key the way :mod:`json` does when serializing it, so that
++    keys of mixed types (e.g. ``200`` and ``'other'``) can be sorted together.
++    Keys of unsupported types are returned unchanged.
++    """
++    if isinstance(key, str):
++        return key
++    if key is True:
++        return 'true'
++    if key is False:
++        return 'false'
++    if key is None:
++        return 'null'
++    if isinstance(key, int):
++        return int.__repr__(key)
++    if isinstance(key, float):
++        if key != key:
++            return 'NaN'
++        if key in (float('inf'), float('-inf')):
++            return 'Infinity' if key > 0 else '-Infinity'
++        return float.__repr__(key)
++    return key
++
++
++def _sort_keys(obj):
++    """
++    Recursively stringify and sort dict keys. Used instead of
++    ``json.dumps(sort_keys=True)``, which raises ``TypeError`` for dicts
++    that mix key types.
++    """
++    if isinstance(obj, dict):
++        items = [(_json_key(k), _sort_keys(v)) for k, v in obj.items()]
++        if all(isinstance(k, str) for k, _ in items):
++            items.sort(key=lambda item: item[0])
++        return dict(items)
++    if isinstance(obj, (list, tuple)):
++        return [_sort_keys(v) for v in obj]
++    return obj
++
++
+ class JSONStorage(Storage):
+     """
+     Store the data in a JSON file.
+@@ -98,10 +139,15 @@ class JSONStorage(Storage):
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
++
++        Keys are written sorted by default; pass ``sort_keys=False`` to
++        keep insertion order.
+         """
+ 
+         super().__init__()
+ 
++        kwargs.setdefault('sort_keys', True)
++
+         self._mode = access_mode
+         self.kwargs = kwargs
+ 
+@@ -144,7 +190,12 @@ class JSONStorage(Storage):
+         self._handle.seek(0)
+ 
+         # Serialize the database state using the user-provided arguments
+-        serialized = json.dumps(data, **self.kwargs)
++        kwargs = self.kwargs
++        if kwargs.get('sort_keys'):
++            # Sort ourselves so mixed int/str keys don't crash ``json``
++            data = _sort_keys(data)
++            kwargs = {**kwargs, 'sort_keys': False}
++        serialized = json.dumps(data, **kwargs)
+ 
+         # Write the serialized data to the file
+         try:

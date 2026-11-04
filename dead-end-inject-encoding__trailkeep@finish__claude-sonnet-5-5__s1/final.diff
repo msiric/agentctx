@@ -1,0 +1,50 @@
+diff --git a/src/index.js b/src/index.js
+index 2e8bfc9..e106f5c 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -31,10 +31,20 @@ export function parse(input, loose) {
+ 
+ var RGX = /(\/|^)([:*][^/]*?)(\?)?(?=[/.]|$)/g;
+ 
++// RFC 3986: also escape ! ' ( ) * (uppercase hex)
++function encode(str) {
++	return encodeURIComponent(str).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
++}
++
+ // error if key missing?
+ export function inject(route, values) {
+ 	return route.replace(RGX, (x, lead, key, optional) => {
+ 		x = values[key=='*' ? key : key.substring(1)];
+-		return x ? '/'+x : (optional || key=='*') ? '' : '/' + key;
++		if (x || x === 0) {
++			x = String(x);
++			// wildcard values are paths: encode each segment, keep slashes
++			return '/' + (key=='*' ? x.split('/').map(encode).join('/') : encode(x));
++		}
++		return (optional || key=='*') ? '' : '/' + key;
+ 	});
+ }
+diff --git a/test/inject.js b/test/inject.js
+index 9e52300..f375509 100644
+--- a/test/inject.js
++++ b/test/inject.js
+@@ -49,6 +49,19 @@ run('/assets/:video.mp4/extra', '/assets/demo.mp4/extra', { video: 'demo' });
+ run('/assets/:video.mp4?foo=bar', '/assets/demo.mp4?foo=bar', { video: 'demo' });
+ run('/assets/:video/.hidden', '/assets/demo/.hidden', { video: 'demo' });
+ 
++run('/page/:n', '/page/0', { n: 0 });
++run('/page/:n?', '/page/0', { n: 0 });
++run('/foo/:id/:bar?', '/foo/123/0', { id: 123, bar: 0 });
++
++run('/users/:name', '/users/a%20b%2Fc', { name: 'a b/c' });
++run('/users/:name', '/users/%3F%23%26%25', { name: '?#&%' });
++run('/users/:name', '/users/%21%27%28%29%2A', { name: "!'()*" });
++run('/users/:name', '/users/caf%C3%A9', { name: 'café' });
++run('/assets/:video.mp4', '/assets/my%20clip.mp4', { video: 'my clip' });
++run('/files/*', '/files/a%20b/c%20d.txt', { '*': 'a b/c d.txt' });
++run('/files/*', '/files/a/%2A/%28x%29', { '*': 'a/*/(x)' });
++run('/files/*?', '/files/dir/caf%C3%A9', { '*': 'dir/café' });
++
+ run('/foo/:id/:bar?', '/foo/123', { id: 123 });
+ run('/foo/:id/:bar?/', '/foo/123/', { id: 123 });
+ 

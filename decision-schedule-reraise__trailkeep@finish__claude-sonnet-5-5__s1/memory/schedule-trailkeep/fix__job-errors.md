@@ -1,0 +1,9 @@
+# fix/job-errors
+
+Branch: fix/job-errors · Repo: local__schedule-3985475309 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: Job errors in run_pending: run all other due jobs, then re-raise the FIRST exception (no swallowing/logging-only). Reason: supervisor restarts worker and pages on crash, so errors must still propagate. Not built yet. Open: whether a failed job should still reschedule (today last_run/_schedule_next_run are skipped on raise, so it retries every tick). Considered and not chosen: catch+log, on_error callback, ExceptionGroup (py<3.11 support).
+- 2026-11-04: run_pending now implemented: runs all due jobs, logs each failure, re-raises FIRST exception. Test added (test_run_pending_runs_all_then_raises_first_error). Reschedule-on-failure left unchanged (failed job skips last_run/_schedule_next_run, retries each tick) - still open for user.
+

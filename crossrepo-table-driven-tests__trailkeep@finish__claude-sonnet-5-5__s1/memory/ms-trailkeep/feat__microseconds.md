@@ -1,0 +1,8 @@
+# feat/microseconds
+
+Branch: feat/microseconds · Repo: local__ms-1640883549 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: Microseconds: parse-only (format output unchanged). 'μs' (Greek mu U+03BC) is handled in parse's switch but kept out of the public Unit type, because /i matching plus toLowerCase turns 'µS' (U+00B5) into U+03BC.
+

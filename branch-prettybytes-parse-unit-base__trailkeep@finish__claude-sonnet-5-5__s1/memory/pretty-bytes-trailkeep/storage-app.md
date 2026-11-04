@@ -1,0 +1,10 @@
+# storage-app
+
+Branch: storage-app · Repo: local__pretty-bytes-4148375603 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: parseBytes: decimal units (kB/MB/GB...) deliberately unsupported (throw SyntaxError) until the user hears back from the storage team on how to read them. Signs/exponents/thousands separators also rejected.
+- 2026-11-04: Storage team answer: on this branch, non-i units are powers of 1024 (users paste from Windows Explorer): '1 KB' or '1 kB' = 1024, '1 MB' = 1048576. To be added in a later session; not in the first parseBytes commit.
+- 2026-11-04: parseBytes now accepts kB/KB (both = 1024), MB..YB as powers of 1024, per storage team answer; other cases (kb, mB, Mb) still throw. Documented in readme.
+

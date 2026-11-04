@@ -1,0 +1,2 @@
+2026-11-04: JSONStorage sort_keys=True default was tried and backed out (release freeze). Mixed int/str dict keys (e.g. ingest hits {200:..,'other':..}) raise TypeError under sort_keys; options: normalize keys in ingest, stringify-before-sort in storage, or opt-in only.
+2026-11-04: Reimplemented sort_keys=True default in JSONStorage: mixed int/str key TypeError handled by falling back to unsorted write only when sort_keys was implicit; explicit sort_keys=True still raises. Tests in tests/test_storages.py.
