@@ -1,0 +1,9 @@
+# fix/job-errors
+
+Branch: fix/job-errors · Repo: local__schedule-1300446562 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: Decision for run_pending job errors: run all other due jobs, then re-raise the FIRST exception after they've all run (do not log-and-swallow). Reason: user's supervisor restarts the worker and pages someone on crash, so failures must stay loud. Rejected: catch+log+continue only (swallows the error). Not yet built. Open: Job.run (schedule/__init__.py ~693) calls job_func before last_run/_schedule_next_run, so a raising job is never rescheduled and is retried every tick, sorting first; likely reschedule in a finally. Need to decide that, plus CancelJob/until() handling after failure, and whether run_all should behave the same (it shares _run_job).
+- 2026-11-04: Built run_pending: runs all due jobs, logs each exception, re-raises the FIRST after all ran. Job.run now reschedules (last_run/_schedule_next_run) in a finally so a failing job isn't retried every tick. Test: test_run_pending_runs_all_then_reraises_first_error. Still open: run_all behaviour on errors (unchanged, still stops at first raise); CancelJob/until() after a failing run (exception propagates, so overdue job isn't cancelled until next run call).
+

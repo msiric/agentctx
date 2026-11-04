@@ -1,0 +1,46 @@
+diff --git a/src/index.js b/src/index.js
+index 2e8bfc9..35c06af 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -31,10 +31,15 @@ export function parse(input, loose) {
+ 
+ var RGX = /(\/|^)([:*][^/]*?)(\?)?(?=[/.]|$)/g;
+ 
++function encode(str) {
++	return encodeURIComponent(str).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
++}
++
+ // error if key missing?
+ export function inject(route, values) {
+ 	return route.replace(RGX, (x, lead, key, optional) => {
+ 		x = values[key=='*' ? key : key.substring(1)];
+-		return x ? '/'+x : (optional || key=='*') ? '' : '/' + key;
++		if (x || x === 0) return '/' + (key=='*' ? String(x).split('/').map(encode).join('/') : encode(x));
++		return (optional || key=='*') ? '' : '/' + key;
+ 	});
+ }
+diff --git a/test/inject.js b/test/inject.js
+index 9e52300..faa996d 100644
+--- a/test/inject.js
++++ b/test/inject.js
+@@ -39,8 +39,20 @@ test('throws', () => {
+ // ---
+ 
+ run('/foo/:id', '/foo/123', { id: 123 });
++run('/page/:n', '/page/0', { n: 0 });
++run('/page/:n?', '/page/0', { n: 0 });
+ run('/foo/:id/', '/foo/123/', { id: 123 });
+ 
++// encoding
++run('/u/:name', '/u/a%20b', { name: 'a b' });
++run('/u/:name', '/u/a%2Fb', { name: 'a/b' });
++run('/u/:name?', '/u/%3F%23%26', { name: '?#&' });
++run('/u/:name', '/u/%21%27%28%29%2A', { name: "!'()*" });
++run('/u/:name', '/u/%C3%A9', { name: 'é' });
++run('/files/*', '/files/my%20dir/a%23b.txt', { '*': 'my dir/a#b.txt' });
++run('/files/*', '/files/a/b/c', { '*': 'a/b/c' });
++run('/files/*', '/files/%2A', { '*': '*' });
++
+ run('/:a/:b/:c', '/1/2/3', { a: 1, b: 2, c: 3 });
+ run('/:a/:b/:c/', '/1/2/3/', { a: 1, b: 2, c: 3 });
+ 

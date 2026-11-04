@@ -1,0 +1,1 @@
+- 2026-11-04: Tests: use one test.each table of cases per function (as in scule's test file), not separate it/test blocks. User wants this in every project because tables are easier to scan and extend.

@@ -1,0 +1,1 @@
+- 2026-11-04: Error messages thrown by the user's packages start with the package name, e.g. 'pretty-bytes: ...', so an error thrown deep in an app shows which dependency it came from. Applies to new messages; pretty-bytes' older messages were deliberately left unprefixed for now.

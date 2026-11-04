@@ -1,0 +1,10 @@
+# storage-app
+
+Branch: storage-app · Repo: local__pretty-bytes-1471150062 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: parseBytes (named export in index.js): only plain numbers + binary units (KiB..YiB), case-sensitive. kB/MB/GB etc. deliberately throw 'Unsupported unit' until user confirms with the storage team how to read them. Fractions truncated to whole bytes; signs/exponents rejected.
+- 2026-11-04: Storage team answer (for the follow-up): non-i units are powers of 1024 on this branch because their users paste sizes from Windows Explorer. 1 KB or kB = 1024, 1 MB = 1048576, etc. Not implemented yet; kB/MB/... still throw. Note this differs from prettyBytes' SI output (1 kB = 1000) on purpose.
+- 2026-11-04: parseBytes now accepts non-i units (kB, KB, MB..YB) as powers of 1024, per the storage team (Windows Explorer paste). Case-sensitive: kB and KB both OK, mB/Kb/kb rejected. Readme and index.d.ts warn that this differs from prettyBytes' SI output, so parseBytes(prettyBytes(1500)) != 1500. Done; not committed.
+

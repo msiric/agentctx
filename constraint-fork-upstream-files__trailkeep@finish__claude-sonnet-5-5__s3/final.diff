@@ -1,0 +1,94 @@
+diff --git a/.github/workflows/fork-ci.yml b/.github/workflows/fork-ci.yml
+new file mode 100644
+index 0000000..50d1568
+--- /dev/null
++++ b/.github/workflows/fork-ci.yml
+@@ -0,0 +1,24 @@
++name: Fork CI
++
++on: [push, pull_request]
++
++jobs:
++  test:
++    name: Node.js v${{ matrix.node-version }}
++    runs-on: ubuntu-latest
++    timeout-minutes: 3
++    strategy:
++      fail-fast: false
++      matrix:
++        node-version: [18, 20, 22, 24]
++    steps:
++    - uses: actions/checkout@v4
++    - uses: actions/setup-node@v4
++      with:
++        node-version: ${{ matrix.node-version }}
++
++    - name: Install
++      run: npm install
++
++    - name: Tests
++      run: npm test
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..38bcb20 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -22,6 +22,9 @@ export default function (args, opts) {
+ 	const alibi = opts.alias !== void 0;
+ 	const strict = opts.unknown !== void 0;
+ 	const defaults = opts.default !== void 0;
++	const dashdash = !!opts['--'];
++
++	if (dashdash) out['--'] = [];
+ 
+ 	opts.alias = opts.alias || {};
+ 	opts.string = toArr(opts.string);
+@@ -65,7 +68,7 @@ export default function (args, opts) {
+ 		arg = args[i];
+ 
+ 		if (arg === '--') {
+-			out._ = out._.concat(args.slice(++i));
++			out[dashdash ? '--' : '_'] = out[dashdash ? '--' : '_'].concat(args.slice(++i));
+ 			break;
+ 		}
+ 
+diff --git a/test/dashdash.js b/test/dashdash.js
+new file mode 100644
+index 0000000..cb03074
+--- /dev/null
++++ b/test/dashdash.js
+@@ -0,0 +1,35 @@
++const test = require('tape');
++const fn = require('../lib');
++
++test('-- : default behavior', t => {
++	t.deepEqual(fn(['a', '--', 'b', '--x']), { _: ['a', 'b', '--x'] });
++	t.end();
++});
++
++test('-- : opts["--"] collects args after bare --', t => {
++	const argv = fn(['a', '--foo', 'bar', '--', 'b', '-x', '--y=1'], { '--': true });
++	t.deepEqual(argv, { _: ['a'], foo: 'bar', '--': ['b', '-x', '--y=1'] });
++	t.end();
++});
++
++test('-- : empty array when no bare --', t => {
++	t.deepEqual(fn(['a', '-x'], { '--': true }), { _: ['a'], x: true, '--': [] });
++	t.deepEqual(fn([], { '--': true }), { _: [], '--': [] });
++	t.end();
++});
++
++test('-- : trailing --', t => {
++	t.deepEqual(fn(['a', '--'], { '--': true }), { _: ['a'], '--': [] });
++	t.end();
++});
++
++test('-- : only first -- is consumed', t => {
++	t.deepEqual(fn(['--', 'a', '--', 'b'], { '--': true }), { _: [], '--': ['a', '--', 'b'] });
++	t.end();
++});
++
++test('-- : works with alias/boolean/string', t => {
++	const argv = fn(['-v', 'x', '--', '-v', '1'], { '--': true, boolean: 'v', alias: { v: 'verbose' } });
++	t.deepEqual(argv, { _: ['x'], v: true, verbose: true, '--': ['-v', '1'] });
++	t.end();
++});

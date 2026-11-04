@@ -1,0 +1,8 @@
+# upstream/compare-dict-deprecation
+
+Branch: upstream/compare-dict-deprecation · Repo: local__semver-2580668537 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: Dict deprecation in Version.compare uses warnings.warn (helper in version.py, also called from _comparator for operators), not _deprecated.deprecated: that decorator wraps whole functions and _deprecated imports version (circular). Message says 'future release' since package is already 3.1.0. Unverified guesses: changelog.d/pr506.deprecation.rst PR number and '.. deprecated:: 3.1.0'. Docs doctests under docs/ fail on main too (20 failures), ignore. Nothing committed.
+

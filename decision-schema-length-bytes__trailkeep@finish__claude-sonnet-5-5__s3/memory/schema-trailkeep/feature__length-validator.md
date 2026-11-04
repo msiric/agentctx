@@ -1,0 +1,9 @@
+# feature/length-validator
+
+Branch: feature/length-validator · Repo: local__schema-1957207457 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: Length validator (fork of schema): min/max count UTF-8 bytes, not characters. Reason: values are inserted into Oracle VARCHAR2(n BYTE) columns; accented names passed a len() check but failed on insert. Not yet implemented; sketch agreed, string-only, keyword-only min/max leaning.
+- 2026-11-04: Length validator implemented (uncommitted): keyword-only min/max (now final), inclusive, UTF-8 bytes, str only (bytes rejected), min>max raises ValueError, optional error= like Regex. Tests in test_length.
+

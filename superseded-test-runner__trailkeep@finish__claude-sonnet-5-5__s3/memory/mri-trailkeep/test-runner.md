@@ -1,0 +1,10 @@
+# test-runner
+
+Branch: test-runner · Repo: local__mri-3783978676 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: Migrating tests from tape/tap-spec to uvu (matches user's other packages) one file at a time. test/num.js done; index.js and unknown.js still tape. package.json test script lists files explicitly (uvu test num.js && tape ... | tap-spec) because tape's test/*.js glob would pick up uvu files. When all converted: script becomes 'uvu test', drop tape and tap-spec.
+- 2026-11-04: SUPERSEDES the uvu decision. Use Node's built-in node:test instead of uvu: security review blocks adding new devDependencies to published packages. Leave test/num.js (currently uvu, uncommitted) and the package.json uvu edits as-is for now; user will redo them with the rest of the migration.
+- 2026-11-04: Migration to node:test finished: all of test/*.js converted, tape/tap-spec/uvu removed from package.json and pnpm-lock.yaml; test script is node --test "test/*.js" (bare 'test/' dir only ran index.js on Node 24). Uses assert.deepStrictEqual in place of tape's loose same/deepEqual; all 23 tests pass.
+

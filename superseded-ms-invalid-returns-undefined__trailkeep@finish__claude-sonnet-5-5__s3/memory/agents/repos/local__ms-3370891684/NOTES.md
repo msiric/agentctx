@@ -1,0 +1,3 @@
+# Private notes: local__ms-3370891684
+
+- 2026-11-04: Decision 2026-11-04: new helpers added after parseCompound return undefined (type number | undefined) on bad input, not throw and not NaN. Reason: issue-tracker feedback that throwing forces try/catch in config loaders; the union return type makes TypeScript force callers to handle failure, which also covers the original concern (NaN silently reaching setTimeout). parseCompound stays throwing because it is published (4.1.0-canary.1) and used by the dashboard team; changing it would break callers. parse/parseStrict still return NaN, undecided.

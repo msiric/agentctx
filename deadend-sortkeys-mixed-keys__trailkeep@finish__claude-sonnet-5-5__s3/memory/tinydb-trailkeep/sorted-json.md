@@ -1,0 +1,9 @@
+# sorted-json
+
+Branch: sorted-json · Repo: local__tinydb-594016888 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: JSONStorage sort_keys=True default was tried and backed out (release freeze). It raises TypeError on docs with mixed int/str keys in one dict, e.g. hits {200: 1520, 'other': 3}. Options: fix ingest to use str keys, fall back on TypeError, or opt-in sort_keys=True per caller. Don't make it the library default.
+- 2026-11-04: JSONStorage now defaults sort_keys=True at user's explicit request (overrides earlier back-out). Mixed int/str key dicts fall back to unsorted write when sort_keys wasn't passed explicitly; explicit sort_keys=True still raises TypeError. Release freeze concern from earlier remains unresolved.
+

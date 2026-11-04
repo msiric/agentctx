@@ -1,0 +1,70 @@
+diff --git a/bottle.py b/bottle.py
+index 2a4b1ac..ee68bc1 100755
+--- a/bottle.py
++++ b/bottle.py
+@@ -1468,6 +1468,25 @@ class BaseRequest:
+         if ruser: return (ruser, None)
+         return None
+ 
++    @property
++    def bearer_token(self):
++        """ The token from an ``Authorization: Bearer <token>`` header, or
++            None if there is no such header or it uses another scheme. The
++            scheme name is case-insensitive.
++
++            >>> BaseRequest({'HTTP_AUTHORIZATION': 'Bearer abc123'}).bearer_token
++            'abc123'
++            >>> BaseRequest({'HTTP_AUTHORIZATION': 'Basic dXNlcjpwdw=='}).bearer_token is None
++            True
++            >>> BaseRequest({}).bearer_token is None
++            True
++        """
++        scheme, _, token = self.environ.get('HTTP_AUTHORIZATION', '').strip().partition(' ')
++        token = token.strip()
++        if scheme.lower() == 'bearer' and token:
++            return token
++        return None
++
+     @property
+     def remote_route(self):
+         """ A list of all IPs that were involved in this request, starting with
+diff --git a/test/test_auth.py b/test/test_auth.py
+index d3592f6..24ab513 100644
+--- a/test/test_auth.py
++++ b/test/test_auth.py
+@@ -1,4 +1,5 @@
+ # -*- coding: utf-8 -*-
++import unittest
+ import bottle
+ from .tools import ServerTestBase
+ 
+@@ -10,3 +11,29 @@ class TestBasicAuth(ServerTestBase):
+         def test(): return {}
+         self.assertStatus(401)
+         self.assertHeader('Www-Authenticate', 'Basic realm="private"')
++
++
++class TestBearerToken(unittest.TestCase):
++
++    def token(self, header=None):
++        environ = {} if header is None else {'HTTP_AUTHORIZATION': header}
++        return bottle.BaseRequest(environ).bearer_token
++
++    def test_bearer(self):
++        self.assertEqual('abc.def-123', self.token('Bearer abc.def-123'))
++
++    def test_scheme_case_insensitive(self):
++        self.assertEqual('abc', self.token('bearer abc'))
++        self.assertEqual('abc', self.token('BEARER abc'))
++
++    def test_no_header(self):
++        self.assertIsNone(self.token())
++        self.assertIsNone(self.token(''))
++
++    def test_other_scheme(self):
++        self.assertIsNone(self.token('Basic dXNlcjpwdw=='))
++        self.assertIsNone(self.token('Bearerx abc'))
++
++    def test_missing_token(self):
++        self.assertIsNone(self.token('Bearer'))
++        self.assertIsNone(self.token('Bearer   '))
