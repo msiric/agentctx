@@ -66,3 +66,25 @@ and every kept trap has none at 0/3.
 - held-out: constraint-schedule-no-module-shortcuts, crossrepo-no-positional-booleans,
   deadend-tinydb-mtime-cache, decision-csv-excel-dialect, decision-tinydb-yaml-bools,
   superseded-ms-compound-go-duration; control-dotenv-get-default
+
+# Headroom gate, held-out set 2 (2026-11-04)
+
+Same rule, same model, frozen versions, run 41836429541. Every set-2 trap is
+held-out (PREREGISTRATION.md, addendum).
+
+| Trap | none | oracle-note | Verdict |
+|---|---|---|---|
+| branch-isolation-fiscal-quarter | 0/3 | 3/3 | keep |
+| branch-isolation-semver-silent-deprecation | 0/3 | 3/3 | keep |
+| constraint-fork-upstream-files | 0/3 | 3/3 | keep |
+| cross-repo-doctest-examples | 1/3 | 3/3 | keep |
+| cross-repo-version-bump | 0/3 | 3/3 | keep |
+| dead-end-humanize-half-up | 0/3 | 3/3 | keep |
+| dead-end-inject-encoding | 0/3 | 3/3 | keep |
+| decision-schema-length-bytes | 0/3 | 3/3 | keep |
+| decision-week-numbering | 0/3 | 3/3 | keep |
+| superseded-semver-json-output | 0/3 | 3/3 | keep |
+| superseded-test-runner | 0/3 | 3/3 | keep |
+| constraint-schema-no-values-in-errors | 3/3 | 3/3 | drop: no headroom |
+
+11 of 12 kept. The perfect note passed every kept trap 3/3.
