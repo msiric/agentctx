@@ -161,3 +161,38 @@ assigned blind to arm from the transcript and the tool's stored files:
    trailkeep changes, then a re-run.
 3. **Held-out run:** once, on frozen versions. Findings are quoted from this
    stage.
+
+## Addendum: held-out set 2 (committed 2026-11-04, before its traps exist)
+
+Held-out set 1 left H2b (trailkeep vs the handoff file) unresolved: +22
+points, p = 0.11 on 6 traps. Set 1 is no longer unseen, since trailkeep 0.5.0
+was designed after reading its failures. Set 2 is a fresh test.
+
+**Traps.** 12 new traps, written by two new blind authors (6 Python, 6
+TypeScript/JavaScript), 2 per fact family: decision, dead-end, constraint,
+superseded, branch-isolation, cross-repo-preference. The authors get the same
+spec, the same blindness, and the batch-2 brief with the gate lessons added.
+They use repos that no earlier trap used. Every trap in set 2 is held-out;
+there is no dev split, because trailkeep doesn't change between now and the
+run.
+
+**Gate.** Same rule as before: `none` and `oracle-note`, 3 seeds. Drop a trap
+if `none` passes 2 or more of 3, or `oracle-note` fails 2 or more of 3.
+
+**Run.** On the kept traps: `trailkeep` (0.5.0), `handoff` and `none`, 3
+seeds, frozen versions (`PINS.env`), dispatched once from a frozen branch.
+`none` runs again rather than reusing its gate cells, since the gate selected
+traps on those cells.
+
+**Primary.** Two one-sided tests on set 2 only, Holm-corrected at α = 0.05,
+using the same method as before (exact sign-flip permutation over trap × seed
+pairs; trap-level version reported as a sensitivity check):
+- **H2b-2:** trailkeep has a higher pass rate than handoff.
+- **H1-2:** trailkeep has a higher pass rate than no memory.
+
+**Secondary.** Tokens added at session start, H5 on the superseded traps,
+failure labels for every trailkeep and handoff failure. Pooling set 1 with
+set 2 mixes trailkeep versions, so any pooled result is exploratory.
+
+No trap is edited after the gate unless it is broken (logged in
+`DEVIATIONS.md`). Set 2 runs once and is reported whatever it shows.
