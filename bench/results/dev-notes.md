@@ -160,3 +160,20 @@ conversations (see `DEVIATIONS.md`). Its 3% in the tables above measures a
 broken setup, not Hindsight. With the model set explicitly it stores
 memories again (one-episode smoke check, which passed). Its held-out cells
 run with the fix.
+
+## 5. Changes after the held-out run (toward 0.5.0)
+
+From the held-out failure labels (`heldout.md`):
+- **Scope:** on a branch with no notes yet, trailkeep now shows up to 5
+  recent decisions from other branches (from their effort files in the
+  worktree, then the log), each labelled with its branch. A branch with its
+  own notes sees only those. Risk: branch-isolation traps, where another
+  branch's rule must not apply; checked by the dev re-run.
+- **Capture rule:** names the three scopes explicitly, with `--repo` for rules
+  about the codebase.
+- **Framing:** injected notes are headed as rules/decisions to follow unless
+  the user says otherwise.
+
+Validated on the dev traps as arm `trailkeep@scope` (plan `dev-scope`). The
+held-out traps are no longer unseen, so they aren't used to tune this; a
+fresh held-out set comes next.

@@ -42,7 +42,8 @@ Later, `trailkeep update` gets the latest version the same way you installed it 
 | When | What happens automatically |
 |---|---|
 | Any session starts in any repo | Notes and the branch's effort file are injected. A one-line pointer mentions the decision log if it has entries. Leftovers from a session that didn't exit cleanly are logged first. |
-| Any session starts in a repo | A short capture rule tells the agent to record decisions, user rules and dead ends the moment they come up, with `trailkeep note`. It doesn't wait for anyone to decide the task "spans sessions". Turn it off with `TRAILKEEP_HINT=0`. |
+| Any session starts in a repo | A short capture rule tells the agent to record decisions, user rules and dead ends the moment they come up, with `trailkeep note`, and to pick the scope: this branch, the whole repo (`--repo`) or every repo (`--all`). It doesn't wait for anyone to decide the task "spans sessions". Turn it off with `TRAILKEEP_HINT=0`. |
+| You're on a branch with no notes yet | The last few decisions recorded on other branches are shown, each labelled with its branch, so repo-wide rules saved on one branch aren't lost on the next. Once the branch has its own notes, only those are shown. |
 | The agent works | It keeps the effort file current: plan ticks, a progress line per session, decisions and dead ends. That's the effort skill's job. |
 | Context gets compacted | The effort file is re-injected fresh. |
 | A session ends | New Decisions and Progress lines from every effort in the worktree go into the decision log, stamped with the commit, the branch's changed files, branch and session id. It takes under 0.1 s, well inside Codex's 3-second limit for this hook. Anything a killed session missed is picked up at the next start, in the background. |

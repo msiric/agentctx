@@ -230,7 +230,22 @@ default_branch() {
 # One standing instruction, so capture doesn't depend on the agent deciding a
 # task "spans sessions" (it can't know). Measured cost: about 110 tokens.
 capture_rule() {
-  printf '%s\n' 'trailkeep: when something comes up that a later session must not lose (a decision and its reason, a rule or preference the user states, an approach that failed and why), record it right away: `trailkeep note "<what and why>"`. It is kept for this branch and shown at the start of the next session. Use `trailkeep note --repo` for a fact about the whole repo, or `--all` for a personal preference that applies in every repo.'
+  printf '%s\n' 'trailkeep: when something comes up that a later session must not lose (a decision and its reason, a rule or preference the user states, an approach that failed and why), record it right away with its reason. Pick the scope: `trailkeep note --repo "..."` for a rule about this codebase that holds on every branch, `trailkeep note "..."` for something specific to this branch'"'"'s task, `trailkeep note --all "..."` for a personal preference in every repo. Notes are shown at the start of the next session.'
+}
+
+# Decisions recorded on other branches, newest first: effort files in this
+# worktree (their latest lines may not be in the log yet), then the log.
+other_decisions() { # CURRENT_BRANCH KEY -> up to 5 lines "- (branch) text"
+  {
+    for f in $(ls -t "$(effort_dir)"/*.md 2>/dev/null); do
+      br=$(effort_branch "$f"); [ -n "$br" ] && [ "$br" != "$1" ] || continue
+      section "$f" "Decisions and dead ends" |
+        awk -v br="$br" -v tab="$TAB" 'NF { l = $0; sub(/^[[:space:]]*[-*][[:space:]]*/, "", l); a[++n] = br tab l } END { for (i = n; i > 0; i--) print a[i] }'
+    done
+    log_events "$2" | awk -F "$TAB" -v OFS="$TAB" -v b="$1" '($3 == "decision" || $3 == "dead-end") && $4 != b { print $4, $7 }'
+  } | awk -F "$TAB" '!seen[$2]++ && $2 !~ /^\[[ xX]\]/ {
+        t = $2; if (length(t) > 240) t = substr(t, 1, 237) "..."
+        printf "- (%s) %s\n", $1, t; if (++c >= 5) exit }'
 }
 
 build_context() {
@@ -246,24 +261,30 @@ build_context() {
 
   budget=$MAX_CHARS
   if [ -s "$GLOBAL_NOTES" ]; then
-    piece "trailkeep: your notes for every repo" "$GLOBAL_NOTES" "$((budget / 4))"
+    piece "trailkeep: your preferences for every repo; apply them unless the user says otherwise" "$GLOBAL_NOTES" "$((budget / 4))"
     budget=$((budget - $(chars "$GLOBAL_NOTES")))
     [ "$budget" -lt $((MAX_CHARS / 2)) ] && budget=$((MAX_CHARS / 2))
     printf '\n'
   fi
   if [ "$has_notes" -eq 1 ]; then
-    piece "trailkeep: private notes for this repository" "$notes" "$((budget / 3))"
+    piece "trailkeep: rules and notes for this repository; follow them unless the user says otherwise" "$notes" "$((budget / 3))"
     budget=$((budget - $(chars "$notes")))
     [ "$budget" -lt $((MAX_CHARS / 2)) ] && budget=$((MAX_CHARS / 2))
     printf '\n'
   fi
   if [ "$has_effort" -eq 1 ] && ! grep -q '^## Plan' "$effort"; then
-    piece "trailkeep: notes for branch $b" "$effort" "$budget"
+    piece "trailkeep: decisions recorded for branch $b; follow them unless the user says otherwise" "$effort" "$budget"
     printf '\n'
   elif [ "$has_effort" -eq 1 ]; then
     printf 'trailkeep: this branch has an effort file. It is the source of truth for the current task. Keep it current as you work: tick Plan items and add one dated line under Progress before you stop.\n'
     piece "trailkeep: effort file for branch $b" "$effort" "$budget"
     printf '\n'
+  fi
+  if [ "$has_effort" -eq 0 ] && [ -n "$effort" ]; then
+    od=$(other_decisions "$b" "$KEY" 2>/dev/null)
+    if [ -n "$od" ]; then
+      printf 'trailkeep: branch %s has no notes yet. Recent decisions from other branches of this repo, newest first. Rules about the codebase as a whole probably hold here too; ones tied to another branch'"'"'s task may not:\n%s\n\n' "$b" "$od"
+    fi
   fi
   if [ "${TRAILKEEP_HINT:-1}" != 0 ] && [ -n "$effort" ]; then
     capture_rule

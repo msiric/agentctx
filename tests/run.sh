@@ -471,12 +471,16 @@ test_note() {
   ax note "Dead end: mmap fails on NFS" >/dev/null
   f=$(ax path); is_file "$f"
   out=$(ax context --for claude </dev/null)
-  contains "$out" "notes for branch feat/cache" "notes-only file injected as notes"
+  contains "$out" "decisions recorded for branch feat/cache" "notes-only file injected as decisions"
   contains "$out" "no Redis in prod"; contains "$out" "mmap fails on NFS"
   case $out in *"## Goal"*) flunk "notes-only file has no empty Goal" ;; *) pass ;; esac
   git checkout -q main
   out=$(ax context --for claude </dev/null)
-  case $out in *"no Redis"*) flunk "branch note leaked to main" ;; *) pass ;; esac
+  contains "$out" "Recent decisions from other branches" "branch without notes sees other branches' decisions"
+  contains "$out" "- (feat/cache) 2026-" "labelled with their branch"
+  ax note "main uses the in-memory cache" >/dev/null
+  out=$(ax context --for claude </dev/null)
+  case $out in *"no Redis"*) flunk "other branches' decisions shown on a branch that has its own notes" ;; *) pass ;; esac
   ax note --repo "CI runs Python 3.9" >/dev/null; status $? 0 "repo note"
   out=$(ax context --for claude </dev/null); contains "$out" "CI runs Python 3.9" "repo note on every branch"
   ax note --all "Prefer table-driven tests" >/dev/null; status $? 0 "personal note"
