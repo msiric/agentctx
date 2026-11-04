@@ -1,0 +1,474 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..5a10784 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -6,8 +6,7 @@ import tempfile
+ import pytest
+ 
+ from tinydb import TinyDB, where
+-from tinydb.storages import JSONStorage, MemoryStorage, Storage, touch
+-from tinydb.table import Document
++from tinydb.storages import JSONStorage, MemoryStorage, Storage, YAMLStorage, touch
+ 
+ random.seed()
+ 
+@@ -212,51 +211,179 @@ def test_custom_with_exception():
+ 
+ 
+ def test_yaml(tmpdir):
+-    """
+-    :type tmpdir: py._path.local.LocalPath
+-    """
++    path = str(tmpdir.join('test.yml'))
++    storage = YAMLStorage(path)
++    storage.write({'_default': {'1': doc}})
+ 
+-    try:
+-        import yaml
+-    except ImportError:
+-        return pytest.skip('PyYAML not installed')
++    assert storage.read() == {'_default': {'1': doc}}
++    storage.close()
+ 
+-    def represent_doc(dumper, data):
+-        # Represent `Document` objects as their dict's string representation
+-        # which PyYAML understands
+-        return dumper.represent_data(dict(data))
++    # Plain YAML only: no Python specific tags
++    assert '!' not in tmpdir.join('test.yml').read()
++
++
++def test_yaml_with_tinydb(tmpdir):
++    path = str(tmpdir.join('test.yml'))
++
++    with TinyDB(path, storage=YAMLStorage) as db:
++        db.insert(doc)
++        db.insert_multiple([{'name': 'a'}, {'name': 'b'}])
++        db.update({'name': 'foo'}, doc_ids=[2])
++
++    # Documents are plain YAML and survive a reopen
++    text = tmpdir.join('test.yml').read()
++    assert '!' not in text
++    # Document IDs are written as plain integers, easy to edit by hand
++    assert '\n  1:\n' in text
++
++    with TinyDB(path, storage=YAMLStorage) as db:
++        assert db.get(doc_id=1) == doc
++        assert db.contains(where('name') == 'foo')
++        assert len(db) == 3
++
++
++def test_yaml_hand_edited_values_stay_strings(tmpdir):
++    path = tmpdir.join('test.yml')
++    path.write(
++        '_default:\n'
++        '  1:\n'
++        '    country: NO\n'
++        '    maintenance: off\n'
++        '    a: yes\n'
++        '    b: On\n'
++        '    c: n\n'
++        '    d: Y\n'
++        '    e: True\n'
++        '    enabled: true\n'
++        '    disabled: false\n'
++    )
++
++    with TinyDB(str(path), storage=YAMLStorage) as db:
++        assert db.get(doc_id=1) == {
++            'country': 'NO', 'maintenance': 'off', 'a': 'yes', 'b': 'On',
++            'c': 'n', 'd': 'Y', 'e': 'True', 'enabled': True, 'disabled': False,
++        }
+ 
+-    yaml.add_representer(Document, represent_doc)
+ 
+-    class YAMLStorage(Storage):
+-        def __init__(self, filename):
+-            self.filename = filename
+-            touch(filename, False)
++def test_yaml_bool_like_strings_round_trip(tmpdir):
++    values = {
++        'country': 'NO', 'maintenance': 'off', 'a': 'yes', 'b': 'true',
++        'c': 'False', 'd': 'null', 'e': '123', 'f': '', 'g': '~',
++        'real_bool': True, 'real_none': None, 'real_int': 123,
++    }
++    path = str(tmpdir.join('test.yml'))
+ 
+-        def read(self):
+-            with open(self.filename) as handle:
+-                data = yaml.safe_load(handle.read())
+-                return data
++    with TinyDB(path, storage=YAMLStorage) as db:
++        db.insert(values)
+ 
+-        def write(self, data):
+-            with open(self.filename, 'w') as handle:
+-                yaml.dump(data, handle)
++    with TinyDB(path, storage=YAMLStorage) as db:
++        result = db.get(doc_id=1)
++        assert result == values
++        for key, value in values.items():
++            assert type(result[key]) is type(value)
+ 
+-        def close(self):
+-            pass
+ 
+-    # Write contents
+-    path = str(tmpdir.join('test.db'))
+-    db = TinyDB(path, storage=YAMLStorage)
+-    db.insert(doc)
+-    assert db.all() == [doc]
++def test_yaml_does_not_change_pyyaml_globals(tmpdir):
++    import yaml
++
++    storage = YAMLStorage(str(tmpdir.join('test.yml')))
++    storage.close()
++
++    assert yaml.safe_load('x: NO') == {'x': False}
++    assert yaml.safe_load('x: on') == {'x': True}
++
++
++def test_yaml_empty_file(tmpdir):
++    path = tmpdir.join('test.yml')
++
++    storage = YAMLStorage(str(path))
++    assert storage.read() is None
++    storage.close()
++
++    # Only comments
++    path.write('# nothing here yet\n')
++    storage = YAMLStorage(str(path))
++    assert storage.read() is None
++    storage.close()
++
++
++def test_yaml_invalid_file_is_not_overwritten(tmpdir):
++    import yaml
++
++    path = tmpdir.join('test.yml')
++    content = '_default: [unclosed\n'
++    path.write(content)
++
++    with pytest.raises(yaml.YAMLError):
++        TinyDB(str(path), storage=YAMLStorage).all()
+ 
+-    db.update({'name': 'foo'})
++    assert path.read() == content
+ 
+-    assert '!' not in tmpdir.join('test.db').read()
+ 
+-    assert db.contains(where('name') == 'foo')
+-    assert len(db) == 1
++def test_yaml_rejects_python_tags(tmpdir):
++    import yaml
++
++    path = tmpdir.join('test.yml')
++    path.write('_default: !!python/object/apply:os.getcwd []\n')
++
++    storage = YAMLStorage(str(path))
++    with pytest.raises(yaml.YAMLError):
++        storage.read()
++    storage.close()
++
++
++def test_yaml_int_and_str_doc_ids(tmpdir):
++    path = tmpdir.join('test.yml')
++    path.write("_default:\n  1:\n    a: 1\n  '2':\n    a: 2\n")
++
++    with TinyDB(str(path), storage=YAMLStorage) as db:
++        assert db.get(doc_id=1) == {'a': 1}
++        assert db.get(doc_id=2) == {'a': 2}
++
++
++def test_yaml_unicode_and_kwargs(tmpdir):
++    path = tmpdir.join('test.yml')
++
++    with TinyDB(str(path), storage=YAMLStorage, sort_keys=True) as db:
++        db.insert({'b': 'こんにちは', 'a': 1})
++
++    text = path.read_text('utf-8')
++    assert 'こんにちは' in text
++    assert text.index('a:') < text.index('b:')
++
++
++def test_yaml_create_dirs(tmpdir):
++    path = str(tmpdir.join('sub').join('dir').join('test.yml'))
++
++    with pytest.raises(IOError):
++        YAMLStorage(path)
++
++    YAMLStorage(path, create_dirs=True).close()
++    assert os.path.exists(path)
++
++
++def test_yaml_readonly(tmpdir):
++    path = str(tmpdir.join('test.yml'))
++    YAMLStorage(path).close()
++
++    storage = YAMLStorage(path, access_mode='r')
++    assert storage.read() is None
++    with pytest.raises(IOError):
++        storage.write({'_default': {}})
++    storage.close()
++
++
++def test_yaml_missing_pyyaml(tmpdir, monkeypatch):
++    import sys
++    from tinydb import storages
++
++    storages._yaml_support.cache_clear()
++    monkeypatch.setitem(sys.modules, 'yaml', None)
++    try:
++        with pytest.raises(ImportError, match='PyYAML'):
++            YAMLStorage(str(tmpdir.join('test.yml')))
++    finally:
++        storages._yaml_support.cache_clear()
+ 
+ 
+ def test_encoding(tmpdir):
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..65644bf 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -3,14 +3,16 @@ Contains the :class:`base class <tinydb.storages.Storage>` for storages and
+ implementations.
+ """
+ 
++import functools
+ import io
+ import json
+ import os
++import re
+ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+ 
+-__all__ = ('Storage', 'JSONStorage', 'MemoryStorage')
++__all__ = ('Storage', 'JSONStorage', 'MemoryStorage')  # YAMLStorage is optional, see below
+ 
+ 
+ def touch(path: str, create_dirs: bool):
+@@ -76,12 +78,16 @@ class Storage(ABC):
+         pass
+ 
+ 
+-class JSONStorage(Storage):
++class FileStorage(Storage):
+     """
+-    Store the data in a JSON file.
++    Base class for storages that keep their data in a single file.
++
++    Takes care of creating the file (and optionally its parent directories),
++    checking the access mode and holding the open file handle. Subclasses only
++    need to implement :meth:`read` and :meth:`write`.
+     """
+ 
+-    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+', **kwargs):
++    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+'):
+         """
+         Create a new instance.
+ 
+@@ -91,11 +97,9 @@ class JSONStorage(Storage):
+         **Note:** Using an access mode other than `r` or `r+` will probably
+         lead to data loss or data corruption!
+ 
+-        **Note:** **Never** pass untrusted or user-controlled code as ``kwargs``
+-        members like ``cls`` or ``default`` will be called on every write
+-        operation.
+-
+-        :param path: Where to store the JSON data.
++        :param path: Where to store the data.
++        :param create_dirs: Whether to create missing parent directories.
++        :param encoding: The encoding used to open the file.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
+         """
+@@ -103,7 +107,6 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
+-        self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+             warnings.warn(
+@@ -122,6 +125,29 @@ class JSONStorage(Storage):
+     def close(self) -> None:
+         self._handle.close()
+ 
++
++class JSONStorage(FileStorage):
++    """
++    Store the data in a JSON file.
++    """
++
++    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+', **kwargs):
++        """
++        Create a new instance.
++
++        See :class:`FileStorage` for the file handling arguments.
++
++        **Note:** **Never** pass untrusted or user-controlled code as ``kwargs``
++        members like ``cls`` or ``default`` will be called on every write
++        operation.
++
++        :param kwargs: Passed on to :func:`json.dumps` on every write.
++        """
++
++        super().__init__(path, create_dirs=create_dirs, encoding=encoding, access_mode=access_mode)
++
++        self.kwargs = kwargs
++
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
+         # Get the file size by moving the cursor to the file end and reading
+         # its location
+@@ -161,6 +187,150 @@ class JSONStorage(Storage):
+         self._handle.truncate()
+ 
+ 
++@functools.cache
++def _yaml_support() -> tuple[Any, Any, Any]:
++    """
++    Import PyYAML lazily and build the loader and dumper used by
++    :class:`YAMLStorage`.
++
++    PyYAML is an optional dependency, so it must not be imported when TinyDB
++    itself is imported. The loader and dumper are subclasses so that PyYAML's
++    global state is left untouched.
++
++    :returns: the ``yaml`` module, the loader class and the dumper class
++    """
++
++    try:
++        import yaml
++    except ImportError:
++        raise ImportError(
++            'YAMLStorage requires PyYAML. Install it with `pip install pyyaml`.'
++        ) from None
++
++    bool_tag = 'tag:yaml.org,2002:bool'
++
++    class Loader(yaml.SafeLoader):
++        """
++        A safe loader that only treats ``true`` and ``false`` as booleans.
++
++        PyYAML follows YAML 1.1 where ``yes``, ``no``, ``on``, ``off``, ``y``,
++        ``n`` (in any capitalization) are booleans too. That turns hand-written
++        values like ``country: NO`` into ``False``. Here, they stay strings.
++        """
++
++    # ``yaml_implicit_resolvers`` is shared with ``SafeLoader``: copy it
++    # (including the lists) before changing it
++    Loader.yaml_implicit_resolvers = {
++        first: [(tag, regexp) for tag, regexp in resolvers if tag != bool_tag]
++        for first, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
++    }
++    Loader.add_implicit_resolver(bool_tag, re.compile(r'^(?:true|false)$'), list('tf'))
++
++    class Dumper(yaml.SafeDumper):
++        """
++        A safe dumper that can also represent ``dict`` subclasses like
++        :class:`~tinydb.table.Document`.
++
++        It keeps PyYAML's default resolvers on purpose: strings that look like
++        a YAML 1.1 boolean (``'NO'``, ``'off'``) are written quoted, so the
++        files stay unambiguous for other YAML tools.
++        """
++
++    Dumper.add_multi_representer(dict, lambda dumper, data: dumper.represent_dict(dict(data)))
++
++    return yaml, Loader, Dumper
++
++
++class YAMLStorage(FileStorage):
++    """
++    Store the data in a YAML file.
++
++    Requires `PyYAML <https://pyyaml.org/>`_. Only ``true`` and ``false`` are
++    read as booleans, so hand-edited values such as ``NO`` or ``off`` stay
++    strings. Only plain YAML types are supported (no Python-specific tags).
++
++    **Note:** Comments and formatting in the file are not preserved when the
++    database is written.
++    """
++
++    def __init__(self, path: str, create_dirs=False, encoding='utf-8', access_mode='r+', **kwargs):
++        """
++        Create a new instance.
++
++        See :class:`FileStorage` for the file handling arguments.
++
++        :param kwargs: Passed on to :func:`yaml.dump` on every write. By
++                       default the output is block style, keeps the key order
++                       and does not escape unicode.
++        """
++
++        # Fail early with a helpful message if PyYAML is missing
++        _yaml_support()
++
++        super().__init__(path, create_dirs=create_dirs, encoding=encoding, access_mode=access_mode)
++
++        self.kwargs = kwargs
++
++    def read(self) -> Optional[dict[str, dict[str, Any]]]:
++        yaml, loader, _ = _yaml_support()
++
++        self._handle.seek(0, os.SEEK_END)
++        size = self._handle.tell()
++
++        if not size:
++            return None
++
++        self._handle.seek(0)
++
++        # Syntax errors are raised on purpose: returning ``None`` here would
++        # make TinyDB overwrite a hand-edited file that merely has a typo.
++        # A file that only contains comments loads as ``None`` (empty).
++        data = yaml.load(self._handle, Loader=loader)
++
++        # Hand-written ``1:`` is an integer key in YAML, but TinyDB looks up
++        # documents by string ID (as stored by JSON). Normalize the IDs.
++        if isinstance(data, dict):
++            data = {
++                name: {str(doc_id): doc for doc_id, doc in table.items()}
++                if isinstance(table, dict) else table
++                for name, table in data.items()
++            }
++
++        return data
++
++    def write(self, data: dict[str, dict[str, Any]]):
++        yaml, _, dumper = _yaml_support()
++
++        self._handle.seek(0)
++
++        # TinyDB uses string document IDs. Write them as integers so the file
++        # reads naturally (``1:`` instead of ``'1':``) when edited by hand.
++        data = {
++            name: {
++                int(doc_id) if isinstance(doc_id, str) and str(int(doc_id)) == doc_id else doc_id: doc
++                for doc_id, doc in table.items()
++            } if isinstance(table, dict) else table
++            for name, table in data.items()
++        }
++
++        options: dict[str, Any] = {
++            'default_flow_style': False,
++            'sort_keys': False,
++            'allow_unicode': True,
++        }
++        options.update(self.kwargs)
++        serialized = yaml.dump(data, Dumper=dumper, **options)
++
++        try:
++            self._handle.write(serialized)
++        except io.UnsupportedOperation:
++            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
++
++        self._handle.flush()
++        os.fsync(self._handle.fileno())
++        self._handle.truncate()
++
++
+ class MemoryStorage(Storage):
+     """
+     Store the data as JSON in memory.

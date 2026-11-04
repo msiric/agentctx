@@ -1,0 +1,1 @@
+- [No positional boolean params](feedback-no-positional-boolean-params.md) — use options objects, never bare boolean args

@@ -1,0 +1,210 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..7722440
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,43 @@
++# HANDOFF
++
++## State
++Task: find out why reads are slow on ~40MB dbs (branch `perf/read-cache`).
++Added `scripts/bench_read.py` (generates a db, times storage.read, db.all(),
++uncached/cached search, prints a cProfile). No library code changed yet.
++
++## Findings (42MB, 198k docs, py3.12)
++- file read 30ms; storage.read() (read + json parse) ~380ms
++- db.all() ~890ms; uncached search ~430ms; cached search ~0ms
++- Confirmed: Table._read_table calls storage.read() on every call, so
++  JSONStorage re-parses the whole file per query/all().
++- search: ~89% is JSON parse. all(): ~43% parse, rest is wrapping 198k
++  dicts in Document/document_id_class objects.
++
++## Decisions / notes
++- Script lives in scripts/ and uses sys.path to import the repo checkout;
++  run with `python -I scripts/bench_read.py`.
++- Distinct queries are used for the "uncached" search to defeat Table's query cache.
++
++## Implemented (uncommitted): content-compare cache in JSONStorage
++- read() always re-reads the file text (~30-45ms) and compares with the cached
++  raw text; json.loads only when it differs. write() clears the cache first.
++  Reason: no mtime/size reliance (NFS issue below), so importer writes always show up.
++- Result (42MB): storage.read 380 -> ~50ms, uncached search 430 -> ~110ms, all() 890 -> ~400ms
++  (remaining all() cost is Document wrapping).
++- Tests: 228 pass (run `python -m pytest -q -c /dev/null --rootdir=. tests`; pytest.ini needs pytest-cov).
++  Manual check: a second TinyDB instance inserting is seen by the first.
++- OPEN CAVEAT: read() returns the shared cached object. If a caller mutates nested
++  values of docs from all()/search() (e.g. doc['tags'].append), the cache is
++  poisoned until the file changes. Fix options: deepcopy (costly) or document it.
++- Not done: no unit test added for cache/external-change yet.
++
++## Not tried yet (superseded)
++- Caching parsed data in JSONStorage (invalidate on write / file mtime+size).
++  Caveat: returned dicts are mutable; callers/cached search results share them.
++
++## Failed approach (from user, prior history)
++- mtime-based cache invalidation was tried last year and removed: dbs live on
++  NFS where mtime has 1s resolution, so writes by the importer within the same
++  second left stale data being served. Don't rely on mtime (or mtime+size
++  alone) for invalidation.
++- Benchmark script committed; caching approach is undecided (user thinking).
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..8fb300a
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,110 @@
++"""Benchmark TinyDB read performance on a large JSON db.
++
++Usage: python scripts/bench_read.py [--size-mb 40] [--repeat 3] [--keep]
++"""
++import argparse
++import cProfile
++import json
++import os
++import pstats
++import random
++import sys
++import tempfile
++import time
++
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
++
++from tinydb import TinyDB, where  # noqa: E402
++
++
++def generate(path, size_mb):
++    rng = random.Random(0)
++    db = TinyDB(path)
++    target = size_mb * 1024 * 1024
++    batch = []
++    while True:
++        for i in range(2000):
++            batch.append({
++                'name': ''.join(rng.choices('abcdefghij', k=12)),
++                'age': rng.randint(0, 99),
++                'tags': [rng.choice('xyz') for _ in range(5)],
++                'bio': ''.join(rng.choices('abcdefgh ', k=120)),
++            })
++        db.insert_multiple(batch)
++        batch = []
++        if os.path.getsize(path) >= target:
++            break
++    n = len(db)
++    db.close()
++    return n
++
++
++def timed(fn, repeat):
++    best = float('inf')
++    for _ in range(repeat):
++        t = time.perf_counter()
++        fn()
++        best = min(best, time.perf_counter() - t)
++    return best
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument('--size-mb', type=int, default=40)
++    ap.add_argument('--repeat', type=int, default=3)
++    ap.add_argument('--keep', action='store_true')
++    args = ap.parse_args()
++
++    d = tempfile.mkdtemp(prefix='tinydb-bench-')
++    path = os.path.join(d, 'db.json')
++    print(f'generating ~{args.size_mb}MB db at {path} ...')
++    n = generate(path, args.size_mb)
++    print(f'{n} docs, {os.path.getsize(path) / 1e6:.1f} MB\n')
++
++    db = TinyDB(path)
++    raw = db.storage
++
++    def parse_only():
++        raw.read()
++
++    def read_text():
++        raw._handle.seek(0)
++        raw._handle.read()
++
++    t_text = timed(read_text, args.repeat)
++    t_parse = timed(parse_only, args.repeat)
++    t_all = timed(lambda: db.all(), args.repeat)
++
++    counter = [0]
++
++    def uncached_search():
++        counter[0] += 1  # distinct query each time defeats the query cache
++        db.search(where('age') == (counter[0] % 100))
++
++    t_search = timed(uncached_search, args.repeat)
++    db.search(where('age') == 5)
++    t_cached = timed(lambda: db.search(where('age') == 5), args.repeat)
++
++    print(f'{"file read (text only)":34s}{t_text * 1000:10.1f} ms')
++    print(f'{"storage.read() (read+json parse)":34s}{t_parse * 1000:10.1f} ms')
++    print(f'{"db.all()":34s}{t_all * 1000:10.1f} ms')
++    print(f'{"db.search() uncached":34s}{t_search * 1000:10.1f} ms')
++    print(f'{"db.search() cached":34s}{t_cached * 1000:10.1f} ms')
++    print(f'\nparse share of db.all():    {t_parse / t_all:.0%}')
++    print(f'parse share of search():    {t_parse / t_search:.0%}')
++
++    print('\n--- cProfile: uncached search ---')
++    pr = cProfile.Profile()
++    pr.enable()
++    uncached_search()
++    pr.disable()
++    pstats.Stats(pr).sort_stats('cumulative').print_stats(8)
++
++    db.close()
++    if not args.keep:
++        os.remove(path)
++        os.rmdir(d)
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..5690ac3 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -119,6 +119,13 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Raw file contents and the parsed result of the last read. Reads
++        # always re-read the file (cheap) and compare it with the cached raw
++        # contents, so changes made by other processes are always picked up
++        # without relying on mtime/size, which are unreliable on e.g. NFS.
++        self._cached_raw = None
++        self._cached_data = None
++
+     def close(self) -> None:
+         self._handle.close()
+ 
+@@ -136,13 +143,24 @@ class JSONStorage(Storage):
+             # Return the cursor to the beginning of the file
+             self._handle.seek(0)
+ 
+-            # Load the JSON contents of the file
+-            return json.load(self._handle)
++            # Read the raw contents and only parse them if they differ from
++            # what we parsed last time
++            raw = self._handle.read()
++
++            if self._cached_raw is None or raw != self._cached_raw:
++                self._cached_data = json.loads(raw)
++                self._cached_raw = raw
++
++            return self._cached_data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
++        # The file is about to change, so drop the cached parse
++        self._cached_raw = None
++        self._cached_data = None
++
+         # Serialize the database state using the user-provided arguments
+         serialized = json.dumps(data, **self.kwargs)
+ 

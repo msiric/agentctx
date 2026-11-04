@@ -1,0 +1,267 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..9028cc0
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,112 @@
++"""
++Benchmark TinyDB read performance on a large JSON database.
++
++Usage: PYTHONPATH=. python scripts/bench_read.py [--size-mb 40] [--repeat 3]
++
++Generates a temporary db file, then times db.all(), a cold search, a cached
++search, and breaks down where the time goes (disk read, json parse, query
++evaluation, Document wrapping).
++"""
++import argparse
++import json
++import os
++import random
++import string
++import tempfile
++import time
++
++from tinydb import TinyDB, where
++from tinydb.table import Document
++
++
++def make_doc(i, rng):
++    return {
++        'id': i,
++        'name': ''.join(rng.choices(string.ascii_lowercase, k=12)),
++        'email': f'user{i}@example.com',
++        'age': rng.randint(18, 90),
++        'tags': [rng.choice(['a', 'b', 'c', 'd', 'e']) for _ in range(5)],
++        'address': {'city': rng.choice(['Berlin', 'Paris', 'Rome']),
++                    'zip': str(rng.randint(10000, 99999))},
++        'bio': ''.join(rng.choices(string.ascii_letters + ' ', k=200)),
++    }
++
++
++def generate(path, size_mb):
++    rng = random.Random(0)
++    docs, size, i = {}, 0, 0
++    per_doc = len(json.dumps(make_doc(0, rng))) + 12
++    n = int(size_mb * 1024 * 1024 / per_doc)
++    for i in range(1, n + 1):
++        docs[str(i)] = make_doc(i, rng)
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return n
++
++
++def best(fn, repeat):
++    times = []
++    for _ in range(repeat):
++        t = time.perf_counter()
++        result = fn()
++        times.append(time.perf_counter() - t)
++    return min(times), result
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument('--size-mb', type=float, default=40)
++    ap.add_argument('--repeat', type=int, default=3)
++    args = ap.parse_args()
++
++    with tempfile.TemporaryDirectory() as tmp:
++        path = os.path.join(tmp, 'db.json')
++        n = generate(path, args.size_mb)
++        print(f'{n} docs, {os.path.getsize(path) / 1e6:.1f} MB\n')
++
++        db = TinyDB(path)
++        q = where('age') > 80
++
++        def row(label, t):
++            print(f'{label:<40}{t * 1000:>10.1f} ms')
++
++        t, docs = best(db.all, args.repeat)
++        row(f'db.all() ({len(docs)} docs)', t)
++
++        def cold():
++            db.clear_cache()
++            return db.search(q)
++        t, res = best(cold, args.repeat)
++        row(f'search, cold cache ({len(res)} hits)', t)
++
++        db.search(q)
++        t, _ = best(lambda: db.search(q), args.repeat)
++        row('search, cached', t)
++
++        print('\nBreakdown (one full-table read):')
++        storage = db.storage
++
++        def raw_read():
++            with open(path) as f:
++                return f.read()
++        t_io, text = best(raw_read, args.repeat)
++        row('  file read (text decode)', t_io)
++
++        t_parse, data = best(lambda: json.loads(text), args.repeat)
++        row('  json.loads', t_parse)
++
++        t_store, table = best(lambda: storage.read()['_default'], args.repeat)
++        row('  JSONStorage.read() total', t_store)
++
++        t_eval, _ = best(lambda: [d for d in table.values() if q(d)],
++                         args.repeat)
++        row('  query eval on parsed data', t_eval)
++
++        t_wrap, _ = best(lambda: [Document(d, int(k))
++                                  for k, d in table.items()], args.repeat)
++        row('  Document wrapping (all docs)', t_wrap)
++        db.close()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..18225cd 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,53 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_read_skips_parse_when_unchanged(tmpdir, monkeypatch):
++    path = str(tmpdir.join('db.json'))
++    with TinyDB(path) as db:
++        db.insert({'a': 1})
++
++        calls = []
++        real_loads = json.loads
++        monkeypatch.setattr(
++            json, 'loads', lambda *a, **k: calls.append(1) or real_loads(*a, **k)
++        )
++
++        assert db.all() == [{'a': 1}]
++        assert db.all() == [{'a': 1}]
++        assert len(calls) == 1
++
++
++def test_json_read_sees_external_write_same_size_and_mtime(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    with TinyDB(path) as db:
++        db.insert({'a': 1})
++        assert db.all() == [{'a': 1}]
++
++        # Another process rewrites the file with same size and same mtime
++        st = os.stat(path)
++        with open(path, 'r+') as f:
++            content = f.read().replace('"a": 1', '"a": 2')
++            f.seek(0)
++            f.write(content)
++        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
++        assert os.stat(path).st_size == st.st_size
++
++        assert db.all() == [{'a': 2}]
++
++
++def test_json_cache_not_corrupted_by_failing_updater(tmpdir):
++    path = str(tmpdir.join('db.json'))
++    with TinyDB(path) as db:
++        db.insert({'a': 1})
++        db.all()
++
++        def boom(doc):
++            doc['a'] = 99
++            raise RuntimeError
++
++        with pytest.raises(RuntimeError):
++            db.update(boom)
++
++        assert db.all() == [{'a': 1}]
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..165578d 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -119,27 +119,55 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # The raw contents of the file and the data parsed from them, as of
++        # the last read. The file is always re-read, but parsing is skipped
++        # if its contents are unchanged. We deliberately compare contents
++        # rather than mtime/size: those can't be trusted on filesystems such
++        # as NFS (coarse timestamps, attribute caching), where a write within
++        # the same second would go unnoticed.
++        self._cached_raw = None
++        self._cached_data = None
++
++    def invalidate_cache(self) -> None:
++        """
++        Drop the parsed-data cache. The next read will parse the file again.
++
++        Called whenever the cached object may have been modified in place.
++        """
++        self._cached_raw = None
++        self._cached_data = None
++
+     def close(self) -> None:
+         self._handle.close()
+ 
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
+-        # Get the file size by moving the cursor to the file end and reading
+-        # its location
+-        self._handle.seek(0, os.SEEK_END)
+-        size = self._handle.tell()
++        # Read the raw file contents (cheap compared to parsing them)
++        self._handle.seek(0)
++        raw = self._handle.read()
+ 
+-        if not size:
++        if not raw:
+             # File is empty, so we return ``None`` so TinyDB can properly
+             # initialize the database
++            self.invalidate_cache()
+             return None
+-        else:
+-            # Return the cursor to the beginning of the file
+-            self._handle.seek(0)
+ 
+-            # Load the JSON contents of the file
+-            return json.load(self._handle)
++        if self._cached_raw is not None and raw == self._cached_raw:
++            # The file is unchanged since the last parse
++            return self._cached_data
++
++        # Load the JSON contents of the file
++        data = json.loads(raw)
++        self._cached_raw = raw
++        self._cached_data = data
++
++        return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The caller has probably modified the cached object in place, and
++        # the file is about to change, so the cache is no longer valid. This
++        # also covers a failed write below.
++        self.invalidate_cache()
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..90676a4 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -837,7 +837,15 @@ class Table:
+         }
+ 
+         # Perform the table update operation
+-        updater(table)
++        try:
++            updater(table)
++        except BaseException:
++            # Storages may hand out their cached data, which the updater may
++            # have partially modified in place. Make sure it isn't reused.
++            invalidate = getattr(self._storage, 'invalidate_cache', None)
++            if invalidate is not None:
++                invalidate()
++            raise
+ 
+         # Convert the document IDs back to strings.
+         # This is required as some storages (most notably the JSON file format)

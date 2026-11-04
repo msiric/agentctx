@@ -1,0 +1,736 @@
+
+  [38;2;9;127;184m▄[0m[48;2;8;130;178m[38;2;5;133;186m▄[0m       [48;2;10;143;160m[38;2;10;143;165m▄[0m[38;2;7;140;156m▄[0m
+ [38;2;8;125;192m▄[0m [38;2;3;132;191m▀[0m[38;2;2;133;192m▄[0m [38;2;3;132;180m▄[0m[38;2;1;137;184m▄[0m[38;2;3;133;174m▄[0m [38;2;3;142;176m▄[0m[38;2;4;142;169m▀[0m [38;2;10;144;164m▄[0m
+[38;2;6;121;195m▀[0m[38;2;5;128;203m▀[0m[48;2;5;124;195m[38;2;3;125;200m▄[0m[38;2;2;126;196m▄[0m[48;2;3;128;188m[38;2;1;131;196m▄[0m[48;2;0;152;219m[38;2;2;131;191m▄[0m[38;2;1;141;196m▀[0m[38;2;1;135;183m▀[0m[38;2;1;148;198m▀[0m[48;2;1;156;202m[38;2;2;135;180m▄[0m[48;2;4;134;169m[38;2;1;137;177m▄[0m[38;2;3;138;173m▄[0m[48;2;6;137;165m[38;2;2;140;170m▄[0m[38;2;7;144;169m▀[0m[38;2;7;139;158m▀[0m
+   [48;2;2;128;202m[38;2;2;124;201m▄[0m[48;2;1;130;201m[38;2;0;135;212m▄[0m[38;2;2;128;196m▄[0m [48;2;2;142;204m[38;2;7;138;199m▄[0m [38;2;1;135;186m▄[0m[48;2;1;142;186m[38;2;2;144;194m▄[0m[48;2;3;138;176m[38;2;2;134;176m▄[0m
+ [48;2;8;118;200m[38;2;8;121;209m▄[0m[38;2;3;121;203m▀[0m [38;2;3;122;192m▀[0m[38;2;1;138;216m▀[0m[48;2;0;138;210m[38;2;3;128;198m▄[0m[48;2;0;126;188m[38;2;2;131;198m▄[0m[48;2;0;142;205m[38;2;3;132;193m▄[0m[38;2;1;140;196m▀[0m  [38;2;4;134;175m▀[0m[48;2;13;135;167m[38;2;8;136;174m▄[0m 
+
+  [38;2;0;116;217mH[38;2;0;116;215mi[38;2;0;117;213mn[38;2;0;118;211md[38;2;0;119;209ms[38;2;0;120;207mi[38;2;0;121;205mg[38;2;0;122;203mh[38;2;0;123;201mt[38;2;0;123;199m: [38;2;0;125;195mA[38;2;0;126;193mg[38;2;0;127;191me[38;2;0;128;189mn[38;2;0;129;187mt [38;2;0;131;183mM[38;2;0;131;181me[38;2;0;132;179mm[38;2;0;133;177mo[38;2;0;134;175mr[38;2;0;135;173my [38;2;0;137;169mT[38;2;0;138;167mh[38;2;0;138;165ma[38;2;0;139;163mt [38;2;0;141;159mL[38;2;0;142;157me[38;2;0;143;155ma[38;2;0;144;153mr[38;2;0;145;151mn[38;2;0;146;150ms[0m
+
+2026-11-03 21:56:51,504 - INFO - hindsight_api.config - Database: pg0 (schema: public)
+2026-11-03 21:56:51,505 - INFO - hindsight_api.config - LLM: provider=claude-code, model=claude-sonnet-5-5
+2026-11-03 21:56:51,505 - INFO - hindsight_api.config - Embeddings: provider=local
+2026-11-03 21:56:51,505 - INFO - hindsight_api.config - Reranker: provider=local
+2026-11-03 21:56:51,505 - INFO - hindsight_api.config - Native threads: 4 per pool (available CPUs=4, cgroup CPU quota=none found)
+2026-11-03 21:56:51,505 - INFO - hindsight_api.config - Graph retriever: link_expansion
+2026-11-03 21:56:54,039 - INFO - hindsight_api.engine.providers.claude_code_llm - Claude Code: Using Claude Agent SDK (authentication via CLAUDE_CODE_OAUTH_TOKEN from config)
+2026-11-03 21:56:54,039 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code provider runs automated model calls on your Claude subscription, which may conflict with Anthropic's terms. Read the notice before using it beyond personal local development, and prefer the 'anthropic' provider with an API key for servers: https://hindsight.vectorize.io/developer/models#claude-code-setup-claude-promax
+2026-11-03 21:56:54,039 - INFO - hindsight_api.engine.providers.claude_code_llm - Claude Code: Using Claude Agent SDK (authentication via CLAUDE_CODE_OAUTH_TOKEN from config)
+2026-11-03 21:56:54,039 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code provider runs automated model calls on your Claude subscription, which may conflict with Anthropic's terms. Read the notice before using it beyond personal local development, and prefer the 'anthropic' provider with an API key for servers: https://hindsight.vectorize.io/developer/models#claude-code-setup-claude-promax
+2026-11-03 21:56:54,039 - INFO - hindsight_api.engine.providers.claude_code_llm - Claude Code: Using Claude Agent SDK (authentication via CLAUDE_CODE_OAUTH_TOKEN from config)
+2026-11-03 21:56:54,039 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code provider runs automated model calls on your Claude subscription, which may conflict with Anthropic's terms. Read the notice before using it beyond personal local development, and prefer the 'anthropic' provider with an API key for servers: https://hindsight.vectorize.io/developer/models#claude-code-setup-claude-promax
+2026-11-03 21:56:54,039 - INFO - hindsight_api.engine.providers.claude_code_llm - Claude Code: Using Claude Agent SDK (authentication via CLAUDE_CODE_OAUTH_TOKEN from config)
+2026-11-03 21:56:54,040 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code provider runs automated model calls on your Claude subscription, which may conflict with Anthropic's terms. Read the notice before using it beyond personal local development, and prefer the 'anthropic' provider with an API key for servers: https://hindsight.vectorize.io/developer/models#claude-code-setup-claude-promax
+2026-11-03 21:56:54,040 - INFO - hindsight_api.engine.providers.claude_code_llm - Claude Code: Using Claude Agent SDK (authentication via CLAUDE_CODE_OAUTH_TOKEN from config)
+2026-11-03 21:56:54,040 - WARNING - hindsight_api.engine.providers.claude_code_llm - Claude Code provider runs automated model calls on your Claude subscription, which may conflict with Anthropic's terms. Read the notice before using it beyond personal local development, and prefer the 'anthropic' provider with an API key for servers: https://hindsight.vectorize.io/developer/models#claude-code-setup-claude-promax
+2026-11-03 21:56:54,646 - INFO - hindsight_api.api.mcp - MCP servers created (stateless_http=False)
+2026-11-03 21:56:54,798 - INFO - hindsight_api.api - HTTP REST API enabled
+2026-11-03 21:56:54,798 - INFO - hindsight_api.api - MCP server enabled at /mcp/
+uvloop available, will use for event loop
+[38;2;0;116;217mStarting Hindsight API...[0m
+  [38;2;128;128;128mVersion:[0m [38;2;0;119;210mv1.1.0[0m
+  [38;2;128;128;128mURL:[0m [38;2;0;122;203mhttp://0.0.0.0:8888[0m
+  [38;2;128;128;128mDatabase:[0m [38;2;0;128;190mpg0[0m
+  [38;2;128;128;128mLLM:[0m [38;2;0;134;176mclaude-code / claude-sonnet-5-5[0m
+  [38;2;128;128;128mEmbeddings:[0m [38;2;0;140;163mlocal[0m
+  [38;2;128;128;128mReranker:[0m [38;2;0;146;150mlocal[0m
+  [38;2;128;128;128mExtensions:[0m [38;2;0;128;190mpgvector (vector) / native (text)[0m
+  [38;2;128;128;128mMCP:[0m [38;2;0;146;150menabled at /mcp[0m
+
+INFO:     Started server process [6055]
+INFO:     Waiting for application startup.
+2026-11-03 21:56:54,835 - INFO - mcp.server.streamable_http_manager - StreamableHTTP session manager started
+2026-11-03 21:56:54,835 - INFO - mcp.server.streamable_http_manager - StreamableHTTP session manager started
+2026-11-03 21:56:54,835 - INFO - hindsight_api.api - MCP lifespans started (multi-bank and single-bank)
+2026-11-03 21:56:54,836 - INFO - root - Metrics initialized - available at /metrics endpoint
+2026-11-03 21:56:54,922 - INFO - hindsight_api.pg0 - Starting embedded PostgreSQL (name=hindsight, port=auto)...
+2026-11-03 21:56:56,163 - INFO - hindsight_api.pg0 - PostgreSQL started: postgresql://hindsight:hindsight@127.0.0.1:5432/hindsight
+2026-11-03 21:56:57,315 - INFO - hindsight_api.engine.providers.claude_code_llm - Claude Code connection verified successfully
+2026-11-03 21:57:03,105 - INFO - hindsight_api.engine.embeddings - Embeddings: initializing local provider with model BAAI/bge-small-en-v1.5
+2026-11-03 21:57:03,106 - INFO - hindsight_api.engine.cross_encoder - Reranker: initializing local provider with model cross-encoder/ms-marco-MiniLM-L-6-v2
+2026-11-03 21:57:03,149 - INFO - hindsight_api.engine.cross_encoder - Reranker: applied transformers 5.x compatibility patch for XLM-RoBERTa
+Fetching 12 files:   0%|          | 0/12 [00:00<?, ?it/s]Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+2026-11-03 21:57:03,443 - WARNING - huggingface_hub.utils._http - Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Fetching 12 files:  17%|█▋        | 2/12 [00:00<00:00, 19.65it/s]
+Fetching 8 files:   0%|          | 0/8 [00:00<?, ?it/s][A
+Fetching 8 files:  12%|█▎        | 1/8 [00:00<00:01,  6.50it/s][AFetching 12 files: 100%|██████████| 12/12 [00:01<00:00,  7.43it/s]Fetching 12 files: 100%|██████████| 12/12 [00:01<00:00,  7.66it/s]
+2026-11-03 21:57:05,026 - INFO - sentence_transformers.base.model - Loading SentenceTransformer model from BAAI/bge-small-en-v1.5.
+Loading weights:   0%|          | 0/199 [00:00<?, ?it/s]Loading weights: 100%|██████████| 199/199 [00:00<00:00, 4605.87it/s]
+
+Fetching 8 files: 100%|██████████| 8/8 [00:02<00:00,  3.59it/s][AFetching 8 files: 100%|██████████| 8/8 [00:02<00:00,  3.65it/s]
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 63.85it/s]
+2026-11-03 21:57:05,954 - INFO - hindsight_api.engine.embeddings - Embeddings: local provider initialized (dim: 384, device: cpu)
+2026-11-03 21:57:06,292 - INFO - sentence_transformers.base.model - No modules.json found for cross-encoder/ms-marco-MiniLM-L-6-v2, initializing a new CrossEncoder model.
+Loading weights:   0%|          | 0/105 [00:00<?, ?it/s]Loading weights: 100%|██████████| 105/105 [00:00<00:00, 5448.77it/s]
+2026-11-03 21:57:07,656 - WARNING - hindsight_api.engine.local_device - Reranker[cross-encoder/ms-marco-MiniLM-L-6-v2]: copied 105/107 misaligned tensor(s) out of memory-mapped storage. The model file's data section is not naturally aligned; without this copy the CPU matmul would return corrupt scores.
+Batches:   0%|          | 0/1 [00:00<?, ?it/s]Batches: 100%|██████████| 1/1 [00:00<00:00, 114.58it/s]
+2026-11-03 21:57:07,667 - INFO - hindsight_api.engine.cross_encoder - Reranker: local provider initialized (device: cpu, max_concurrent=4)
+2026-11-03 21:57:07,667 - INFO - hindsight_api.engine.memory_engine - Running database migrations...
+2026-11-03 21:57:07,667 - INFO - hindsight_api.engine.memory_engine - Running migrations on 1 schema(s)...
+2026-11-03 21:57:07,741 - INFO - alembic.runtime.plugins - setup plugin alembic.autogenerate.schemas
+2026-11-03 21:57:07,742 - INFO - alembic.runtime.plugins - setup plugin alembic.autogenerate.tables
+2026-11-03 21:57:07,742 - INFO - alembic.runtime.plugins - setup plugin alembic.autogenerate.types
+2026-11-03 21:57:07,742 - INFO - alembic.runtime.plugins - setup plugin alembic.autogenerate.constraints
+2026-11-03 21:57:07,742 - INFO - alembic.runtime.plugins - setup plugin alembic.autogenerate.defaults
+2026-11-03 21:57:07,742 - INFO - alembic.runtime.plugins - setup plugin alembic.autogenerate.comments
+2026-11-03 21:57:07,742 - INFO - alembic.runtime.plugins - setup plugin alembic.ext.checkconstraint_byname
+2026-11-03 21:57:07,778 - INFO - hindsight_api.migrations - pgvector extension not found, attempting to install...
+2026-11-03 21:57:07,791 - INFO - hindsight_api.migrations - pgvector extension installed in public schema
+2026-11-03 21:57:07,793 - INFO - hindsight_api.migrations - Running database migrations to head for schema 'public'...
+2026-11-03 21:57:07,793 - INFO - hindsight_api.migrations - Database URL: postgresql://***:***@127.0.0.1:5432/hindsight
+2026-11-03 21:57:07,793 - INFO - hindsight_api.migrations - Script location: /opt/hostedtoolcache/Python/3.12.15/x64/lib/python3.12/site-packages/hindsight_api/alembic
+2026-11-03 21:57:07,804 - INFO - alembic.runtime.migration - Context impl PostgresqlImpl.
+2026-11-03 21:57:07,805 - INFO - alembic.runtime.migration - Will assume transactional DDL.
+2026-11-03 21:57:07,837 - INFO - alembic.runtime.migration - Running upgrade  -> 5a366d414dce, initial_schema
+2026-11-03 21:57:07,886 - INFO - alembic.runtime.migration - Running upgrade 5a366d414dce -> b7c4d8e9f1a2, add_chunks_table
+2026-11-03 21:57:07,893 - INFO - alembic.runtime.migration - Running upgrade b7c4d8e9f1a2 -> c8e5f2a3b4d1, add_retain_params_to_documents
+2026-11-03 21:57:07,895 - INFO - alembic.runtime.migration - Running upgrade c8e5f2a3b4d1 -> d9f6a3b4c5e2, Rename fact_type 'bank' to 'experience'
+2026-11-03 21:57:07,897 - INFO - alembic.runtime.migration - Running upgrade d9f6a3b4c5e2 -> rename_personality, rename_personality_to_disposition
+2026-11-03 21:57:07,903 - INFO - alembic.runtime.migration - Running upgrade rename_personality -> e0a1b2c3d4e5, disposition_to_3_traits
+2026-11-03 21:57:07,906 - INFO - alembic.runtime.migration - Running upgrade e0a1b2c3d4e5 -> f1a2b3c4d5e6, add_memory_links_from_type_weight_index
+2026-11-03 21:57:07,907 - INFO - alembic.runtime.migration - Running upgrade f1a2b3c4d5e6 -> g2a3b4c5d6e7, add_tags_column
+2026-11-03 21:57:07,909 - INFO - alembic.runtime.migration - Running upgrade g2a3b4c5d6e7 -> h3c4d5e6f7g8, mental_models_v4
+2026-11-03 21:57:07,919 - INFO - alembic.runtime.migration - Running upgrade h3c4d5e6f7g8 -> i4d5e6f7g8h9, delete_opinions
+2026-11-03 21:57:07,921 - INFO - alembic.runtime.migration - Running upgrade i4d5e6f7g8h9 -> j5e6f7g8h9i0, mental_model_versions
+2026-11-03 21:57:07,925 - INFO - alembic.runtime.migration - Running upgrade j5e6f7g8h9i0 -> k6f7g8h9i0j1, add_directive_subtype
+2026-11-03 21:57:07,927 - INFO - alembic.runtime.migration - Running upgrade k6f7g8h9i0j1 -> l7g8h9i0j1k2, add_worker_columns
+2026-11-03 21:57:07,930 - INFO - alembic.runtime.migration - Running upgrade l7g8h9i0j1k2 -> m8h9i0j1k2l3, mental_model_id_to_text
+2026-11-03 21:57:07,932 - INFO - alembic.runtime.migration - Running upgrade m8h9i0j1k2l3 -> n9i0j1k2l3m4, learnings_and_pinned_reflections
+2026-11-03 21:57:07,945 - INFO - alembic.runtime.migration - Running upgrade n9i0j1k2l3m4 -> o0j1k2l3m4n5, migrate_mental_models_data
+2026-11-03 21:57:07,948 - INFO - alembic.runtime.migration - Running upgrade o0j1k2l3m4n5 -> p1k2l3m4n5o6, new_knowledge_architecture
+2026-11-03 21:57:07,959 - INFO - alembic.runtime.migration - Running upgrade p1k2l3m4n5o6 -> q2l3m4n5o6p7, fix_mental_model_fact_type
+2026-11-03 21:57:07,960 - INFO - alembic.runtime.migration - Running upgrade q2l3m4n5o6p7 -> r3m4n5o6p7q8, Add reflect_response JSONB column to reflections
+2026-11-03 21:57:07,961 - INFO - alembic.runtime.migration - Running upgrade r3m4n5o6p7q8 -> s4n5o6p7q8r9, Add consolidated_at column to memory_units for incremental consolidation tracking.
+2026-11-03 21:57:07,963 - INFO - alembic.runtime.migration - Running upgrade s4n5o6p7q8r9 -> t5o6p7q8r9s0, Rename mental_model fact_type to observation and reflections table to mental_models
+2026-11-03 21:57:07,968 - INFO - alembic.runtime.migration - Running upgrade t5o6p7q8r9s0 -> u6p7q8r9s0t1, Change mental_models.id from UUID to TEXT
+2026-11-03 21:57:07,971 - INFO - alembic.runtime.migration - Running upgrade u6p7q8r9s0t1 -> v7q8r9s0t1u2, Add max_tokens and trigger columns to mental_models
+2026-11-03 21:57:07,972 - INFO - alembic.runtime.migration - Running upgrade v7q8r9s0t1u2 -> w8r9s0t1u2v3, Fix mental_models primary key to be scoped per bank
+2026-11-03 21:57:07,974 - INFO - alembic.runtime.migration - Running upgrade w8r9s0t1u2v3 -> x9s0t1u2v3w4, Add config JSONB column to banks table for hierarchical configuration
+2026-11-03 21:57:07,975 - INFO - alembic.runtime.migration - Running upgrade x9s0t1u2v3w4 -> y0t1u2v3w4x5, Add GIN index on async_operations.result_metadata for parent_operation_id queries
+2026-11-03 21:57:07,976 - INFO - alembic.runtime.migration - Running upgrade y0t1u2v3w4x5 -> a1b2c3d4e5f6, Add file_storage table for BYTEA-based file storage
+2026-11-03 21:57:07,978 - INFO - alembic.runtime.migration - Running upgrade a1b2c3d4e5f6 -> z1u2v3w4x5y6, Add observation_scopes column to memory_units table
+2026-11-03 21:57:07,979 - INFO - alembic.runtime.migration - Running upgrade z1u2v3w4x5y6 -> aa2b3c4d5e6f, Make event_date nullable in memory_units to support timestamp-free content
+2026-11-03 21:57:07,980 - INFO - alembic.runtime.migration - Running upgrade aa2b3c4d5e6f -> a2b3c4d5e6f7, Add text_signals column to memory_units for enriched BM25 indexing.
+2026-11-03 21:57:07,985 - INFO - alembic.runtime.migration - Running upgrade a2b3c4d5e6f7 -> b4c5d6e7f8a9, Backfill observation_scopes column if missing.
+2026-11-03 21:57:07,986 - INFO - alembic.runtime.migration - Running upgrade b4c5d6e7f8a9 -> c1a2b3d4e5f6, Enable pg_trgm extension and add GIN trigram index on entities.canonical_name
+2026-11-03 21:57:07,997 - INFO - alembic.runtime.migration - Running upgrade c1a2b3d4e5f6 -> b3c4d5e6f7g8, Add partial indexes on memory_units temporal date fields for fast temporal retrieval
+2026-11-03 21:57:08,000 - INFO - alembic.runtime.migration - Running upgrade b3c4d5e6f7g8 -> d2e3f4a5b6c7, Add covering and composite indexes to speed up link expansion graph retrieval.
+2026-11-03 21:57:08,002 - INFO - alembic.runtime.migration - Running upgrade d2e3f4a5b6c7 -> e4f5a6b7c8d9, Add webhooks table and next_retry_at to async_operations.
+2026-11-03 21:57:08,006 - INFO - alembic.runtime.migration - Running upgrade e4f5a6b7c8d9 -> f7g8h9i0j1k2, Add http_config JSONB column to webhooks table.
+2026-11-03 21:57:08,007 - INFO - alembic.runtime.migration - Running upgrade f7g8h9i0j1k2 -> a2b3c4d5e6f8, Add GIN index on source_memory_ids for observation lookup performance
+2026-11-03 21:57:08,009 - INFO - alembic.runtime.migration - Running upgrade a2b3c4d5e6f7, a2b3c4d5e6f8 -> c3d4e5f6g7h8, Add history column to mental_models
+2026-11-03 21:57:08,010 - INFO - alembic.runtime.migration - Running upgrade c3d4e5f6g7h8 -> d5e6f7a8b9c0, Add internal_id to banks and per-(bank, fact_type) partial vector indexes
+2026-11-03 21:57:08,013 - INFO - alembic.runtime.migration - Running upgrade d5e6f7a8b9c0 -> d4e5f6g7h8i9, Recreate idx_memory_units_source_memory_ids GIN index with fastupdate=off
+2026-11-03 21:57:08,016 - INFO - alembic.runtime.migration - Running upgrade d4e5f6g7h8i9 -> e5f6g7h8i9j0, Add CASCADE DELETE FK from async_operations and webhooks to banks.
+2026-11-03 21:57:08,019 - INFO - alembic.runtime.migration - Running upgrade e5f6g7h8i9j0 -> f6g7h8i9j0k1, chunk_fk_cascade_delete
+2026-11-03 21:57:08,022 - INFO - alembic.runtime.migration - Running upgrade f6g7h8i9j0k1 -> g7h8i9j0k1l2, backsweep_orphan_memory_units
+2026-11-03 21:57:08,023 - INFO - alembic.runtime.migration - Running upgrade g7h8i9j0k1l2 -> a3b4c5d6e7f8, Add consolidation_failed_at column to memory_units for tracking persistent LLM failures.
+2026-11-03 21:57:08,024 - INFO - alembic.runtime.migration - Running upgrade f1a2b3c4d5e6 -> g2h3i4j5k6l7, remove_opinion_fact_type
+2026-11-03 21:57:08,027 - INFO - alembic.runtime.migration - Running upgrade a3b4c5d6e7f8 -> b3c4d5e6f7a8, add content_hash to chunks table for delta retain
+2026-11-03 21:57:08,028 - INFO - alembic.runtime.migration - Running upgrade b3c4d5e6f7a8 -> c5d6e7f8a9b0, Add bank_id column to memory_links for direct filtering
+2026-11-03 21:57:08,030 - INFO - alembic.runtime.migration - Running upgrade a3b4c5d6e7f8, c8e5f2a3b4d1 -> c2d3e4f5g6h7, Add audit_log table for feature usage tracking.
+2026-11-03 21:57:08,033 - INFO - alembic.runtime.migration - Running upgrade c2d3e4f5g6h7, c5d6e7f8a9b0 -> d6e7f8a9b0c1, Drop unused metadata column from documents table
+2026-11-03 21:57:08,035 - INFO - alembic.runtime.migration - Running upgrade d6e7f8a9b0c1 -> 2eee35aa3cfc, Recreate entities trigram index on LOWER(canonical_name) for case-insensitive matching
+2026-11-03 21:57:08,036 - INFO - alembic.runtime.migration - Running upgrade 2eee35aa3cfc -> a4b5c6d7e8f9, Fix per-bank vector indexes to match configured extension
+2026-11-03 21:57:08,037 - INFO - alembic.runtime.migration - Running upgrade a4b5c6d7e8f9, g2h3i4j5k6l7 -> h3i4j5k6l7m8, Merge 3 migration heads and add unit_entities composite index
+2026-11-03 21:57:08,038 - INFO - alembic.runtime.migration - Running upgrade z1u2v3w4x5y6 -> a2v3w4x5y6z7, Add last_refreshed_source_query column to mental_models
+2026-11-03 21:57:08,039 - INFO - alembic.runtime.migration - Running upgrade a2v3w4x5y6z7 -> b3w4x5y6z7a8, Add structured_content JSONB column to mental_models
+2026-11-03 21:57:08,040 - INFO - alembic.runtime.migration - Running upgrade b3w4x5y6z7a8 -> c4x5y6z7a8b9, backsweep_orphan_observations_v2
+2026-11-03 21:57:08,041 - INFO - alembic.runtime.migration - Running upgrade c4x5y6z7a8b9, h3i4j5k6l7m8 -> 8c6fa6f7230b, Merge divergent migration heads for v0.5.3
+2026-11-03 21:57:08,042 - INFO - alembic.runtime.migration - Running upgrade 8c6fa6f7230b -> d5y6z7a8b9c0, Backfill mental_models.subtype for databases that ran h3c4d5e6f7g8 before the fix
+2026-11-03 21:57:08,045 - INFO - alembic.runtime.migration - Running upgrade d5y6z7a8b9c0 -> i4j5k6l7m8n9, Add 'cancelled' to async_operations status check constraint
+2026-11-03 21:57:08,046 - INFO - alembic.runtime.migration - Running upgrade i4j5k6l7m8n9 -> k6l7m8n9o0p1, No-op: observation_sources table is Oracle-only
+2026-11-03 21:57:08,047 - INFO - alembic.runtime.migration - Running upgrade k6l7m8n9o0p1 -> o1a2b3c4d5e6, oracle_baseline
+2026-11-03 21:57:08,047 - INFO - alembic.runtime.migration - Running upgrade o1a2b3c4d5e6 -> b5d4e3f2a1c9, Backfill entity_cooccurrences.last_cooccurred from memory_units event time
+2026-11-03 21:57:08,049 - INFO - alembic.runtime.migration - Running upgrade o1a2b3c4d5e6 -> 9f8e7d6c5b4a, Make memory_links.from_unit_id and memory_links.to_unit_id FKs deferrable.
+2026-11-03 21:57:08,052 - INFO - alembic.runtime.migration - Running upgrade 9f8e7d6c5b4a, b5d4e3f2a1c9 -> m3rg3h3ad5f6, Merge divergent heads from deferrable FK and cooccurrence backfill
+2026-11-03 21:57:08,053 - INFO - alembic.runtime.migration - Running upgrade m3rg3h3ad5f6 -> 86f7a033d372, Repair mental_models.subtype on databases stuck at m3rg3h3ad5f6
+2026-11-03 21:57:08,056 - INFO - alembic.runtime.migration - Running upgrade 86f7a033d372 -> b8c9d0e1f2a3, Re-create vchord vector indexes with vector_cosine_ops
+2026-11-03 21:57:08,056 - INFO - alembic.runtime.migration - Running upgrade 86f7a033d372 -> p4q5r6s7t8u9, Drop GENERATED expression on tsvector search_vector columns.
+2026-11-03 21:57:08,062 - INFO - alembic.runtime.migration - Running upgrade p4q5r6s7t8u9 -> e1b2c3d4f5a6, Drop indexes that are unused or redundant with composite indexes.
+2026-11-03 21:57:08,067 - INFO - alembic.runtime.migration - Running upgrade e1b2c3d4f5a6 -> e9b2c7d1f3a4, Drop materialized entity rows from memory_links.
+2026-11-03 21:57:08,069 - INFO - alembic.runtime.migration - Running upgrade e9b2c7d1f3a4 -> b5a4c3e2f1d8, Add graph_maintenance_queue table
+2026-11-03 21:57:08,072 - INFO - alembic.runtime.migration - Running upgrade b5a4c3e2f1d8, b8c9d0e1f2a3 -> c1d2e3f4a5b6, Merge graph_maintenance_queue and vchord_cosine_opclass heads.
+2026-11-03 21:57:08,073 - INFO - alembic.runtime.migration - Running upgrade c1d2e3f4a5b6 -> d3e4f5a6b7c8, Add llm_requests table for per-bank LLM request tracing.
+2026-11-03 21:57:08,076 - INFO - alembic.runtime.migration - Running upgrade d3e4f5a6b7c8 -> a7b8c9d0e1f2, Move mental-model and observation history into dedicated tables.
+2026-11-03 21:57:08,083 - INFO - alembic.runtime.migration - Running upgrade a7b8c9d0e1f2 -> e5f6a7b8c9d0, Add server-side routines for background maintenance sweeps.
+2026-11-03 21:57:08,084 - INFO - alembic.runtime.migration - Running upgrade e5f6a7b8c9d0 -> b2d4f6a8c1e3, Repair: install maintenance routines on the ``public`` / base-schema run.
+2026-11-03 21:57:08,086 - INFO - alembic.runtime.migration - Running upgrade b2d4f6a8c1e3 -> c9a1b2d3e4f5, Add invalidated_memory_units table for curation (edit/invalidate).
+2026-11-03 21:57:08,091 - INFO - alembic.runtime.migration - Running upgrade c9a1b2d3e4f5 -> c3e5a7b9d1f4, Repair: widen ``*_history.bank_id`` from VARCHAR(64) to TEXT on PostgreSQL.
+2026-11-03 21:57:08,093 - INFO - alembic.runtime.migration - Running upgrade c3e5a7b9d1f4 -> a1d3f5b7c9e2, Repair: widen the remaining live ``bank_id`` columns from VARCHAR(64) to TEXT on PostgreSQL.
+2026-11-03 21:57:08,097 - INFO - alembic.runtime.migration - Running upgrade a1d3f5b7c9e2 -> 2071c7518f88, Add a composite index on memory_links(bank_id, link_type) (PostgreSQL).
+2026-11-03 21:57:08,099 - INFO - alembic.runtime.migration - Running upgrade a1d3f5b7c9e2 -> d4f6a8c2e1b3, Drop the embedding column from the curation archive (invalidated_memory_units).
+2026-11-03 21:57:08,100 - INFO - alembic.runtime.migration - Running upgrade d4f6a8c2e1b3, 2071c7518f88 -> e1f2a3b4c5d6, Merge two divergent migration heads.
+2026-11-03 21:57:08,101 - INFO - alembic.runtime.migration - Running upgrade e1f2a3b4c5d6 -> c7e9f1a3b5d2, Make maintenance routines resilient to schemas that vanish mid-scan.
+2026-11-03 21:57:08,102 - INFO - alembic.runtime.migration - Running upgrade c7e9f1a3b5d2 -> f4d1c2b3a5e6, Add server-side routine for cron-scheduled mental model refresh.
+2026-11-03 21:57:08,103 - INFO - alembic.runtime.migration - Running upgrade f4d1c2b3a5e6 -> c3f7a1b9d2e4, Backfill search_vector for native-backend observations.
+2026-11-03 21:57:08,105 - INFO - alembic.runtime.migration - Running upgrade c3f7a1b9d2e4 -> b57a7c9e0d13, Add bank_stats_cache table for distributed get_bank_stats caching
+2026-11-03 21:57:08,107 - INFO - alembic.runtime.migration - Running upgrade b57a7c9e0d13 -> e7c3a9f1b2d5, Drop the search_vector column from the curation archive (invalidated_memory_units).
+2026-11-03 21:57:08,107 - INFO - alembic.runtime.migration - Running upgrade e7c3a9f1b2d5 -> a8c1e4f7b0d3, Add indexes for terminal cleanup and newest-first operation listing.
+2026-11-03 21:57:08,109 - INFO - alembic.runtime.migration - Running upgrade a8c1e4f7b0d3 -> b6d2f8a4c1e7, Install the maintenance discovery routines into the configured schema.
+2026-11-03 21:57:08,111 - INFO - alembic.runtime.migration - Running upgrade b6d2f8a4c1e7 -> d7b2f8a1c934, Add the ``schemas_with_expired_operations`` cross-tenant discovery routine.
+2026-11-03 21:57:08,112 - INFO - alembic.runtime.migration - Running upgrade d7b2f8a1c934 -> c7d1e9a4b3f2, Add ``causal_links`` to the curation archive (invalidated_memory_units).
+2026-11-03 21:57:08,112 - INFO - alembic.runtime.migration - Running upgrade c7d1e9a4b3f2 -> a1c9e7f3b2d8, Drop observation_history's FK to memory_units.
+2026-11-03 21:57:08,113 - INFO - alembic.runtime.migration - Running upgrade a1c9e7f3b2d8 -> a9b8c7d6e5f4, Add knowledge_pages table (knowledge-base hierarchy).
+2026-11-03 21:57:08,117 - INFO - alembic.runtime.migration - Running upgrade a9b8c7d6e5f4 -> e4a7c1b9d2f6, Drop the never-written `access_count` column from memory_units (and its archive).
+2026-11-03 21:57:08,118 - INFO - alembic.runtime.migration - Running upgrade e4a7c1b9d2f6 -> f2a6d8c4b1e9, Repair: drop the stale global memory_units vector index on per-bank backends.
+2026-11-03 21:57:08,119 - INFO - alembic.runtime.migration - Running upgrade f2a6d8c4b1e9 -> b3e8d1c6f4a9, Add entities.entity_kind and exclude label entities from the trigram index.
+2026-11-03 21:57:08,122 - INFO - alembic.runtime.migration - Running upgrade b3e8d1c6f4a9 -> d9c1a7b4e2f6, Add async_operations.serialization_key for per-document retain serialization.
+2026-11-03 21:57:08,124 - INFO - alembic.runtime.migration - Running upgrade d9c1a7b4e2f6 -> c4f7a91b2d38, Add entity_maintenance_queue table (+ seed it with every existing entity)
+2026-11-03 21:57:08,125 - INFO - alembic.runtime.migration - Running upgrade c4f7a91b2d38 -> e7c3a91f4b62, Add last_memory_seen_at to mental_models, splitting it from last_refreshed_at.
+2026-11-03 21:57:08,127 - INFO - alembic.runtime.migration - Running upgrade e7c3a91f4b62 -> c8b4e2a71f95, Make the cross-schema maintenance routines skip a schema under concurrent DDL.
+2026-11-03 21:57:08,129 - INFO - alembic.runtime.migration - Running upgrade c8b4e2a71f95 -> f2a7c9d4b168, Add a partial index for the cron-scheduled mental model discovery sweep.
+2026-11-03 21:57:08,130 - INFO - alembic.runtime.migration - Running upgrade f2a7c9d4b168 -> c4e8a1b7d2f6, Index memory_units(bank_id, updated_at) so the scoped staleness check is cheap.
+2026-11-03 21:57:08,132 - INFO - alembic.runtime.migration - Running upgrade c4e8a1b7d2f6 -> d1e2f3a4b5c6, Drop schema-v1 mental model structured_content
+2026-11-03 21:57:08,132 - INFO - alembic.runtime.migration - Running upgrade d1e2f3a4b5c6 -> e2f4a6c8b0d1, Add attachments and document_attachments (inline retain attachments).
+2026-11-03 21:57:08,137 - INFO - alembic.runtime.migration - Running upgrade e2f4a6c8b0d1 -> f3a5b7c9d1e2, Drop the unused memory_units_bm25 materialized view.
+2026-11-03 21:57:08,138 - INFO - alembic.runtime.migration - Running upgrade f3a5b7c9d1e2 -> a7c2e9f41b60, Give every attachment an owning document, and drop document_attachments.
+2026-11-03 21:57:08,142 - INFO - alembic.runtime.migration - Running upgrade a7c2e9f41b60 -> b8d3f1a6c2e4, Add last_refresh_failed_at column to mental_models
+2026-11-03 21:57:08,143 - INFO - alembic.runtime.migration - Running upgrade b8d3f1a6c2e4 -> c8d1e4f7a20b, Add bank_aliases: extra ids a bank also answers to.
+2026-11-03 21:57:08,145 - INFO - alembic.runtime.migration - Running upgrade c8d1e4f7a20b -> d4f8b1c6e903, Let one of a bank's aliases be the id shown in its place.
+2026-11-03 21:57:08,146 - INFO - alembic.runtime.migration - Running upgrade d4f8b1c6e903 -> a6c4e8f1b203, Store per-request reasoning tokens alongside visible output tokens.
+2026-11-03 21:57:08,147 - INFO - alembic.runtime.migration - Running upgrade d4f8b1c6e903 -> 7c2e5a9d1f40, Scope the entities trigram index by bank: GIN (bank_id, LOWER(canonical_name)).
+2026-11-03 21:57:08,163 - INFO - alembic.runtime.migration - Running upgrade 7c2e5a9d1f40, a6c4e8f1b203 -> e5b1c7d3a902, Merge divergent heads from the bank-scoped trigram index and reasoning tokens
+2026-11-03 21:57:08,164 - INFO - alembic.runtime.migration - Running upgrade e5b1c7d3a902 -> c8e2f4a6b1d3, Oracle Text index for knowledge-page search
+2026-11-03 21:57:08,164 - INFO - alembic.runtime.migration - Running upgrade c8e2f4a6b1d3 -> b2429c65cc20, Make ``banks_needing_consolidation()`` probe each bank instead of scanning facts.
+2026-11-03 21:57:08,166 - INFO - alembic.runtime.migration - Running upgrade b2429c65cc20 -> d4f7a2c9e1b5, Scheduled full refresh for mental models
+2026-11-03 21:57:08,168 - INFO - alembic.runtime.migration - Running upgrade d4f7a2c9e1b5 -> e8c1a4f7b2d9, Repair: drop every global memory_units vector index on per-bank backends.
+2026-11-03 21:57:08,169 - INFO - alembic.runtime.migration - Running upgrade e8c1a4f7b2d9 -> f2a9c4e7b1d3, Repair: widen the columns that reference ``mental_models.id``.
+2026-11-03 21:57:08,171 - INFO - alembic.runtime.migration - Running upgrade f2a9c4e7b1d3 -> c7e2f9a4d1b8, Clear year-1 / year-9999 placeholder event_date values from memory_units
+2026-11-03 21:57:08,173 - INFO - hindsight_api.migrations - Database migrations completed successfully for schema 'public'
+2026-11-03 21:57:08,184 - INFO - hindsight_api.migrations - Using vector extension: pgvector
+2026-11-03 21:57:08,196 - INFO - hindsight_api.migrations - Target vector extension: pgvector
+2026-11-03 21:57:08,220 - INFO - hindsight_api.engine.memory_engine - Schema migrations completed
+2026-11-03 21:57:08,220 - INFO - hindsight_api.engine.memory_engine - Connecting to database at postgresql://***:***@127.0.0.1:5432/hindsight
+2026-11-03 21:57:08,241 - INFO - hindsight_api.engine.db.postgresql - PostgreSQL pool created (min=5, max=100, cmd_timeout=60s, acquire_timeout=30s, session_setup_on_acquire=True)
+2026-11-03 21:57:08,251 - INFO - hindsight_api.engine.task_backend - BrokerTaskBackend initialized
+2026-11-03 21:57:08,251 - INFO - hindsight_api.engine.memory_engine - Memory system initialized (pool and task backend started)
+2026-11-03 21:57:08,251 - INFO - root - Memory system initialized
+2026-11-03 21:57:08,551 - INFO - root - DB pool metrics configured
+2026-11-03 21:57:08,551 - INFO - hindsight.loop_watchdog - Loop watchdog started (stall_threshold=1.00s, poll_interval=0.25s)
+2026-11-03 21:57:08,552 - INFO - root - Worker id: runnervmnwato (source: hostname (default))
+2026-11-03 21:57:08,553 - INFO - root - Worker poller started (worker_id=runnervmnwato)
+2026-11-03 21:57:08,553 - INFO - root - Tenant extension started
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8888 (Press CTRL+C to quit)
+2026-11-03 21:57:08,555 - INFO - hindsight_api.worker.poller - Worker runnervmnwato starting polling loop (max_slots=10, reservations=[consolidation=2], shared_pool=8)
+2026-11-03 21:57:08,555 - INFO - hindsight_api.worker.poller - Worker runnervmnwato recovering stale tasks across 1 schemas
+2026-11-03 21:57:08,560 - INFO - hindsight_api.worker.poller - Worker runnervmnwato recovered 0 stale tasks from previous run (1 schemas in 0.0s)
+2026-11-03 21:57:09,060 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=0/10 | reserved: [consolidation=0/2(avail=2)] | shared=0/8(avail=8) | global: pending=0 (queried=0/1 schemas: ) | others: none | pool: size=5 limits=5-100 idle=5 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1644 peak_rss_mb=1713 | my_active: none
+2026-11-03 21:57:38,630 - INFO - hindsight_api.engine.memory_engine - Created parent operation 7d257041-b783-435f-9211-79eda963276f with 1 child sub-batch(es)
+2026-11-03 21:57:38,736 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 21:57:38,742 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::ms, 1 items, operation_id=621ae893-f3c4-4ca1-a7ab-a948ccd888de
+2026-11-03 21:57:38,750 - WARNING - hindsight_api.config_resolver - Unknown retain strategy 'survey', using resolved config as-is
+2026-11-03 21:57:39,374 - INFO - hindsight_api.config_resolver - Updated bank config for coding-agent::ms: ['reflect_mission', 'retain_mission', 'retain_extraction_mode', 'enable_observations', 'observations_mission', 'entity_labels', 'entities_allow_free_form', 'retain_default_strategy', 'retain_strategies']
+2026-11-03 21:57:39,377 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=1/10 | reserved: [consolidation=0/2(avail=2)] | shared=1/8(avail=7) | global: pending=1 (queried=1/1 schemas: default) | others: none | pool: size=5 limits=5-100 idle=4 in_use=1 free_holders=99 pending_acquires=0 | proc: rss_mb=1657 peak_rss_mb=1713 | my_active: retain:coding-agent::ms(1)
+2026-11-03 21:57:39,377 - INFO - hindsight_api.worker.poller - [PENDING_BREAKDOWN] batch_retain: total=1 payload_null=1 retry_blocked=0 assigned=0
+2026-11-03 21:57:39,377 - INFO - hindsight_api.worker.poller - [WORKER_TASK] op=621ae893-f3c4-4ca1-a7ab-a948ccd888de type=batch_retain op_type=retain bank=coding-agent::ms age=1s stage=llm.claude_code.retain_extract_facts.attempt=1/4 stage_age=0s
+2026-11-03 21:57:39,795 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Component map' for bank coding-agent::ms
+2026-11-03 21:57:39,814 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::ms, operation_id=7e64cc63-fd10-441b-81c1-9f0770fba6d3
+2026-11-03 21:57:39,978 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Core concepts' for bank coding-agent::ms
+2026-11-03 21:57:39,986 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::ms, operation_id=d4d89072-7db2-4a09-80bc-3ab38f540876
+2026-11-03 21:57:40,032 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 2 tasks (0 consolidation): refresh_mental_model:2 (schemas: default)
+2026-11-03 21:57:40,044 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::ms, mental_model_id=mm-aa879a14e5ef44c48def388881abb4ca
+2026-11-03 21:57:40,046 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::ms, mental_model_id=mm-86fff9ea4e114195876f4a2f225afb32
+2026-11-03 21:57:40,072 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-aa879a14e5ef44c48def388881abb4ca: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 21:57:40,088 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-aa879a14e5ef44c48def388881abb4ca (full): no new facts found, preserving content
+2026-11-03 21:57:40,094 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Conventions and patterns' for bank coding-agent::ms
+2026-11-03 21:57:40,097 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::ms, mental_model_id=mm-aa879a14e5ef44c48def388881abb4ca
+2026-11-03 21:57:40,101 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: d4d89072-7db2-4a09-80bc-3ab38f540876
+2026-11-03 21:57:40,107 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::ms, operation_id=271c350f-b3f3-4297-8edb-94207cd1d2b1
+2026-11-03 21:57:40,121 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-86fff9ea4e114195876f4a2f225afb32: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 21:57:40,121 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-86fff9ea4e114195876f4a2f225afb32 (full): no new facts found, preserving content
+2026-11-03 21:57:40,132 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::ms, mental_model_id=mm-86fff9ea4e114195876f4a2f225afb32
+2026-11-03 21:57:40,140 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 7e64cc63-fd10-441b-81c1-9f0770fba6d3
+2026-11-03 21:57:40,147 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): refresh_mental_model:1 (schemas: default)
+2026-11-03 21:57:40,151 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::ms, mental_model_id=mm-04114e5780164d0da2bd3088a0f6e3fc
+2026-11-03 21:57:40,161 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-04114e5780164d0da2bd3088a0f6e3fc: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 21:57:40,161 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-04114e5780164d0da2bd3088a0f6e3fc (full): no new facts found, preserving content
+2026-11-03 21:57:40,165 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::ms, mental_model_id=mm-04114e5780164d0da2bd3088a0f6e3fc
+2026-11-03 21:57:40,167 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 271c350f-b3f3-4297-8edb-94207cd1d2b1
+2026-11-03 21:57:40,210 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Key decisions and rationale' for bank coding-agent::ms
+2026-11-03 21:57:40,216 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::ms, operation_id=16d47f4b-b0d5-46c8-b150-040801a512d2
+2026-11-03 21:57:40,254 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Initiatives and enhancements' for bank coding-agent::ms
+2026-11-03 21:57:40,260 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::ms, operation_id=18d68d6f-e8cf-403e-aba3-c7d6c0fa9894
+2026-11-03 21:57:40,306 - INFO - hindsight_api.engine.memory_engine - Created parent operation f348872f-06ba-4875-bba9-e0c127380358 with 1 child sub-batch(es)
+2026-11-03 21:57:40,681 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 3 tasks (0 consolidation): refresh_mental_model:2, batch_retain:1 (schemas: default)
+2026-11-03 21:57:40,683 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::ms, mental_model_id=mm-92a506c3c3f54c66819e8ceb49028416
+2026-11-03 21:57:40,683 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::ms, mental_model_id=mm-b90b0d99eb964b7c8c4d68920b5c08cc
+2026-11-03 21:57:40,684 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::ms, 1 items, operation_id=d5b9860b-8dce-4f78-8ce9-dc61d0f03484
+2026-11-03 21:57:40,697 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-b90b0d99eb964b7c8c4d68920b5c08cc: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 21:57:40,697 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-b90b0d99eb964b7c8c4d68920b5c08cc (full): no new facts found, preserving content
+2026-11-03 21:57:40,702 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::ms, mental_model_id=mm-b90b0d99eb964b7c8c4d68920b5c08cc
+2026-11-03 21:57:40,721 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 18d68d6f-e8cf-403e-aba3-c7d6c0fa9894
+2026-11-03 21:57:40,847 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-92a506c3c3f54c66819e8ceb49028416: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 21:57:40,848 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-92a506c3c3f54c66819e8ceb49028416 (full): no new facts found, preserving content
+2026-11-03 21:57:40,848 - WARNING - hindsight_api.engine.db_utils - [DB POOL] Slow acquire: 0.067s
+2026-11-03 21:57:40,906 - WARNING - hindsight_api.engine.db_utils - [DB POOL] Slow acquire: 0.058s
+2026-11-03 21:57:40,993 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::ms, mental_model_id=mm-92a506c3c3f54c66819e8ceb49028416
+2026-11-03 21:57:40,999 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 16d47f4b-b0d5-46c8-b150-040801a512d2
+2026-11-03 21:57:41,520 - INFO - hindsight_api.engine.retain.orchestrator - 
+============================================================
+RETAIN_BATCH START: coding-agent::ms
+Batch size: 1 content items, 147 chars
+============================================================
+[streaming] 1 chunks, batch_size 100 — 1 batch
+  Extract facts: 0 facts, 1 chunks from 1 contents in 2.714s
+[streaming] Embeddings: no texts embedded
+[streaming] Document survey-baseline:4ff48cec099f0514c3e9bbca18706c9c21122bfb tracked (0 facts in first batch)
+[streaming] Consumer batch 1: 0 facts extracted from 1 chunks, skipping
+============================================================
+STREAMING RETAIN COMPLETE: 0 units across 1 batches in 2.771s
+Document: survey-baseline:4ff48cec099f0514c3e9bbca18706c9c21122bfb
+============================================================
+
+2026-11-03 21:57:41,528 - INFO - hindsight_api.engine.memory_engine - consolidation task queued for bank_id=coding-agent::ms, operation_id=73fbf64b-ad5c-451c-891d-ef847069455d
+2026-11-03 21:57:41,531 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::ms store=PostgresMemories docs=1 wall=2.788s 0.1KB/s | pg.acquire=0.025s/16c/1%
+2026-11-03 21:57:41,531 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Completed background batch retain for bank_id=coding-agent::ms
+2026-11-03 21:57:41,532 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 621ae893-f3c4-4ca1-a7ab-a948ccd888de
+2026-11-03 21:57:41,534 - INFO - hindsight_api.engine.memory_engine - Updated parent operation 7d257041-b783-435f-9211-79eda963276f to status 'completed' (all children done)
+2026-11-03 21:57:41,543 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (1 consolidation): consolidation:1 (schemas: default)
+2026-11-03 21:57:41,560 - INFO - hindsight_api.engine.memory_engine - [CONSOLIDATION] bank=coding-agent::ms completed: 0 processed
+2026-11-03 21:57:41,561 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 73fbf64b-ad5c-451c-891d-ef847069455d
+2026-11-03 21:57:56,207 - INFO - hindsight_api.engine.providers.claude_code_llm - slow llm call: scope=retain_extract_facts, model=claude-code/claude-sonnet-5-5, time=15.493s
+2026-11-03 21:57:56,655 - INFO - hindsight_api.engine.providers.claude_code_llm - slow llm call: scope=retain_extract_facts, model=claude-code/claude-sonnet-5-5, time=15.938s
+2026-11-03 21:57:57,250 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 1 (entity resolution): 0.016s
+2026-11-03 21:57:57,300 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 2 (write transaction): 0.051s
+2026-11-03 21:57:57,328 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Consumer batch 1 total (excluding fire-and-forget): 0.095s
+2026-11-03 21:57:57,347 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Final ANN chunk 1/1: 138 links in 0.014s
+2026-11-03 21:57:57,347 - INFO - hindsight_api.engine.retain.orchestrator - 
+============================================================
+RETAIN_BATCH START: coding-agent::ms
+Batch size: 1 content items, 15,816 chars
+============================================================
+[streaming] 2 chunks, batch_size 100 — 1 batch
+  Extract facts: 9 facts, 1 chunks from 1 contents in 15.506s
+  Extract facts: 9 facts, 1 chunks from 1 contents in 15.948s
+  Generate embeddings: 9 embeddings in 0.869s
+  Generate embeddings: 9 embeddings in 0.577s
+[streaming] Embeddings: 18 texts in 2 backend request(s) (avg 9.0, max 9 texts per request)
+[streaming] Consumer batch 1: processing 18 facts from 2 chunks
+[streaming] Document gitlog:ms tracked (full content)
+  Store chunks: 2 chunks in 0.006s
+  Insert facts: 18 units in 0.000s
+  Insert unit_entities: 155 pairs in 0.006s
+  Temporal links: 310 links in 0.015s
+  Semantic links: skipped (deferred to final ANN pass)
+  Causal links: 1 links in 0.001s
+[streaming] Checkpoint: 18 facts committed, ANN pass next
+[streaming] Final ANN: loaded 18 units with embeddings in 0.001s
+      [8.1] ANN search (Phase 1): 18 units → 138 links in 0.009s
+[streaming] Final ANN: 138 total semantic links
+[streaming] Final ANN pass: 0.016s for 18 units
+============================================================
+STREAMING RETAIN COMPLETE: 18 units across 1 batches in 16.654s
+Document: gitlog:ms
+============================================================
+
+2026-11-03 21:57:57,354 - INFO - hindsight_api.engine.memory_engine - consolidation task queued for bank_id=coding-agent::ms, operation_id=68f56652-d2ca-4efc-a714-b8209d07b785
+2026-11-03 21:57:57,355 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::ms store=PostgresMemories docs=1 wall=16.671s 0.9KB/s | embed=1.446s/2c/9% pg.acquire=0.014s/21c/0%
+2026-11-03 21:57:57,355 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Completed background batch retain for bank_id=coding-agent::ms
+2026-11-03 21:57:57,356 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: d5b9860b-8dce-4f78-8ce9-dc61d0f03484
+2026-11-03 21:57:57,358 - INFO - hindsight_api.engine.memory_engine - Updated parent operation f348872f-06ba-4875-bba9-e0c127380358 to status 'completed' (all children done)
+2026-11-03 21:57:57,367 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (1 consolidation): consolidation:1 (schemas: default)
+2026-11-03 21:57:57,370 - INFO - hindsight_api.engine.consolidation.consolidator - [CONSOLIDATION] bank=coding-agent::ms total_unconsolidated=18
+2026-11-03 21:57:57,653 - INFO - hindsight_api.engine.memories.postgres - Using LinkExpansion graph retriever
+2026-11-03 21:58:00,709 - INFO - hindsight_api.engine.memory_engine - Created parent operation 11160fca-5e4a-5784-8f73-c4f211b1c452 with 1 child sub-batch(es)
+2026-11-03 21:58:00,862 - INFO - hindsight_api.engine.memory_engine - [REFLECT coding-a-80862-93b82a] Starting agentic reflect for query: A developer is starting a coding session in this r...
+2026-11-03 21:58:00,868 - INFO - hindsight_api.engine.memory_engine - [REFLECT coding-a-80862-93b82a] Bank has 5 mental models
+2026-11-03 21:58:01,019 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 21:58:01,022 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::ms, 1 items, operation_id=8551145f-31f5-4971-8fa1-5840f95eeb19
+2026-11-03 21:58:01,704 - INFO - hindsight_api.engine.maintenance - Maintenance: retention took 0.002s
+2026-11-03 21:58:01,706 - INFO - hindsight_api.engine.maintenance - Maintenance: consolidation reconcile took 0.002s
+2026-11-03 21:58:01,709 - INFO - hindsight_api.engine.maintenance - Maintenance: scheduled mental model refresh took 0.002s
+2026-11-03 21:58:07,732 - INFO - hindsight_api.engine.consolidation.consolidator - [CONSOLIDATION] bank=coding-agent::ms llm_batch #1 (8 memories, 1 llm calls) | processed=8/18 | recall=0.576s, llm=9.329s, embedding=0.367s, db_write=0.007s | created=8 updated=0 skipped=0 | input_tokens=~4495 | avg=1.295s/memory
+2026-11-03 21:58:07,746 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 1 (entity resolution): 0.021s
+2026-11-03 21:58:07,776 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 2 (write transaction): 0.030s
+2026-11-03 21:58:07,780 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Consumer batch 1 total (excluding fire-and-forget): 0.055s
+2026-11-03 21:58:07,791 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Final ANN chunk 1/1: 4 links in 0.006s
+2026-11-03 21:58:07,791 - INFO - hindsight_api.engine.retain.orchestrator - 
+============================================================
+RETAIN_BATCH START: coding-agent::ms
+Batch size: 1 content items, 2,004 chars
+============================================================
+[streaming] 1 chunks, batch_size 100 — 1 batch
+  Extract facts: 2 facts, 1 chunks from 1 contents in 6.384s
+  Generate embeddings: 2 embeddings in 0.308s
+[streaming] Embeddings: 2 texts in 1 backend request(s) (avg 2.0, max 2 texts per request)
+[streaming] Consumer batch 1: processing 2 facts from 1 chunks
+[streaming] Document conversation:cca9055c-8ac8-4f08-84b2-56f26ba9e5ca tracked (full content)
+  Store chunks: 1 chunks in 0.005s
+  Insert facts: 2 units in 0.000s
+  Insert unit_entities: 13 pairs in 0.002s
+  Temporal links: 18 links in 0.008s
+  Semantic links: skipped (deferred to final ANN pass)
+  Causal links: 1 links in 0.001s
+[streaming] Checkpoint: 2 facts committed, ANN pass next
+[streaming] Final ANN: loaded 2 units with embeddings in 0.001s
+      [8.1] ANN search (Phase 1): 2 units → 4 links in 0.004s
+[streaming] Final ANN: 4 total semantic links
+[streaming] Final ANN pass: 0.008s for 2 units
+============================================================
+STREAMING RETAIN COMPLETE: 2 units across 1 batches in 6.765s
+Document: conversation:cca9055c-8ac8-4f08-84b2-56f26ba9e5ca
+============================================================
+
+2026-11-03 21:58:07,800 - INFO - hindsight_api.engine.memory_engine - consolidation task queued for bank_id=coding-agent::ms, operation_id=ed5d61c1-3c24-4a22-8c25-6b2e79edb842
+2026-11-03 21:58:07,802 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::ms store=PostgresMemories docs=1 wall=6.78s 0.3KB/s | embed=0.308s/1c/5% pg.acquire=0.01s/20c/0%
+2026-11-03 21:58:07,802 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Completed background batch retain for bank_id=coding-agent::ms
+2026-11-03 21:58:07,804 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 8551145f-31f5-4971-8fa1-5840f95eeb19
+2026-11-03 21:58:07,807 - INFO - hindsight_api.engine.memory_engine - Updated parent operation 11160fca-5e4a-5784-8f73-c4f211b1c452 to status 'completed' (all children done)
+2026-11-03 21:58:09,334 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=1/10 | reserved: [consolidation=1/2(avail=1)] | shared=0/8(avail=8) | global: pending=1 (queried=1/1 schemas: default) | others: none | pool: size=8 limits=5-100 idle=8 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1886 peak_rss_mb=1886 | my_active: consolidation:coding-agent::ms(1)
+2026-11-03 21:58:09,334 - INFO - hindsight_api.worker.poller - [PENDING_BREAKDOWN] consolidation: total=1 payload_null=0 retry_blocked=0 assigned=0
+2026-11-03 21:58:09,334 - INFO - hindsight_api.worker.poller - [WORKER_TASK] op=68f56652-d2ca-4efc-a714-b8209d07b785 type=consolidation op_type=consolidation bank=coding-agent::ms age=12s stage=llm.claude_code.consolidation.attempt=1/4 stage_age=1s
+2026-11-03 21:58:17,518 - INFO - hindsight_api.engine.consolidation.consolidator - [CONSOLIDATION] bank=coding-agent::ms llm_batch #2 (5 memories, 1 llm calls) | processed=13/18 | recall=0.715s, llm=8.899s, embedding=0.142s, db_write=0.003s | created=5 updated=0 skipped=0 | input_tokens=~6345 | avg=1.957s/memory
+2026-11-03 21:58:22,596 - INFO - hindsight_api.engine.memory_engine - [REFLECT coding-a-80862-93b82a] Cancelled after 21.7s: client disconnected
+2026-11-03 21:58:22,596 - INFO - hindsight_api.api.http - [REFLECT CANCELLED] bank=coding-agent::ms reason=client disconnected
+2026-11-03 21:58:23,869 - INFO - hindsight_api.engine.memory_engine - Created parent operation 828aa349-2b4f-54af-9826-ae0f5919ad38 with 1 child sub-batch(es)
+2026-11-03 21:58:24,053 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 21:58:24,054 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::ms, 1 items, operation_id=67b5c524-e361-4963-84b4-da1cb89b4874
+2026-11-03 21:58:24,060 - INFO - hindsight_api.engine.retain.orchestrator - Delta retain: no unchanged chunks for conversation:cca9055c-8ac8-4f08-84b2-56f26ba9e5ca, falling back to full retain
+2026-11-03 21:58:25,962 - INFO - hindsight_api.engine.memory_engine - Created parent operation e170a138-de82-5204-8a04-8308202ec5c0 with 1 child sub-batch(es)
+2026-11-03 21:58:30,864 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 1 (entity resolution): 0.018s
+2026-11-03 21:58:30,894 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 2 (write transaction): 0.029s
+2026-11-03 21:58:30,899 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Consumer batch 1 total (excluding fire-and-forget): 0.052s
+2026-11-03 21:58:30,909 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Final ANN chunk 1/1: 3 links in 0.005s
+2026-11-03 21:58:30,909 - INFO - hindsight_api.engine.retain.orchestrator - 
+============================================================
+RETAIN_BATCH START: coding-agent::ms
+Batch size: 1 content items, 2,809 chars
+============================================================
+[delta] Chunked new content: 1 chunks in 0.000s
+[delta] Chunk diff: 0 unchanged, 1 changed, 0 new, 0 removed
+[streaming] 1 chunks, batch_size 100 — 1 batch
+  Extract facts: 2 facts, 1 chunks from 1 contents in 6.588s
+  Generate embeddings: 2 embeddings in 0.196s
+[streaming] Embeddings: 2 texts in 1 backend request(s) (avg 2.0, max 2 texts per request)
+[streaming] Consumer batch 1: processing 2 facts from 1 chunks
+[streaming] Document conversation:cca9055c-8ac8-4f08-84b2-56f26ba9e5ca tracked (full content)
+  Store chunks: 1 chunks in 0.004s
+  Insert facts: 2 units in 0.000s
+  Insert unit_entities: 19 pairs in 0.002s
+  Temporal links: 18 links in 0.006s
+  Semantic links: skipped (deferred to final ANN pass)
+  Causal links: 1 links in 0.001s
+[streaming] Checkpoint: 2 facts committed, ANN pass next
+[streaming] Final ANN: loaded 2 units with embeddings in 0.001s
+      [8.1] ANN search (Phase 1): 2 units → 3 links in 0.004s
+[streaming] Final ANN: 3 total semantic links
+[streaming] Final ANN pass: 0.007s for 2 units
+============================================================
+STREAMING RETAIN COMPLETE: 2 units across 1 batches in 6.852s
+Document: conversation:cca9055c-8ac8-4f08-84b2-56f26ba9e5ca
+============================================================
+
+2026-11-03 21:58:30,916 - INFO - hindsight_api.engine.memory_engine - graph_maintenance task queued for bank_id=coding-agent::ms, operation_id=a642f1c3-3ce9-4058-b861-1909d3fcbcc9
+2026-11-03 21:58:30,917 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::ms store=PostgresMemories docs=1 wall=6.862s 0.4KB/s | embed=0.196s/1c/3% pg.acquire=0.007s/21c/0%
+2026-11-03 21:58:30,917 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Completed background batch retain for bank_id=coding-agent::ms
+2026-11-03 21:58:30,918 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 67b5c524-e361-4963-84b4-da1cb89b4874
+2026-11-03 21:58:30,919 - INFO - hindsight_api.engine.memory_engine - Updated parent operation 828aa349-2b4f-54af-9826-ae0f5919ad38 to status 'completed' (all children done)
+2026-11-03 21:58:30,929 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 2 tasks (0 consolidation): batch_retain:1, graph_maintenance:1 (schemas: default)
+2026-11-03 21:58:30,930 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::ms, 1 items, operation_id=df56b674-b318-47a7-9641-5b165f0bd207
+2026-11-03 21:58:30,938 - INFO - hindsight_api.engine.retain.orchestrator - Delta retain: no unchanged chunks for conversation:cca9055c-8ac8-4f08-84b2-56f26ba9e5ca, falling back to full retain
+2026-11-03 21:58:31,012 - INFO - hindsight_api.engine.graph_maintenance - [GRAPH_MAINT] bank=coding-agent::ms done: {'relink_units_processed': 0, 'relink_links_added': 0, 'entities_examined': 11, 'orphan_entities_pruned': 0, 'stale_cooccurrences_pruned': 2, 'queues_drained': True}, elapsed=0.08s, operation_id=a642f1c3-3ce9-4058-b861-1909d3fcbcc9
+2026-11-03 21:58:31,015 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: a642f1c3-3ce9-4058-b861-1909d3fcbcc9
+2026-11-03 21:58:31,478 - INFO - hindsight_api.engine.providers.claude_code_llm - slow llm call: scope=consolidation, model=claude-code/claude-sonnet-5-5, time=12.424s
+2026-11-03 21:58:31,619 - INFO - hindsight_api.engine.consolidation.consolidator - [CONSOLIDATION] bank=coding-agent::ms response left 2/7 facts unaddressed; re-asking them
+2026-11-03 21:58:36,538 - INFO - hindsight_api.engine.consolidation.consolidator - [CONSOLIDATION] bank=coding-agent::ms response left 2/2 facts unaddressed; re-asking them
+2026-11-03 21:58:37,927 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 1 (entity resolution): 0.008s
+2026-11-03 21:58:37,955 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 2 (write transaction): 0.028s
+2026-11-03 21:58:37,959 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Consumer batch 1 total (excluding fire-and-forget): 0.040s
+2026-11-03 21:58:37,967 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Final ANN chunk 1/1: 3 links in 0.005s
+2026-11-03 21:58:37,967 - INFO - hindsight_api.engine.retain.orchestrator - 
+============================================================
+RETAIN_BATCH START: coding-agent::ms
+Batch size: 1 content items, 3,112 chars
+============================================================
+[delta] Chunked new content: 1 chunks in 0.000s
+[delta] Chunk diff: 0 unchanged, 1 changed, 0 new, 0 removed
+[streaming] 1 chunks, batch_size 100 — 1 batch
+  Extract facts: 2 facts, 1 chunks from 1 contents in 6.792s
+  Generate embeddings: 2 embeddings in 0.187s
+[streaming] Embeddings: 2 texts in 1 backend request(s) (avg 2.0, max 2 texts per request)
+[streaming] Consumer batch 1: processing 2 facts from 1 chunks
+[streaming] Document conversation:cca9055c-8ac8-4f08-84b2-56f26ba9e5ca tracked (full content)
+  Store chunks: 1 chunks in 0.004s
+  Insert facts: 2 units in 0.000s
+  Insert unit_entities: 17 pairs in 0.002s
+  Temporal links: 18 links in 0.006s
+  Semantic links: skipped (deferred to final ANN pass)
+  Causal links: 1 links in 0.001s
+[streaming] Checkpoint: 2 facts committed, ANN pass next
+[streaming] Final ANN: loaded 2 units with embeddings in 0.001s
+      [8.1] ANN search (Phase 1): 2 units → 3 links in 0.004s
+[streaming] Final ANN: 3 total semantic links
+[streaming] Final ANN pass: 0.006s for 2 units
+============================================================
+STREAMING RETAIN COMPLETE: 2 units across 1 batches in 7.033s
+Document: conversation:cca9055c-8ac8-4f08-84b2-56f26ba9e5ca
+============================================================
+
+2026-11-03 21:58:37,974 - INFO - hindsight_api.engine.memory_engine - graph_maintenance task queued for bank_id=coding-agent::ms, operation_id=68f953e1-8797-49b0-9cca-1920ef11b8b8
+2026-11-03 21:58:37,975 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::ms store=PostgresMemories docs=1 wall=7.044s 0.4KB/s | embed=0.187s/1c/3% pg.acquire=0.008s/21c/0%
+2026-11-03 21:58:37,975 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Completed background batch retain for bank_id=coding-agent::ms
+2026-11-03 21:58:37,976 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: df56b674-b318-47a7-9641-5b165f0bd207
+2026-11-03 21:58:37,977 - INFO - hindsight_api.engine.memory_engine - Updated parent operation e170a138-de82-5204-8a04-8308202ec5c0 to status 'completed' (all children done)
+2026-11-03 21:58:37,986 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): graph_maintenance:1 (schemas: default)
+2026-11-03 21:58:37,994 - INFO - hindsight_api.engine.graph_maintenance - [GRAPH_MAINT] bank=coding-agent::ms done: {'relink_units_processed': 0, 'relink_links_added': 0, 'entities_examined': 16, 'orphan_entities_pruned': 1, 'stale_cooccurrences_pruned': 11, 'queues_drained': True}, elapsed=0.01s, operation_id=68f953e1-8797-49b0-9cca-1920ef11b8b8
+2026-11-03 21:58:37,995 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 68f953e1-8797-49b0-9cca-1920ef11b8b8
+2026-11-03 21:58:39,516 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=1/10 | reserved: [consolidation=1/2(avail=1)] | shared=0/8(avail=8) | global: pending=1 (queried=1/1 schemas: default) | others: none | pool: size=8 limits=5-100 idle=8 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1912 peak_rss_mb=2072 | my_active: consolidation:coding-agent::ms(1)
+2026-11-03 21:58:39,516 - INFO - hindsight_api.worker.poller - [PENDING_BREAKDOWN] consolidation: total=1 payload_null=0 retry_blocked=0 assigned=0
+2026-11-03 21:58:39,516 - INFO - hindsight_api.worker.poller - [WORKER_TASK] op=68f56652-d2ca-4efc-a714-b8209d07b785 type=consolidation op_type=consolidation bank=coding-agent::ms age=42s stage=llm.claude_code.consolidation.attempt=1/4 stage_age=3s
+2026-11-03 21:58:48,499 - INFO - hindsight_api.engine.consolidation.consolidator - [CONSOLIDATION] bank=coding-agent::ms llm_batch #3 (7 memories, 4 llm calls) | processed=20/18 | recall=2.714s, llm=28.111s, embedding=0.119s, db_write=0.003s | created=5 updated=0 skipped=2 | input_tokens=~25841 | avg=4.426s/memory
+2026-11-03 21:58:55,713 - INFO - hindsight_api.engine.consolidation.consolidator - [CONSOLIDATION] bank=coding-agent::ms llm_batch #4 (2 memories, 1 llm calls) | processed=22/18 | recall=0.618s, llm=6.453s, embedding=0.126s, db_write=0.002s | created=2 updated=0 skipped=0 | input_tokens=~6477 | avg=3.606s/memory
+2026-11-03 21:58:55,723 - INFO - hindsight_api.engine.consolidation.consolidator - 
+============================================================
+CONSOLIDATION for bank coding-agent::ms
+[1] Found 18 pending memories to consolidate
+[3] Results: 22 memories -> 20 actions (20 created, 0 updated, 0 merged, 2 skipped)
+[4] Timing breakdown: recall=4.624s (7 calls, avg=661ms), llm=52.793s (7 calls, avg=7542ms), embedding=0.754s (4 calls, avg=188ms), db_write=0.014s (19 calls, avg=1ms), avg_obs=7.4, avg_prompt_tokens=~6166
+============================================================
+CONSOLIDATION COMPLETE: 58.354s total
+============================================================
+2026-11-03 21:58:55,726 - INFO - hindsight_api.engine.memory_engine - [CONSOLIDATION] bank=coding-agent::ms completed: 22 processed
+2026-11-03 21:58:55,727 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 68f56652-d2ca-4efc-a714-b8209d07b785
+2026-11-03 21:58:55,737 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (1 consolidation): consolidation:1 (schemas: default)
+2026-11-03 21:58:55,739 - INFO - hindsight_api.engine.memory_engine - [CONSOLIDATION] bank=coding-agent::ms completed: 0 processed
+2026-11-03 21:58:55,740 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: ed5d61c1-3c24-4a22-8c25-6b2e79edb842
+2026-11-03 21:59:09,785 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=0/10 | reserved: [consolidation=0/2(avail=2)] | shared=0/8(avail=8) | global: pending=0 (queried=0/1 schemas: ) | others: none | pool: size=8 limits=5-100 idle=8 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1921 peak_rss_mb=2072 | my_active: none
+2026-11-03 21:59:11,634 - INFO - hindsight_api.engine.memory_engine - Created parent operation 1a2a6003-f83d-4d10-8ea6-10e1be3a6c55 with 1 child sub-batch(es)
+2026-11-03 21:59:11,741 - INFO - hindsight_api.config_resolver - Updated bank config for coding-agent::ufo: ['reflect_mission', 'retain_mission', 'retain_extraction_mode', 'enable_observations', 'observations_mission', 'entity_labels', 'entities_allow_free_form', 'retain_default_strategy', 'retain_strategies']
+2026-11-03 21:59:11,842 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 21:59:11,854 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::ufo, 1 items, operation_id=f48aabd1-b7d5-442e-959b-43a9930bd69b
+2026-11-03 21:59:11,861 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Component map' for bank coding-agent::ufo
+2026-11-03 21:59:11,872 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::ufo, operation_id=678f33d1-70ff-43a2-91cf-6a794dd5873f
+2026-11-03 21:59:12,152 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Core concepts' for bank coding-agent::ufo
+2026-11-03 21:59:12,175 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::ufo, operation_id=d63a8eb5-6955-46ae-84a6-31aa28e95fdc
+2026-11-03 21:59:12,256 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Conventions and patterns' for bank coding-agent::ufo
+2026-11-03 21:59:12,273 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::ufo, operation_id=cc618ada-55b0-4e14-a0a1-9a5e5bf8d8a8
+2026-11-03 21:59:12,367 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Key decisions and rationale' for bank coding-agent::ufo
+2026-11-03 21:59:12,373 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 3 tasks (0 consolidation): refresh_mental_model:3 (schemas: default)
+2026-11-03 21:59:12,378 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::ufo, operation_id=1f4e7283-6e81-4e9e-a495-bdc177f49b74
+2026-11-03 21:59:12,381 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::ufo, mental_model_id=mm-83e851a624664b6e815d71f9739e07a4
+2026-11-03 21:59:12,381 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::ufo, mental_model_id=mm-7c56f6fce546411384ffb7b1f4da1493
+2026-11-03 21:59:12,382 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::ufo, mental_model_id=mm-67f5f8ab0ba14d818786351daaddb6af
+2026-11-03 21:59:12,415 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-83e851a624664b6e815d71f9739e07a4: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 21:59:12,416 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-83e851a624664b6e815d71f9739e07a4 (full): no new facts found, preserving content
+2026-11-03 21:59:12,417 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-7c56f6fce546411384ffb7b1f4da1493: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 21:59:12,418 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-7c56f6fce546411384ffb7b1f4da1493 (full): no new facts found, preserving content
+2026-11-03 21:59:12,419 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-67f5f8ab0ba14d818786351daaddb6af: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 21:59:12,419 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-67f5f8ab0ba14d818786351daaddb6af (full): no new facts found, preserving content
+2026-11-03 21:59:12,423 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): refresh_mental_model:1 (schemas: default)
+2026-11-03 21:59:12,428 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::ufo, mental_model_id=mm-7c56f6fce546411384ffb7b1f4da1493
+2026-11-03 21:59:12,429 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::ufo, mental_model_id=mm-51a141e6f89c4a218286304460b442a5
+2026-11-03 21:59:12,430 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::ufo, mental_model_id=mm-83e851a624664b6e815d71f9739e07a4
+2026-11-03 21:59:12,432 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 678f33d1-70ff-43a2-91cf-6a794dd5873f
+2026-11-03 21:59:12,433 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::ufo, mental_model_id=mm-67f5f8ab0ba14d818786351daaddb6af
+2026-11-03 21:59:12,437 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: d63a8eb5-6955-46ae-84a6-31aa28e95fdc
+2026-11-03 21:59:12,439 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: cc618ada-55b0-4e14-a0a1-9a5e5bf8d8a8
+2026-11-03 21:59:12,447 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-51a141e6f89c4a218286304460b442a5: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 21:59:12,447 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-51a141e6f89c4a218286304460b442a5 (full): no new facts found, preserving content
+2026-11-03 21:59:12,452 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::ufo, mental_model_id=mm-51a141e6f89c4a218286304460b442a5
+2026-11-03 21:59:12,454 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 1f4e7283-6e81-4e9e-a495-bdc177f49b74
+2026-11-03 21:59:12,480 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Created pinned mental model 'Initiatives and enhancements' for bank coding-agent::ufo
+2026-11-03 21:59:12,485 - INFO - hindsight_api.engine.memory_engine - refresh_mental_model task queued for bank_id=coding-agent::ufo, operation_id=68f9a370-0380-41c6-a906-309bd6980093
+2026-11-03 21:59:12,567 - INFO - hindsight_api.engine.memory_engine - Created parent operation 436353aa-dab1-4da1-ae66-7a0bafce4219 with 1 child sub-batch(es)
+2026-11-03 21:59:12,973 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 2 tasks (0 consolidation): refresh_mental_model:1, batch_retain:1 (schemas: default)
+2026-11-03 21:59:12,975 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Starting for bank_id=coding-agent::ufo, mental_model_id=mm-b7886390749d4470af8a3f0d512edcde
+2026-11-03 21:59:12,976 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::ufo, 1 items, operation_id=5a939fda-dac4-48ac-aef1-acb03635b786
+2026-11-03 21:59:12,982 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-b7886390749d4470af8a3f0d512edcde: nothing in scope to reflect over (mode=full); skipping the reflect loop
+2026-11-03 21:59:12,982 - INFO - hindsight_api.engine.memory_engine - [MENTAL_MODELS] Refresh for mm-b7886390749d4470af8a3f0d512edcde (full): no new facts found, preserving content
+2026-11-03 21:59:12,997 - INFO - hindsight_api.engine.memory_engine - [REFRESH_MENTAL_MODEL_TASK] Completed for bank_id=coding-agent::ufo, mental_model_id=mm-b7886390749d4470af8a3f0d512edcde
+2026-11-03 21:59:13,194 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 68f9a370-0380-41c6-a906-309bd6980093
+2026-11-03 21:59:13,523 - INFO - hindsight_api.engine.retain.orchestrator - 
+============================================================
+RETAIN_BATCH START: coding-agent::ufo
+Batch size: 1 content items, 147 chars
+============================================================
+[streaming] 1 chunks, batch_size 100 — 1 batch
+  Extract facts: 0 facts, 1 chunks from 1 contents in 1.624s
+[streaming] Embeddings: no texts embedded
+[streaming] Document survey-baseline:f06c800d0c59f2a4a1b9ba65eb6cb61a84419be6 tracked (0 facts in first batch)
+[streaming] Consumer batch 1: 0 facts extracted from 1 chunks, skipping
+============================================================
+STREAMING RETAIN COMPLETE: 0 units across 1 batches in 1.657s
+Document: survey-baseline:f06c800d0c59f2a4a1b9ba65eb6cb61a84419be6
+============================================================
+
+2026-11-03 21:59:13,536 - INFO - hindsight_api.engine.memory_engine - consolidation task queued for bank_id=coding-agent::ufo, operation_id=bad62e5b-26ef-4814-ae6a-c6786afad0e5
+2026-11-03 21:59:13,538 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::ufo store=PostgresMemories docs=1 wall=1.684s 0.1KB/s | pg.acquire=0.018s/16c/1%
+2026-11-03 21:59:13,539 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Completed background batch retain for bank_id=coding-agent::ufo
+2026-11-03 21:59:13,542 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: f48aabd1-b7d5-442e-959b-43a9930bd69b
+2026-11-03 21:59:13,544 - INFO - hindsight_api.engine.memory_engine - Updated parent operation 1a2a6003-f83d-4d10-8ea6-10e1be3a6c55 to status 'completed' (all children done)
+2026-11-03 21:59:13,567 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (1 consolidation): consolidation:1 (schemas: default)
+2026-11-03 21:59:13,572 - INFO - hindsight_api.engine.memory_engine - [CONSOLIDATION] bank=coding-agent::ufo completed: 0 processed
+2026-11-03 21:59:13,573 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: bad62e5b-26ef-4814-ae6a-c6786afad0e5
+2026-11-03 21:59:28,715 - INFO - hindsight_api.engine.providers.claude_code_llm - slow llm call: scope=retain_extract_facts, model=claude-code/claude-sonnet-5-5, time=15.720s
+2026-11-03 21:59:28,811 - INFO - hindsight_api.engine.providers.claude_code_llm - slow llm call: scope=retain_extract_facts, model=claude-code/claude-sonnet-5-5, time=15.819s
+2026-11-03 21:59:29,412 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 1 (entity resolution): 0.014s
+2026-11-03 21:59:29,452 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 2 (write transaction): 0.039s
+2026-11-03 21:59:29,506 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Consumer batch 1 total (excluding fire-and-forget): 0.108s
+2026-11-03 21:59:29,520 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Final ANN chunk 1/1: 99 links in 0.011s
+2026-11-03 21:59:29,520 - INFO - hindsight_api.engine.retain.orchestrator - 
+============================================================
+RETAIN_BATCH START: coding-agent::ufo
+Batch size: 1 content items, 23,425 chars
+============================================================
+[streaming] 2 chunks, batch_size 100 — 1 batch
+  Extract facts: 8 facts, 1 chunks from 1 contents in 15.727s
+  Extract facts: 5 facts, 1 chunks from 1 contents in 15.827s
+  Generate embeddings: 8 embeddings in 0.653s
+  Generate embeddings: 5 embeddings in 0.585s
+[streaming] Embeddings: 13 texts in 2 backend request(s) (avg 6.5, max 8 texts per request)
+[streaming] Consumer batch 1: processing 13 facts from 2 chunks
+[streaming] Document gitlog:ufo tracked (full content)
+  Store chunks: 2 chunks in 0.006s
+  Insert facts: 13 units in 0.000s
+  Insert unit_entities: 164 pairs in 0.006s
+  Temporal links: 170 links in 0.010s
+  Semantic links: skipped (deferred to final ANN pass)
+  Causal links: 0 links in 0.000s
+[streaming] Checkpoint: 13 facts committed, ANN pass next
+[streaming] Final ANN: loaded 13 units with embeddings in 0.001s
+      [8.1] ANN search (Phase 1): 13 units → 99 links in 0.007s
+[streaming] Final ANN: 99 total semantic links
+[streaming] Final ANN pass: 0.012s for 13 units
+============================================================
+STREAMING RETAIN COMPLETE: 13 units across 1 batches in 16.541s
+Document: gitlog:ufo
+============================================================
+
+2026-11-03 21:59:29,526 - INFO - hindsight_api.engine.memory_engine - consolidation task queued for bank_id=coding-agent::ufo, operation_id=acaa033a-df25-4b4f-8cec-a2cfeff6a93d
+2026-11-03 21:59:29,526 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::ufo store=PostgresMemories docs=1 wall=16.551s 1.4KB/s | embed=1.238s/2c/7% pg.acquire=0.011s/21c/0%
+2026-11-03 21:59:29,526 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Completed background batch retain for bank_id=coding-agent::ufo
+2026-11-03 21:59:29,528 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 5a939fda-dac4-48ac-aef1-acb03635b786
+2026-11-03 21:59:29,529 - INFO - hindsight_api.engine.memory_engine - Updated parent operation 436353aa-dab1-4da1-ae66-7a0bafce4219 to status 'completed' (all children done)
+2026-11-03 21:59:29,538 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (1 consolidation): consolidation:1 (schemas: default)
+2026-11-03 21:59:29,541 - INFO - hindsight_api.engine.consolidation.consolidator - [CONSOLIDATION] bank=coding-agent::ufo total_unconsolidated=13
+2026-11-03 21:59:38,893 - INFO - hindsight_api.engine.memory_engine - Created parent operation 6c39c91b-6401-5e65-bec0-12fafb286c91 with 1 child sub-batch(es)
+2026-11-03 21:59:39,054 - INFO - hindsight_api.engine.memory_engine - [REFLECT coding-a-79054-1f994e] Starting agentic reflect for query: A developer is starting a coding session in this r...
+2026-11-03 21:59:39,061 - INFO - hindsight_api.engine.memory_engine - [REFLECT coding-a-79054-1f994e] Bank has 5 mental models
+2026-11-03 21:59:39,213 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 21:59:39,216 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::ufo, 1 items, operation_id=d3512f76-9035-4357-b868-90ed92c3e99e
+2026-11-03 21:59:40,222 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=2/10 | reserved: [consolidation=1/2(avail=1)] | shared=1/8(avail=7) | global: pending=1 (queried=1/1 schemas: default) | others: none | pool: size=8 limits=5-100 idle=8 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1969 peak_rss_mb=2072 | my_active: consolidation:coding-agent::ufo(1), retain:coding-agent::ufo(1)
+2026-11-03 21:59:40,222 - INFO - hindsight_api.worker.poller - [PENDING_BREAKDOWN] batch_retain: total=1 payload_null=1 retry_blocked=0 assigned=0
+2026-11-03 21:59:40,222 - INFO - hindsight_api.worker.poller - [WORKER_TASK] op=acaa033a-df25-4b4f-8cec-a2cfeff6a93d type=consolidation op_type=consolidation bank=coding-agent::ufo age=11s stage=llm.claude_code.consolidation.attempt=1/4 stage_age=9s
+2026-11-03 21:59:40,222 - INFO - hindsight_api.worker.poller - [WORKER_TASK] op=d3512f76-9035-4357-b868-90ed92c3e99e type=batch_retain op_type=retain bank=coding-agent::ufo age=1s stage=llm.claude_code.retain_extract_facts.attempt=1/4 stage_age=1s
+2026-11-03 21:59:41,588 - INFO - hindsight_api.engine.providers.claude_code_llm - slow llm call: scope=consolidation, model=claude-code/claude-sonnet-5-5, time=10.385s
+2026-11-03 21:59:41,886 - INFO - hindsight_api.engine.consolidation.consolidator - [CONSOLIDATION] bank=coding-agent::ufo llm_batch #1 (8 memories, 1 llm calls) | processed=8/13 | recall=1.656s, llm=10.389s, embedding=0.267s, db_write=0.005s | created=8 updated=0 skipped=0 | input_tokens=~4636 | avg=1.543s/memory
+2026-11-03 21:59:45,423 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 1 (entity resolution): 0.012s
+2026-11-03 21:59:45,447 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 2 (write transaction): 0.023s
+2026-11-03 21:59:45,450 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Consumer batch 1 total (excluding fire-and-forget): 0.038s
+2026-11-03 21:59:45,458 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Final ANN chunk 1/1: 10 links in 0.005s
+2026-11-03 21:59:45,458 - INFO - hindsight_api.engine.retain.orchestrator - 
+============================================================
+RETAIN_BATCH START: coding-agent::ufo
+Batch size: 1 content items, 2,608 chars
+============================================================
+[streaming] 1 chunks, batch_size 100 — 1 batch
+  Extract facts: 2 facts, 1 chunks from 1 contents in 6.054s
+  Generate embeddings: 2 embeddings in 0.134s
+[streaming] Embeddings: 2 texts in 1 backend request(s) (avg 2.0, max 2 texts per request)
+[streaming] Consumer batch 1: processing 2 facts from 1 chunks
+[streaming] Document conversation:8c5d6ba9-4a46-41b3-bec2-4ccec857fc3c tracked (full content)
+  Store chunks: 1 chunks in 0.004s
+  Insert facts: 2 units in 0.000s
+  Insert unit_entities: 13 pairs in 0.002s
+  Temporal links: 13 links in 0.006s
+  Semantic links: skipped (deferred to final ANN pass)
+  Causal links: 1 links in 0.001s
+[streaming] Checkpoint: 2 facts committed, ANN pass next
+[streaming] Final ANN: loaded 2 units with embeddings in 0.001s
+      [8.1] ANN search (Phase 1): 2 units → 10 links in 0.004s
+[streaming] Final ANN: 10 total semantic links
+[streaming] Final ANN pass: 0.006s for 2 units
+============================================================
+STREAMING RETAIN COMPLETE: 2 units across 1 batches in 6.240s
+Document: conversation:8c5d6ba9-4a46-41b3-bec2-4ccec857fc3c
+============================================================
+
+2026-11-03 21:59:45,464 - INFO - hindsight_api.engine.memory_engine - consolidation task queued for bank_id=coding-agent::ufo, operation_id=3148b99a-2b8e-49c7-aa5a-58178b14b135
+2026-11-03 21:59:45,465 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::ufo store=PostgresMemories docs=1 wall=6.249s 0.4KB/s | embed=0.134s/1c/2% pg.acquire=0.007s/20c/0%
+2026-11-03 21:59:45,465 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Completed background batch retain for bank_id=coding-agent::ufo
+2026-11-03 21:59:45,466 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: d3512f76-9035-4357-b868-90ed92c3e99e
+2026-11-03 21:59:45,468 - INFO - hindsight_api.engine.memory_engine - Updated parent operation 6c39c91b-6401-5e65-bec0-12fafb286c91 to status 'completed' (all children done)
+2026-11-03 21:59:52,902 - INFO - hindsight_api.engine.providers.claude_code_llm - slow llm call: scope=consolidation, model=claude-code/claude-sonnet-5-5, time=10.040s
+2026-11-03 21:59:53,080 - INFO - hindsight_api.engine.consolidation.consolidator - [CONSOLIDATION] bank=coding-agent::ufo llm_batch #2 (5 memories, 1 llm calls) | processed=13/13 | recall=0.972s, llm=10.043s, embedding=0.156s, db_write=0.003s | created=5 updated=0 skipped=0 | input_tokens=~6534 | avg=2.239s/memory
+2026-11-03 22:00:01,133 - INFO - hindsight_api.engine.consolidation.consolidator - [CONSOLIDATION] bank=coding-agent::ufo llm_batch #3 (2 memories, 1 llm calls) | processed=15/13 | recall=0.478s, llm=7.493s, embedding=0.066s, db_write=0.001s | created=2 updated=0 skipped=0 | input_tokens=~6304 | avg=4.025s/memory
+2026-11-03 22:00:01,139 - INFO - hindsight_api.engine.consolidation.consolidator - 
+============================================================
+CONSOLIDATION for bank coding-agent::ufo
+[1] Found 13 pending memories to consolidate
+[3] Results: 15 memories -> 15 actions (15 created, 0 updated, 0 merged, 0 skipped)
+[4] Timing breakdown: recall=3.106s (3 calls, avg=1035ms), llm=27.925s (3 calls, avg=9308ms), embedding=0.489s (3 calls, avg=163ms), db_write=0.009s (13 calls, avg=1ms), avg_obs=5.3, avg_prompt_tokens=~5825
+============================================================
+CONSOLIDATION COMPLETE: 31.599s total
+============================================================
+2026-11-03 22:00:01,142 - INFO - hindsight_api.engine.memory_engine - [CONSOLIDATION] bank=coding-agent::ufo completed: 15 processed
+2026-11-03 22:00:01,143 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: acaa033a-df25-4b4f-8cec-a2cfeff6a93d
+2026-11-03 22:00:01,154 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (1 consolidation): consolidation:1 (schemas: default)
+2026-11-03 22:00:01,157 - INFO - hindsight_api.engine.memory_engine - [CONSOLIDATION] bank=coding-agent::ufo completed: 0 processed
+2026-11-03 22:00:01,158 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 3148b99a-2b8e-49c7-aa5a-58178b14b135
+2026-11-03 22:00:01,556 - INFO - hindsight_api.engine.memory_engine - Created parent operation 435e4570-3fce-5396-b049-268b2581c4ae with 1 child sub-batch(es)
+2026-11-03 22:00:01,671 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 1 tasks (0 consolidation): batch_retain:1 (schemas: default)
+2026-11-03 22:00:01,673 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Starting background batch retain for bank_id=coding-agent::ufo, 1 items, operation_id=9075d1fc-5e7f-4ea6-9214-975f320968ce
+2026-11-03 22:00:01,678 - INFO - hindsight_api.engine.retain.orchestrator - Delta retain: no unchanged chunks for conversation:8c5d6ba9-4a46-41b3-bec2-4ccec857fc3c, falling back to full retain
+2026-11-03 22:00:02,270 - INFO - hindsight_api.engine.memory_engine - [REFLECT coding-a-79054-1f994e] Cancelled after 23.2s: client disconnected
+2026-11-03 22:00:02,270 - INFO - hindsight_api.api.http - [REFLECT CANCELLED] bank=coding-agent::ufo reason=client disconnected
+2026-11-03 22:00:08,729 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 1 (entity resolution): 0.007s
+2026-11-03 22:00:08,733 - INFO - hindsight_api.engine.memories.pg.writes - [OBSERVATIONS] Deleted 1 observations, reset 0 source memories for re-consolidation in bank coding-agent::ufo
+2026-11-03 22:00:08,733 - INFO - hindsight_api.engine.retain.fact_storage - [RETAIN] Document conversation:8c5d6ba9-4a46-41b3-bec2-4ccec857fc3c re-ingested: invalidated 1 observation(s) derived from 2 outgoing memory_units
+2026-11-03 22:00:08,746 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Phase 2 (write transaction): 0.017s
+2026-11-03 22:00:08,749 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Consumer batch 1 total (excluding fire-and-forget): 0.027s
+2026-11-03 22:00:08,756 - INFO - hindsight_api.engine.retain.orchestrator - [streaming] Final ANN chunk 1/1: 9 links in 0.005s
+2026-11-03 22:00:08,757 - INFO - hindsight_api.engine.retain.orchestrator - 
+============================================================
+RETAIN_BATCH START: coding-agent::ufo
+Batch size: 1 content items, 2,950 chars
+============================================================
+[delta] Chunked new content: 1 chunks in 0.000s
+[delta] Chunk diff: 0 unchanged, 1 changed, 0 new, 0 removed
+[streaming] 1 chunks, batch_size 100 — 1 batch
+  Extract facts: 2 facts, 1 chunks from 1 contents in 6.875s
+  Generate embeddings: 2 embeddings in 0.167s
+[streaming] Embeddings: 2 texts in 1 backend request(s) (avg 2.0, max 2 texts per request)
+[streaming] Consumer batch 1: processing 2 facts from 1 chunks
+[streaming] Document conversation:8c5d6ba9-4a46-41b3-bec2-4ccec857fc3c tracked (full content)
+  Store chunks: 1 chunks in 0.001s
+  Insert facts: 2 units in 0.000s
+  Insert unit_entities: 11 pairs in 0.002s
+  Temporal links: 13 links in 0.002s
+  Semantic links: skipped (deferred to final ANN pass)
+  Causal links: 1 links in 0.001s
+[streaming] Checkpoint: 2 facts committed, ANN pass next
+[streaming] Final ANN: loaded 2 units with embeddings in 0.001s
+      [8.1] ANN search (Phase 1): 2 units → 9 links in 0.003s
+[streaming] Final ANN: 9 total semantic links
+[streaming] Final ANN pass: 0.006s for 2 units
+============================================================
+STREAMING RETAIN COMPLETE: 2 units across 1 batches in 7.081s
+Document: conversation:8c5d6ba9-4a46-41b3-bec2-4ccec857fc3c
+============================================================
+
+2026-11-03 22:00:08,763 - INFO - hindsight_api.engine.memory_engine - consolidation task queued for bank_id=coding-agent::ufo, operation_id=78e1f70f-7378-4c7a-9090-e84b2e225617
+2026-11-03 22:00:08,766 - INFO - hindsight_api.engine.memory_engine - graph_maintenance task queued for bank_id=coding-agent::ufo, operation_id=1e22b33a-0196-4781-810e-49ddd457b18a
+2026-11-03 22:00:08,766 - INFO - hindsight_api.engine.retain.timing - [retain-timing] bank=coding-agent::ufo store=PostgresMemories docs=1 wall=7.093s 0.4KB/s | embed=0.167s/1c/2% pg.acquire=0.007s/22c/0%
+2026-11-03 22:00:08,766 - INFO - hindsight_api.engine.memory_engine - [BATCH_RETAIN_TASK] Completed background batch retain for bank_id=coding-agent::ufo
+2026-11-03 22:00:08,767 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 9075d1fc-5e7f-4ea6-9214-975f320968ce
+2026-11-03 22:00:08,768 - INFO - hindsight_api.engine.memory_engine - Updated parent operation 435e4570-3fce-5396-b049-268b2581c4ae to status 'completed' (all children done)
+2026-11-03 22:00:08,777 - INFO - hindsight_api.worker.poller - Worker runnervmnwato claimed 2 tasks (1 consolidation): consolidation:1, graph_maintenance:1 (schemas: default)
+2026-11-03 22:00:08,781 - INFO - hindsight_api.engine.consolidation.consolidator - [CONSOLIDATION] bank=coding-agent::ufo total_unconsolidated=2
+2026-11-03 22:00:08,791 - INFO - hindsight_api.engine.graph_maintenance - [GRAPH_MAINT] bank=coding-agent::ufo done: {'relink_units_processed': 0, 'relink_links_added': 0, 'entities_examined': 9, 'orphan_entities_pruned': 0, 'stale_cooccurrences_pruned': 10, 'queues_drained': True}, elapsed=0.01s, operation_id=1e22b33a-0196-4781-810e-49ddd457b18a
+2026-11-03 22:00:08,792 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 1e22b33a-0196-4781-810e-49ddd457b18a
+2026-11-03 22:00:10,307 - INFO - hindsight_api.worker.poller - [WORKER_STATS] worker=runnervmnwato slots=1/10 | reserved: [consolidation=1/2(avail=1)] | shared=0/8(avail=8) | global: pending=0 (queried=1/1 schemas: default) | others: none | pool: size=8 limits=5-100 idle=8 in_use=0 free_holders=100 pending_acquires=0 | proc: rss_mb=1937 peak_rss_mb=2072 | my_active: consolidation:coding-agent::ufo(1)
+2026-11-03 22:00:10,307 - INFO - hindsight_api.worker.poller - [WORKER_TASK] op=78e1f70f-7378-4c7a-9090-e84b2e225617 type=consolidation op_type=consolidation bank=coding-agent::ufo age=2s stage=llm.claude_code.consolidation.attempt=1/4 stage_age=1s
+2026-11-03 22:00:14,267 - INFO - hindsight_api.engine.consolidation.consolidator - [CONSOLIDATION] bank=coding-agent::ufo llm_batch #1 (2 memories, 1 llm calls) | processed=2/2 | recall=0.532s, llm=4.856s, embedding=0.083s, db_write=0.001s | created=2 updated=0 skipped=0 | input_tokens=~6388 | avg=2.742s/memory
+2026-11-03 22:00:14,273 - INFO - hindsight_api.engine.consolidation.consolidator - 
+============================================================
+CONSOLIDATION for bank coding-agent::ufo
+[1] Found 2 pending memories to consolidate
+[3] Results: 2 memories -> 2 actions (2 created, 0 updated, 0 merged, 0 skipped)
+[4] Timing breakdown: recall=0.532s, llm=4.856s, embedding=0.083s, db_write=0.001s, avg_obs=8.0, avg_prompt_tokens=~6389
+============================================================
+CONSOLIDATION COMPLETE: 5.493s total
+============================================================
+2026-11-03 22:00:14,276 - INFO - hindsight_api.engine.memory_engine - [CONSOLIDATION] bank=coding-agent::ufo completed: 2 processed
+2026-11-03 22:00:14,276 - INFO - hindsight_api.engine.memory_engine - Marked async operation as completed: 78e1f70f-7378-4c7a-9090-e84b2e225617

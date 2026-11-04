@@ -1,0 +1,201 @@
+diff --git a/docs/changelog.rst b/docs/changelog.rst
+index 92c07e1..54a21c9 100644
+--- a/docs/changelog.rst
++++ b/docs/changelog.rst
+@@ -19,6 +19,12 @@ see `semver.org <http://semver.org/>`_
+           syntax (``Query()['some']['nested']['field']``) that will
+           not break even when new methods are added to the ``Query`` API.
+ 
++Unreleased
++^^^^^^^^^^
++
++- Feature: Add ``Table.to_csv(path, fields=None)`` to export a table to a
++  CSV file
++
+ v4.9.0 (2026-08-06)
+ ^^^^^^^^^^^^^^^^^^^
+ 
+diff --git a/scripts/export_invoices.py b/scripts/export_invoices.py
+new file mode 100644
+index 0000000..a338382
+--- /dev/null
++++ b/scripts/export_invoices.py
+@@ -0,0 +1,38 @@
++"""Export the ``invoices`` table of a TinyDB JSON file to CSV.
++
++Usage: python scripts/export_invoices.py DB_PATH OUT_CSV
++"""
++import csv
++import sys
++
++from tinydb import TinyDB
++from tinydb.storages import JSONStorage
++
++COLUMNS = ['number', 'customer', 'amount', 'due_date']
++
++
++def export_invoices(db_path, out_path):
++    # Open read-only so exporting never modifies the source database
++    with TinyDB(db_path, storage=JSONStorage, access_mode='r') as db:
++        invoices = db.table('invoices').all()
++
++    with open(out_path, 'w', newline='', encoding='utf-8-sig') as f:
++        writer = csv.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore',
++                                delimiter=';')
++        writer.writeheader()
++        writer.writerows(invoices)
++
++    return len(invoices)
++
++
++def main(argv):
++    if len(argv) != 3:
++        print(f'Usage: {argv[0]} DB_PATH OUT_CSV', file=sys.stderr)
++        return 2
++    count = export_invoices(argv[1], argv[2])
++    print(f'Wrote {count} invoices to {argv[2]}')
++    return 0
++
++
++if __name__ == '__main__':
++    sys.exit(main(sys.argv))
+diff --git a/scripts/sample_db.json b/scripts/sample_db.json
+new file mode 100644
+index 0000000..40bf510
+--- /dev/null
++++ b/scripts/sample_db.json
+@@ -0,0 +1 @@
++{"invoices": {"1": {"number": "INV-001", "customer": "Acme, Inc.", "amount": 1250.0, "due_date": "2026-11-30"}, "2": {"number": "INV-002", "customer": "Globex", "amount": 310.5, "due_date": "2026-12-15"}, "3": {"number": "INV-003", "customer": "Initech \"West\"", "amount": 99.99, "due_date": "2027-01-05"}, "4": {"number": "INV-004", "customer": "M\u00fcller GmbH", "amount": 42.5, "due_date": "2027-02-01"}}}
+\ No newline at end of file
+diff --git a/tests/test_tables.py b/tests/test_tables.py
+index a94005e..3d82b61 100644
+--- a/tests/test_tables.py
++++ b/tests/test_tables.py
+@@ -1,3 +1,4 @@
++import csv
+ import re
+ 
+ import pytest
+@@ -197,3 +198,64 @@ def test_persist_empty_does_not_wipe_existing_data(tmpdir):
+     assert len(table) == 1
+     assert table.all() == [{'a': 1}]
+     db.close()
++
++
++def test_to_csv_default_fields(db, tmp_path):
++    path = tmp_path / 'out.csv'
++    db.to_csv(path)
++
++    with open(path, newline='', encoding='utf-8') as f:
++        rows = list(csv.reader(f))
++
++    assert rows == [['int', 'char'], ['1', 'a'], ['1', 'b'], ['1', 'c']]
++
++
++def test_to_csv_first_seen_order_and_missing(db, tmp_path):
++    table = db.table('t')
++    table.insert({'b': 1, 'a': 2})
++    table.insert({'c': 3, 'a': 4})
++    path = tmp_path / 'out.csv'
++
++    table.to_csv(path)
++
++    with open(path, newline='', encoding='utf-8') as f:
++        rows = list(csv.reader(f))
++
++    assert rows == [['b', 'a', 'c'], ['1', '2', ''], ['', '4', '3']]
++
++
++def test_to_csv_fields_select_and_order(db, tmp_path):
++    table = db.table('t')
++    table.insert({'a': 1, 'b': 2, 'c': 3})
++    path = tmp_path / 'out.csv'
++
++    table.to_csv(path, fields=['c', 'a', 'missing'])
++
++    with open(path, newline='', encoding='utf-8') as f:
++        rows = list(csv.reader(f))
++
++    assert rows == [['c', 'a', 'missing'], ['3', '1', '']]
++
++
++def test_to_csv_empty_table(db, tmp_path):
++    table = db.table('empty')
++    path = tmp_path / 'out.csv'
++
++    table.to_csv(path, fields=['a', 'b'])
++    assert path.read_text(encoding='utf-8').splitlines() == ['a,b']
++
++    table.to_csv(path)
++    assert path.read_text(encoding='utf-8').strip() == ''
++
++
++def test_to_csv_quoting_and_unicode(db, tmp_path):
++    table = db.table('t')
++    table.insert({'name': 'Müller, "Hans"', 'note': None})
++    path = tmp_path / 'out.csv'
++
++    table.to_csv(path)
++
++    with open(path, newline='', encoding='utf-8') as f:
++        rows = list(csv.reader(f))
++
++    assert rows == [['name', 'note'], ['Müller, "Hans"', '']]
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..e93abc8 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -3,7 +3,9 @@ This module implements tables, the central place for accessing and manipulating
+ data in TinyDB.
+ """
+ 
++import csv
+ from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping
++from os import PathLike
+ from typing import (
+     NoReturn,
+     Optional,
+@@ -706,6 +708,43 @@ class Table:
+         # Reset document ID counter
+         self._next_id = None
+ 
++    def to_csv(
++        self,
++        path: Union[str, 'PathLike[str]'],
++        fields: Optional[Iterable[str]] = None,
++    ) -> None:
++        """
++        Export the table to a CSV file.
++
++        The first row is a header with the column names, followed by one row
++        per document. Values that a document doesn't have become empty cells.
++        Nested values (dicts, lists) are written using their ``str()``
++        representation.
++
++        The file is written as UTF-8 using the default ``csv`` dialect
++        (comma separated).
++
++        :param path: the file to write to. An existing file is overwritten.
++        :param fields: the columns to export, in order. Keys not listed here
++                       are left out. Defaults to every top-level key of all
++                       documents, in the order they are first seen.
++        """
++
++        documents = self.all()
++
++        if fields is None:
++            # dict keys keep insertion order, which gives first-seen order
++            columns = list(dict.fromkeys(key for doc in documents for key in doc))
++        else:
++            columns = list(fields)
++
++        with open(path, 'w', newline='', encoding='utf-8') as f:
++            writer = csv.DictWriter(
++                f, fieldnames=columns, restval='', extrasaction='ignore'
++            )
++            writer.writeheader()
++            writer.writerows(documents)
++
+     def count(self, cond: QueryLike) -> int:
+         """
+         Count the documents matching a query.

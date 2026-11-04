@@ -1,0 +1,10 @@
+# feat/compound-format
+
+Branch: feat/compound-format · Repo: local__ms-564568771 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: compound format option: long:true takes precedence over compound (compound is short-format only); sub-second values return '0s' with no '-0s'. README not yet updated, branch not pushed.
+- 2026-11-04: compound format (not yet changed): output must be Go time.ParseDuration-compatible since deploy logs are scraped by a Go service: no spaces, parts glued, hours as largest unit (e.g. 25h30m, not '1d 1h 30m'). User deferred this to fix parse() whitespace first.
+- 2026-11-04: compound format now emits Go time.ParseDuration-compatible output (e.g. 25h30m, no spaces, hours max); README documents it; tests updated. Not committed/pushed.
+

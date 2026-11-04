@@ -1,0 +1,44 @@
+{
+  "groupId": "g_eb5a72bbb8c8",
+  "state": "in-progress",
+  "percent": 15,
+  "startedAt": "2026-11-04T00:47:28.817Z",
+  "shippedAt": null,
+  "lastActivityAt": "2026-11-04T00:47:32.462Z",
+  "summary": "Adds an opt-in way for ms's parse to reject unitless strings like \"30\" by returning NaN, leaving default behaviour unchanged, with tests.",
+  "narrative": "The owner asked for an opt-in strict mode so bare numbers in config files stop being read as milliseconds. So far memory holds one observation: the agent inspected src/index.ts and found parse() defaults unitless numbers to milliseconds, and that a parseStrict() exists but does not reject them. No code change, test, PR or release is recorded yet, so the request is still in the exploration stage.",
+  "milestones": [
+    {
+      "at": "2026-11-04T00:47:32.462Z",
+      "text": "Inspected src/index.ts: parse() treats unitless numbers as ms; existing parseStrict() does not reject them.",
+      "evidence": [
+        "obs #1"
+      ]
+    }
+  ],
+  "preferences": [
+    {
+      "kind": "directive",
+      "preference": "Defaults must not change; new behaviour should be opt-in and come with tests.",
+      "quote": "The default behaviour must not change. Tests too.",
+      "at": "2026-11-04T00:47:28.817Z"
+    }
+  ],
+  "outcome": null,
+  "evidence": [
+    "obs #1",
+    "prompt #1"
+  ],
+  "reviewedThrough": "2026-11-04T00:47:33.934Z",
+  "reviewedConversations": [
+    "[\"conversation\",\"claude\",\"ff5c626a-9927-4cc4-a559-1f636c060fea\"]"
+  ],
+  "checkedAt": "2026-11-04T00:47:45.755Z",
+  "changedAt": "2026-11-04T00:47:45.755Z",
+  "readings": [
+    {
+      "at": "2026-11-04T00:47:45.755Z",
+      "percent": 15
+    }
+  ]
+}

@@ -1,0 +1,238 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..6d227ad 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -6,7 +6,7 @@ import tempfile
+ import pytest
+ 
+ from tinydb import TinyDB, where
+-from tinydb.storages import JSONStorage, MemoryStorage, Storage, touch
++from tinydb.storages import JSONStorage, MemoryStorage, Storage, YAMLStorage, touch
+ from tinydb.table import Document
+ 
+ random.seed()
+@@ -285,3 +285,55 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_yaml(tmpdir):
++    path = str(tmpdir.join('test.yaml'))
++    storage = YAMLStorage(path)
++    assert storage.read() is None
++    storage.write(doc)
++    assert doc == storage.read()
++    storage.close()
++
++
++def test_yaml_hand_edited_bools_are_strings(tmpdir):
++    path = tmpdir.join('test.yaml')
++    path.write('_default:\n  1: {a: NO, b: yes, c: off, d: On, e: true, f: false, g: y}\n')
++    storage = YAMLStorage(str(path))
++    assert storage.read() == {
++        '_default': {1: {'a': 'NO', 'b': 'yes', 'c': 'off', 'd': 'On',
++                         'e': True, 'f': False, 'g': 'y'}}
++    }
++    storage.close()
++
++
++def test_yaml_string_bools_roundtrip(tmpdir):
++    path = str(tmpdir.join('test.yaml'))
++    data = {'_default': {'1': {'a': 'NO', 'b': 'yes', 'c': 'true', 'd': True}}}
++    storage = YAMLStorage(path)
++    storage.write(data)
++    assert storage.read() == data
++    storage.close()
++
++
++def test_yaml_does_not_modify_safeloader(tmpdir):
++    import yaml
++    YAMLStorage(str(tmpdir.join('t.yaml'))).close()
++    assert yaml.safe_load('a: yes') == {'a': True}
++
++
++def test_yaml_shrinking_write_truncates(tmpdir):
++    path = str(tmpdir.join('test.yaml'))
++    storage = YAMLStorage(path)
++    storage.write({'a': 'x' * 100})
++    storage.write({'a': 1})
++    assert storage.read() == {'a': 1}
++    storage.close()
++
++
++def test_yaml_with_tinydb(tmpdir):
++    path = str(tmpdir.join('test.yaml'))
++    with TinyDB(path, storage=YAMLStorage) as db:
++        db.insert({'x': 'NO', 'y': 1})
++    with TinyDB(path, storage=YAMLStorage) as db:
++        assert db.all() == [{'x': 'NO', 'y': 1}]
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..5a17656 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -10,7 +10,7 @@ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+ 
+-__all__ = ('Storage', 'JSONStorage', 'MemoryStorage')
++__all__ = ('Storage', 'JSONStorage', 'YAMLStorage', 'MemoryStorage')
+ 
+ 
+ def touch(path: str, create_dirs: bool):
+@@ -76,12 +76,16 @@ class Storage(ABC):
+         pass
+ 
+ 
+-class JSONStorage(Storage):
++class _FileStorage(Storage):
+     """
+-    Store the data in a JSON file.
++    Shared file handling for storages that keep their data in a single file.
++
++    Takes care of creating the file (and optionally its parent directories),
++    validating the access mode and opening the file handle. Subclasses only
++    need to implement :meth:`read` and :meth:`write`.
+     """
+ 
+-    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+', **kwargs):
++    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+'):
+         """
+         Create a new instance.
+ 
+@@ -91,11 +95,9 @@ class JSONStorage(Storage):
+         **Note:** Using an access mode other than `r` or `r+` will probably
+         lead to data loss or data corruption!
+ 
+-        **Note:** **Never** pass untrusted or user-controlled code as ``kwargs``
+-        members like ``cls`` or ``default`` will be called on every write
+-        operation.
+-
+-        :param path: Where to store the JSON data.
++        :param path: Where to store the data.
++        :param create_dirs: Whether to create missing parent directories.
++        :param encoding: The encoding used to open the file.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
+         """
+@@ -103,7 +105,6 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
+-        self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+             warnings.warn(
+@@ -122,6 +123,31 @@ class JSONStorage(Storage):
+     def close(self) -> None:
+         self._handle.close()
+ 
++
++class JSONStorage(_FileStorage):
++    """
++    Store the data in a JSON file.
++    """
++
++    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+', **kwargs):
++        """
++        Create a new instance.
++
++        See :class:`_FileStorage` for the file handling arguments.
++
++        **Note:** **Never** pass untrusted or user-controlled code as ``kwargs``
++        members like ``cls`` or ``default`` will be called on every write
++        operation.
++
++        :param path: Where to store the JSON data.
++        :param access_mode: mode in which the file is opened (r, r+)
++        :type access_mode: str
++        """
++
++        super().__init__(path, create_dirs=create_dirs, encoding=encoding, access_mode=access_mode)
++
++        self.kwargs = kwargs
++
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
+         # Get the file size by moving the cursor to the file end and reading
+         # its location
+@@ -161,6 +187,80 @@ class JSONStorage(Storage):
+         self._handle.truncate()
+ 
+ 
++class YAMLStorage(_FileStorage):
++    """
++    Store the data in a YAML file.
++
++    Requires PyYAML. Only ``true`` and ``false`` are read as booleans, so
++    hand-edited values like ``NO``, ``yes``, ``off`` or ``On`` stay strings.
++    """
++
++    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+', **kwargs):
++        """
++        Create a new instance.
++
++        See :class:`_FileStorage` for the file handling arguments.
++
++        :param path: Where to store the YAML data.
++        :param kwargs: Passed to ``yaml.safe_dump`` on every write.
++        """
++
++        try:
++            import yaml
++        except ImportError as e:  # pragma: no cover
++            raise ImportError('YAMLStorage requires PyYAML (pip install pyyaml)') from e
++
++        super().__init__(path, create_dirs=create_dirs, encoding=encoding, access_mode=access_mode)
++
++        self._yaml = yaml
++        self._loader = _strict_bool_loader(yaml)
++        self.kwargs = kwargs
++
++    def read(self) -> Optional[dict[str, dict[str, Any]]]:
++        self._handle.seek(0)
++        data = self._yaml.load(self._handle, Loader=self._loader)
++
++        # Empty file (or only comments/whitespace): let TinyDB initialize
++        return data if data else None
++
++    def write(self, data: dict[str, dict[str, Any]]):
++        self._handle.seek(0)
++
++        kwargs = {'default_flow_style': False, 'allow_unicode': True, **self.kwargs}
++        serialized = self._yaml.safe_dump(data, **kwargs)
++
++        try:
++            self._handle.write(serialized)
++        except io.UnsupportedOperation:
++            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
++
++        self._handle.flush()
++        os.fsync(self._handle.fileno())
++        self._handle.truncate()
++
++
++def _strict_bool_loader(yaml):
++    """
++    Build a ``SafeLoader`` subclass where only ``true``/``false`` are booleans.
++    """
++
++    import re
++
++    class StrictBoolLoader(yaml.SafeLoader):
++        pass
++
++    # Copy the resolver table so we don't modify ``SafeLoader`` itself
++    StrictBoolLoader.yaml_implicit_resolvers = {
++        ch: [(tag, rx) for tag, rx in resolvers if tag != 'tag:yaml.org,2002:bool']
++        for ch, resolvers in yaml.SafeLoader.yaml_implicit_resolvers.items()
++    }
++    StrictBoolLoader.add_implicit_resolver(
++        'tag:yaml.org,2002:bool', re.compile(r'^(?:true|false)$'), list('tf')
++    )
++
++    return StrictBoolLoader
++
++
+ class MemoryStorage(Storage):
+     """
+     Store the data as JSON in memory.

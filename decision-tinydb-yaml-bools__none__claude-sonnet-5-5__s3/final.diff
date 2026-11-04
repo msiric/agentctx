@@ -1,0 +1,234 @@
+diff --git a/docs/api.rst b/docs/api.rst
+index e6c6f5f..2313e48 100644
+--- a/docs/api.rst
++++ b/docs/api.rst
+@@ -105,7 +105,7 @@ details.
+ ------------------
+ 
+ .. automodule:: tinydb.storages
+-    :members: JSONStorage, MemoryStorage
++    :members: FileStorage, JSONStorage, YAMLStorage, MemoryStorage
+     :special-members:
+     :exclude-members: __weakref__
+ 
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..ae59a2f 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -6,7 +6,7 @@ import tempfile
+ import pytest
+ 
+ from tinydb import TinyDB, where
+-from tinydb.storages import JSONStorage, MemoryStorage, Storage, touch
++from tinydb.storages import JSONStorage, MemoryStorage, Storage, YAMLStorage, touch
+ from tinydb.table import Document
+ 
+ random.seed()
+@@ -285,3 +285,52 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_yaml_storage(tmpdir):
++    yaml = pytest.importorskip('yaml')
++
++    path = str(tmpdir.join('test.yaml'))
++    storage = YAMLStorage(path)
++    assert storage.read() is None
++
++    storage.write(doc)
++    assert storage.read() == doc
++
++    # Shorter content must not leave leftovers behind
++    storage.write({'a': 1})
++    assert storage.read() == {'a': 1}
++    storage.close()
++
++    with open(path) as f:
++        assert yaml.safe_load(f) == {'a': 1}
++
++
++def test_yaml_storage_with_db(tmpdir):
++    pytest.importorskip('yaml')
++
++    path = str(tmpdir.join('test.yaml'))
++    with TinyDB(path, storage=YAMLStorage) as db:
++        db.insert(doc)
++        db.update({'name': 'foo'})
++        assert db.all() == [{**doc, 'name': 'foo'}]
++        assert db.contains(where('name') == 'foo')
++        assert db.get(doc_id=1) == {**doc, 'name': 'foo'}
++
++    assert '!' not in tmpdir.join('test.yaml').read()
++
++    # Persisted across reopen
++    with TinyDB(path, storage=YAMLStorage) as db:
++        assert len(db) == 1
++        assert db.search(where('int') == 42)
++
++
++def test_yaml_storage_read_only_write(tmpdir):
++    pytest.importorskip('yaml')
++
++    path = str(tmpdir.join('test.yaml'))
++    YAMLStorage(path).close()
++    storage = YAMLStorage(path, access_mode='r')
++    with pytest.raises(IOError):
++        storage.write(doc)
++    storage.close()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..4f16c8f 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -10,7 +10,7 @@ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+ 
+-__all__ = ('Storage', 'JSONStorage', 'MemoryStorage')
++__all__ = ('Storage', 'FileStorage', 'JSONStorage', 'YAMLStorage', 'MemoryStorage')
+ 
+ 
+ def touch(path: str, create_dirs: bool):
+@@ -76,12 +76,16 @@ class Storage(ABC):
+         pass
+ 
+ 
+-class JSONStorage(Storage):
++class FileStorage(Storage):
+     """
+-    Store the data in a JSON file.
++    Base class for storages that keep their data in a single file.
++
++    Handles creating the file (and optionally its parent directories),
++    validating the access mode and opening the file handle. Subclasses
++    implement :meth:`read` and :meth:`write` on top of ``self._handle``.
+     """
+ 
+-    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+', **kwargs):
++    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+'):
+         """
+         Create a new instance.
+ 
+@@ -91,11 +95,9 @@ class JSONStorage(Storage):
+         **Note:** Using an access mode other than `r` or `r+` will probably
+         lead to data loss or data corruption!
+ 
+-        **Note:** **Never** pass untrusted or user-controlled code as ``kwargs``
+-        members like ``cls`` or ``default`` will be called on every write
+-        operation.
+-
+-        :param path: Where to store the JSON data.
++        :param path: Where to store the data.
++        :param create_dirs: Whether to create missing parent directories.
++        :param encoding: The encoding used to open the file.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
+         """
+@@ -103,7 +105,6 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
+-        self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+             warnings.warn(
+@@ -122,6 +123,29 @@ class JSONStorage(Storage):
+     def close(self) -> None:
+         self._handle.close()
+ 
++
++class JSONStorage(FileStorage):
++    """
++    Store the data in a JSON file.
++    """
++
++    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+', **kwargs):
++        """
++        Create a new instance.
++
++        See :class:`FileStorage` for the file handling arguments.
++
++        **Note:** **Never** pass untrusted or user-controlled code as ``kwargs``
++        members like ``cls`` or ``default`` will be called on every write
++        operation.
++
++        :param path: Where to store the JSON data.
++        """
++
++        super().__init__(path, create_dirs=create_dirs, encoding=encoding, access_mode=access_mode)
++
++        self.kwargs = kwargs
++
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
+         # Get the file size by moving the cursor to the file end and reading
+         # its location
+@@ -161,6 +185,68 @@ class JSONStorage(Storage):
+         self._handle.truncate()
+ 
+ 
++class YAMLStorage(FileStorage):
++    """
++    Store the data in a YAML file.
++
++    Requires `PyYAML <https://pyyaml.org/>`_ to be installed. Data is read
++    with ``yaml.safe_load`` and written with a safe dumper, so no arbitrary
++    Python objects are (de)serialized.
++    """
++
++    def __init__(self, path: str, create_dirs=False, encoding=None, access_mode='r+', **kwargs):
++        """
++        Create a new instance.
++
++        See :class:`FileStorage` for the file handling arguments.
++
++        :param path: Where to store the YAML data.
++        :param kwargs: Extra arguments passed to ``yaml.dump`` on every write.
++        """
++
++        try:
++            import yaml
++        except ImportError as e:  # pragma: no cover
++            raise ImportError('YAMLStorage requires PyYAML (pip install pyyaml)') from e
++
++        super().__init__(path, create_dirs=create_dirs, encoding=encoding, access_mode=access_mode)
++
++        self.kwargs = kwargs
++
++        class _Dumper(yaml.SafeDumper):
++            pass
++
++        # Dump dict subclasses (e.g. ``Document``) as plain mappings
++        _Dumper.add_multi_representer(
++            dict, lambda dumper, data: dumper.represent_dict(dict(data))
++        )
++        self._yaml = yaml
++        self._dumper = _Dumper
++
++    def read(self) -> Optional[dict[str, dict[str, Any]]]:
++        self._handle.seek(0)
++        # Empty file (or empty document) yields ``None`` so TinyDB can
++        # initialize the database
++        return self._yaml.safe_load(self._handle)
++
++    def write(self, data: dict[str, dict[str, Any]]):
++        self._handle.seek(0)
++
++        kwargs = {'Dumper': self._dumper, **self.kwargs}
++        serialized = self._yaml.dump(data, **kwargs)
++
++        try:
++            self._handle.write(serialized)
++        except io.UnsupportedOperation:
++            raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
++
++        self._handle.flush()
++        os.fsync(self._handle.fileno())
++
++        # Drop leftovers in case the file has gotten shorter
++        self._handle.truncate()
++
++
+ class MemoryStorage(Storage):
+     """
+     Store the data as JSON in memory.

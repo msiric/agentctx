@@ -1,0 +1,190 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..b20a0d8
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,91 @@
++"""
++Benchmark TinyDB read performance on a large JSON db file.
++
++Usage: python scripts/bench_read.py [target_mb] [repeats]
++"""
++import cProfile
++import json
++import os
++import pstats
++import sys
++import tempfile
++import time
++
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
++
++from tinydb import TinyDB, where  # noqa: E402
++
++
++def make_db(path, target_mb):
++    doc = lambda i: {
++        'name': f'user{i}', 'age': i % 90, 'email': f'user{i}@example.com',
++        'tags': ['a', 'b', 'c', str(i % 10)], 'address': {'city': f'c{i % 500}', 'zip': i},
++        'bio': 'lorem ipsum dolor sit amet ' * 4,
++    }
++    per_doc = len(json.dumps(doc(0))) + 12
++    n = int(target_mb * 1024 * 1024 / per_doc)
++    with open(path, 'w') as f:
++        json.dump({'_default': {str(i + 1): doc(i) for i in range(n)}}, f)
++    return n
++
++
++def timeit(label, fn, repeats):
++    times = []
++    for _ in range(repeats):
++        t = time.perf_counter()
++        fn()
++        times.append(time.perf_counter() - t)
++    print(f'{label:<38} first={times[0]*1000:8.1f} ms  '
++          f'best={min(times)*1000:8.1f} ms  mean={sum(times)/len(times)*1000:8.1f} ms')
++
++
++def main():
++    mb = float(sys.argv[1]) if len(sys.argv) > 1 else 40
++    repeats = int(sys.argv[2]) if len(sys.argv) > 2 else 5
++    with tempfile.TemporaryDirectory() as d:
++        path = os.path.join(d, 'db.json')
++        t = time.perf_counter()
++        n = make_db(path, mb)
++        print(f'generated {n} docs, {os.path.getsize(path)/1e6:.1f} MB '
++              f'in {time.perf_counter()-t:.1f}s\n')
++
++        db = TinyDB(path)
++        storage = db.storage
++
++        print('-- end to end --')
++        timeit('db.all()', db.all, repeats)
++        # Fresh condition each time defeats the query cache; same one hits it.
++        timeit('db.search (new query each time)',
++               lambda c=iter(range(10**6)): db.search(where('age') == next(c) % 90), repeats)
++        q = where('city_missing') == 1
++        timeit('db.search (same query, cached)', lambda: db.search(q), repeats)
++
++        print('\n-- breakdown --')
++        def raw_read():
++            storage._handle.seek(0)
++            return storage._handle.read()
++        timeit('file read() to str', raw_read, repeats)
++        text = raw_read()
++        timeit('json.loads(str)', lambda: json.loads(text), repeats)
++        timeit('storage.read() (seek+json.load)', storage.read, repeats)
++        table = db.table('_default')
++        timeit('table._read_table()', table._read_table, repeats)
++        data = table._read_table()
++        cond = where('age') == 42
++        timeit('query eval only (no parse)',
++               lambda: [d for d in data.values() if cond(d)], repeats)
++        timeit('Document wrapping only (all docs)',
++               lambda: [table.document_class(v, table.document_id_class(k))
++                        for k, v in data.items()], repeats)
++
++        print('\n-- cProfile of one uncached search --')
++        pr = cProfile.Profile()
++        pr.enable()
++        db.search(where('age') == 7)
++        pr.disable()
++        pstats.Stats(pr).sort_stats('cumulative').print_stats(8)
++        db.close()
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..03fa830 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -75,6 +75,14 @@ class Storage(ABC):
+ 
+         pass
+ 
++    def discard_cache(self) -> None:
++        """
++        Optional: Drop any cached state, e.g. after a failed update that may
++        have mutated data returned by :meth:`read`.
++        """
++
++        pass
++
+ 
+ class JSONStorage(Storage):
+     """
+@@ -119,27 +127,43 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Raw file contents and the result of parsing them. The file is always
++        # re-read (other processes may write to it, and stat data such as
++        # mtime is not reliable enough on network file systems), but parsing
++        # is skipped when the contents are byte-for-byte identical.
++        self._cached_raw = None
++        self._cached_data = None
++
+     def close(self) -> None:
+         self._handle.close()
+ 
++    def discard_cache(self) -> None:
++        self._cached_raw = None
++        self._cached_data = None
++
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
+-        # Get the file size by moving the cursor to the file end and reading
+-        # its location
+-        self._handle.seek(0, os.SEEK_END)
+-        size = self._handle.tell()
++        self._handle.seek(0)
++        raw = self._handle.read()
+ 
+-        if not size:
++        if not raw:
+             # File is empty, so we return ``None`` so TinyDB can properly
+             # initialize the database
++            self.discard_cache()
+             return None
+-        else:
+-            # Return the cursor to the beginning of the file
+-            self._handle.seek(0)
+ 
+-            # Load the JSON contents of the file
+-            return json.load(self._handle)
++        # Compare the full contents (not mtime/size) to detect changes
++        if self._cached_raw is not None and raw == self._cached_raw:
++            return self._cached_data
++
++        data = json.loads(raw)
++        self._cached_raw = raw
++        self._cached_data = data
++        return data
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        # The caller may keep mutating ``data``, so don't cache it
++        self.discard_cache()
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..572127d 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -836,8 +836,13 @@ class Table:
+             for doc_id, doc in raw_table.items()
+         }
+ 
+-        # Perform the table update operation
+-        updater(table)
++        # Perform the table update operation. Updaters mutate the data in
++        # place, so drop any storage-side cache if one fails midway.
++        try:
++            updater(table)
++        except BaseException:
++            self._storage.discard_cache()
++            raise
+ 
+         # Convert the document IDs back to strings.
+         # This is required as some storages (most notably the JSON file format)

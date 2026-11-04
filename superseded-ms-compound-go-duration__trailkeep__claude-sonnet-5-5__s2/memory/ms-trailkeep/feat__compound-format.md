@@ -1,0 +1,8 @@
+# feat/compound-format
+
+Branch: feat/compound-format · Repo: local__ms-122059179 · Kind: branch · Created: 2026-11-03
+
+## Decisions and dead ends
+
+- 2026-11-03: Compound format must be Go time.ParseDuration-compatible (deploy logs scraped by Go service): no spaces, hours biggest unit, e.g. 25h30m not '1d 1h 30m'. Deferred until parse() whitespace fix is done.
+

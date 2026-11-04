@@ -1,0 +1,9 @@
+# feature/yaml-storage
+
+Branch: feature/yaml-storage · Repo: local__tinydb-364529466 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: YAML storage decisions: use PyYAML only (no ruamel). Loader must be a custom SafeLoader subclass where ONLY true/false load as booleans (NO/off/yes/on etc. stay strings, e.g. 'country: NO', 'maintenance: off'), since plain safe_load applies YAML 1.1 bool rules. Step 1 = extract FileStorage base from JSONStorage; YAMLStorage built later.
+- 2026-11-04: YAMLStorage done in tinydb/storages.py (extends FileStorage, lazy PyYAML import, custom SafeLoader w/ only true/false bools, safe_dump so 'NO'/'off' strings get quoted on write); tests in tests/test_storages.py. Run pytest with -o addopts='' (cov flags not installed).
+

@@ -1,0 +1,99 @@
+diff --git a/README.md b/README.md
+index 4a26073..95494fb 100644
+--- a/README.md
++++ b/README.md
+@@ -214,7 +214,7 @@ stringifyQuery({ foo: 'bar', baz: undefined })
+ 
+ ### `$URL()`
+ 
+-### `cleanDoubleSlashes(input)`
++### `cleanDoubleSlashes(input, options?)`
+ 
+ Removes double slashes from the URL.
+ 
+@@ -227,6 +227,15 @@ cleanDoubleSlashes("http://example.com/analyze//http://localhost:3000//");
+ // Returns "http://example.com/analyze/http://localhost:3000/"
+ ```
+ 
++If `options.respectQueryAndFragment` is `true`, the query and fragment are left untouched.
++
++```js
++cleanDoubleSlashes("/foo//bar?redirect=//baz", {
++  respectQueryAndFragment: true,
++});
++// Returns "/foo/bar?redirect=//baz"
++```
++
+ ### `filterQuery(input, predicate)`
+ 
+ Removes the query section of the URL.
+diff --git a/src/utils.ts b/src/utils.ts
+index ea98aba..01fc8ea 100644
+--- a/src/utils.ts
++++ b/src/utils.ts
+@@ -263,9 +263,25 @@ export function withLeadingSlash(input = ""): string {
+  * // Returns "http://example.com/analyze/http://localhost:3000/"
+  * ```
+  *
++ * If `respectQueryAndFragment` is `true`, the query and fragment are left untouched.
++ *
++ * ```js
++ * cleanDoubleSlashes("/foo//bar?redirect=//baz", { respectQueryAndFragment: true });
++ * // Returns "/foo/bar?redirect=//baz"
++ * ```
++ *
+  * @group utils
+  */
+-export function cleanDoubleSlashes(input = ""): string {
++export function cleanDoubleSlashes(
++  input = "",
++  options: { respectQueryAndFragment?: boolean } = {},
++): string {
++  if (options.respectQueryAndFragment) {
++    const index = input.search(/[?#]/);
++    if (index !== -1) {
++      return cleanDoubleSlashes(input.slice(0, index)) + input.slice(index);
++    }
++  }
+   return input
+     .split("://")
+     .map((string_) => string_.replace(/\/{2,}/g, "/"))
+diff --git a/test/double-slash.test.ts b/test/double-slash.test.ts
+index 6824666..613660b 100644
+--- a/test/double-slash.test.ts
++++ b/test/double-slash.test.ts
+@@ -16,6 +16,34 @@ describe("cleanDoubleSlashes", () => {
+     });
+   }
+ 
++  describe("respectQueryAndFragment", () => {
++    const opts = { respectQueryAndFragment: true };
++    const tests = {
++      "/foo//bar?redirect=//baz": "/foo/bar?redirect=//baz",
++      "/foo//bar#//baz": "/foo/bar#//baz",
++      "/foo//bar?a=//b#//c": "/foo/bar?a=//b#//c",
++      "http://foo.com//bar?u=http://x//y": "http://foo.com/bar?u=http://x//y",
++      "//foo//bar//": "/foo/bar/",
++      "?a=//b": "?a=//b",
++    };
++    for (const input in tests) {
++      test(input, () => {
++        expect(cleanDoubleSlashes(input, opts)).toBe(tests[input]);
++      });
++    }
++
++    test("default behaviour is unchanged", () => {
++      expect(cleanDoubleSlashes("/foo//bar?redirect=//baz")).toBe(
++        "/foo/bar?redirect=/baz",
++      );
++      expect(
++        cleanDoubleSlashes("/foo//bar?redirect=//baz", {
++          respectQueryAndFragment: false,
++        }),
++      ).toBe("/foo/bar?redirect=/baz");
++    });
++  });
++
+   test("no input", () => {
+     expect(cleanDoubleSlashes()).toBe("");
+   });

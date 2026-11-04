@@ -1,0 +1,98 @@
+diff --git a/.claude/settings.local.json b/.claude/settings.local.json
+new file mode 100644
+index 0000000..c32d49a
+--- /dev/null
++++ b/.claude/settings.local.json
+@@ -0,0 +1 @@
++{"basicMemory":{"primaryProject":"main","secondaryProjects":[],"captureFolder":"sessions","rememberFolder":"bm-remember","recallTimeframe":"3d","preCompactCapture":"extractive","sessionProfile":"coding","repository":"dotenv","captureEvents":true,"placementConventions":"Starting point, not a scaffold: sessions/ for coding checkpoints, decisions/ for decision notes, tasks/ for active tasks, notes/ for research and reference, schemas/ for schemas. Folders appear as notes land.","teamProjects":{}},"outputStyle":"basic-memory"}
+diff --git a/src/dotenv/cli.py b/src/dotenv/cli.py
+index c06c706..59983ce 100644
+--- a/src/dotenv/cli.py
++++ b/src/dotenv/cli.py
+@@ -140,7 +140,12 @@ def set_value(ctx: click.Context, key: Any, value: Any) -> None:
+ @cli.command()
+ @click.pass_context
+ @click.argument("key", required=True)
+-def get(ctx: click.Context, key: Any) -> None:
++@click.option(
++    "--default",
++    default=None,
++    help="Value to print (with exit code 0) if the key is missing or has no value.",
++)
++def get(ctx: click.Context, key: Any, default: Optional[str]) -> None:
+     """Retrieve the value for the given key."""
+     file = ctx.obj["FILE"]
+ 
+@@ -148,9 +153,12 @@ def get(ctx: click.Context, key: Any) -> None:
+         values = dotenv_values(stream=stream)
+ 
+     # Empty strings are valid values; only missing keys / bare keys (None) fail.
+-    if key not in values or values[key] is None:
+-        sys.exit(1)
+-    click.echo(values[key])
++    value = values.get(key)
++    if value is None:
++        if default is None:
++            sys.exit(1)
++        value = default
++    click.echo(value)
+ 
+ 
+ @cli.command()
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 8123c9d..1c4050b 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -91,6 +91,52 @@ def test_get_non_existent_value(cli, dotenv_path):
+     assert (result.exit_code, result.output) == (1, "")
+ 
+ 
++def test_get_default_used_for_missing_key(cli, dotenv_path):
++    dotenv_path.write_text("a=b")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "get", "x", "--default", "d"])
++
++    assert (result.exit_code, result.output) == (0, "d\n")
++
++
++def test_get_default_used_for_key_without_value(cli, dotenv_path):
++    dotenv_path.write_text("a")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "get", "a", "--default", "d"])
++
++    assert (result.exit_code, result.output) == (0, "d\n")
++
++
++def test_get_default_ignored_for_empty_string_value(cli, dotenv_path):
++    dotenv_path.write_text("a=\n")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "get", "a", "--default", "d"])
++
++    assert (result.exit_code, result.output) == (0, "\n")
++
++
++def test_get_default_ignored_for_existing_value(cli, dotenv_path):
++    dotenv_path.write_text("a=b")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "get", "a", "--default", "d"])
++
++    assert (result.exit_code, result.output) == (0, "b\n")
++
++
++def test_get_empty_default_for_missing_key(cli, dotenv_path):
++    dotenv_path.write_text("a=b")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "get", "x", "--default", ""])
++
++    assert (result.exit_code, result.output) == (0, "\n")
++
++
++def test_get_default_does_not_mask_missing_file(cli):
++    result = cli.invoke(dotenv_cli, ["--file", "nx_file", "get", "a", "--default", "d"])
++
++    assert result.exit_code == 2
++
++
+ def test_get_non_existent_file(cli):
+     result = cli.invoke(dotenv_cli, ["--file", "nx_file", "get", "a"])
+ 

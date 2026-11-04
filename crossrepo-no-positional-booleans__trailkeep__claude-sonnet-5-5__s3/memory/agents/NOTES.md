@@ -1,0 +1,1 @@
+- 2026-11-04: User rule: never use positional boolean parameters; use an options object (e.g. parse(str, { requireUnit: true }), not parse(x, true)) because bare booleans are unreadable at the call site.

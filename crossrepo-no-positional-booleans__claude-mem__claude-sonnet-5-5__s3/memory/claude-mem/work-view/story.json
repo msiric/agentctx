@@ -1,0 +1,17 @@
+{
+  "narrative": "Shipping velocity: nothing has shipped yet. One request is in flight and sits at about 15%, with no merged PR or release recorded, so there is no ask-to-ship time to report.\n\n## Opt-in strict parse for unitless numbers in ms (started 2026-11-04)\n\nThe owner asked for an opt-in strict mode so bare numbers in config files, such as \"30\", stop being read as milliseconds. The strict mode should make parse return NaN for those strings. They were explicit that existing behaviour must stay as it is and that tests must come with the change.\n\nSo far memory holds one observation. The agent inspected src/index.ts and found two things. parse() defaults unitless numbers to milliseconds. A parseStrict() already exists but does not reject them. That puts the work in the exploration stage. No code change, test, PR or release is recorded, and there has been no stall or rework.\n\nWhat this teaches so far is limited to the owner's constraint: the new behaviour is opt-in, defaults do not change, and tests are part of the deliverable. The next milestone to watch for is an implementation with tests, then a PR.",
+  "preferences": [
+    {
+      "preference": "Keep default behaviour unchanged. New behaviour should be opt-in and come with tests.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "The default behaviour must not change. Tests too.",
+          "at": "2026-11-04T00:47:28.817Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-04T00:48:05.609Z"
+}

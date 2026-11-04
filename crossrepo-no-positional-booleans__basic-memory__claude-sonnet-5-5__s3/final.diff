@@ -1,0 +1,118 @@
+diff --git a/.claude/settings.local.json b/.claude/settings.local.json
+new file mode 100644
+index 0000000..fb71105
+--- /dev/null
++++ b/.claude/settings.local.json
+@@ -0,0 +1 @@
++{"basicMemory":{"primaryProject":"ufo","secondaryProjects":[],"captureFolder":"sessions","rememberFolder":"bm-remember","recallTimeframe":"3d","preCompactCapture":"extractive","sessionProfile":"coding","repository":"ufo","captureEvents":true,"placementConventions":"Starting point, not a scaffold; structure stays emergent.\n- schemas/ for note schemas\n- sessions/ for coding checkpoints\n- decisions/ for engineering decisions\n- tasks/ for active work\n- notes/ for general knowledge and research","teamProjects":{}},"outputStyle":"basic-memory"}
+diff --git a/README.md b/README.md
+index 4a26073..1fba8cd 100644
+--- a/README.md
++++ b/README.md
+@@ -214,10 +214,12 @@ stringifyQuery({ foo: 'bar', baz: undefined })
+ 
+ ### `$URL()`
+ 
+-### `cleanDoubleSlashes(input)`
++### `cleanDoubleSlashes(input, respectQueryAndFragment?)`
+ 
+ Removes double slashes from the URL.
+ 
++If second argument is `true`, the query string and fragment are left untouched.
++
+ **Example:**
+ 
+ ```js
+@@ -225,6 +227,9 @@ cleanDoubleSlashes("//foo//bar//"); // "/foo/bar/"
+ 
+ cleanDoubleSlashes("http://example.com/analyze//http://localhost:3000//");
+ // Returns "http://example.com/analyze/http://localhost:3000/"
++
++cleanDoubleSlashes("/foo//bar?redirect=//baz", true);
++// Returns "/foo/bar?redirect=//baz"
+ ```
+ 
+ ### `filterQuery(input, predicate)`
+diff --git a/src/utils.ts b/src/utils.ts
+index ea98aba..66a8297 100644
+--- a/src/utils.ts
++++ b/src/utils.ts
+@@ -254,18 +254,37 @@ export function withLeadingSlash(input = ""): string {
+ /**
+  * Removes double slashes from the URL.
+  *
++ * If second argument is `true`, the query string and fragment are left untouched.
++ *
+  * @example
+  *
+  * ```js
+  * cleanDoubleSlashes("//foo//bar//"); // "/foo/bar/"
+  *
++ * cleanDoubleSlashes("/foo//bar?redirect=//baz", true);
++ * // Returns "/foo/bar?redirect=//baz"
++ *
+  * cleanDoubleSlashes("http://example.com/analyze//http://localhost:3000//");
+  * // Returns "http://example.com/analyze/http://localhost:3000/"
+  * ```
+  *
+  * @group utils
+  */
+-export function cleanDoubleSlashes(input = ""): string {
++export function cleanDoubleSlashes(
++  input = "",
++  respectQueryAndFragment?: boolean,
++): string {
++  if (!respectQueryAndFragment) {
++    return _cleanDoubleSlashes(input);
++  }
++  const index = input.search(/[?#]/);
++  if (index === -1) {
++    return _cleanDoubleSlashes(input);
++  }
++  return _cleanDoubleSlashes(input.slice(0, index)) + input.slice(index);
++}
++
++function _cleanDoubleSlashes(input: string): string {
+   return input
+     .split("://")
+     .map((string_) => string_.replace(/\/{2,}/g, "/"))
+diff --git a/test/double-slash.test.ts b/test/double-slash.test.ts
+index 6824666..cdfb35c 100644
+--- a/test/double-slash.test.ts
++++ b/test/double-slash.test.ts
+@@ -16,6 +16,35 @@ describe("cleanDoubleSlashes", () => {
+     });
+   }
+ 
++  describe("respectQueryAndFragment", () => {
++    const respected = {
++      "/foo//bar?redirect=//baz": "/foo/bar?redirect=//baz",
++      "/foo//bar#//baz": "/foo/bar#//baz",
++      "/foo//bar?a=//b#//c": "/foo/bar?a=//b#//c",
++      "//foo//bar//?x=//": "/foo/bar/?x=//",
++      "http://foo.com//bar?u=http://x//y": "http://foo.com/bar?u=http://x//y",
++      "/foo//bar": "/foo/bar",
++      "?a=//b": "?a=//b",
++      "#//a": "#//a",
++    };
++    for (const input in respected) {
++      test(input, () => {
++        expect(cleanDoubleSlashes(input, true)).toBe(respected[input]);
++      });
++    }
++
++    test("default still cleans query and fragment", () => {
++      expect(cleanDoubleSlashes("/foo//bar?redirect=//baz#//x")).toBe(
++        "/foo/bar?redirect=/baz#/x",
++      );
++      expect(cleanDoubleSlashes("/a//b?c=//d", false)).toBe("/a/b?c=/d");
++    });
++
++    test("no input", () => {
++      expect(cleanDoubleSlashes(undefined, true)).toBe("");
++    });
++  });
++
+   test("no input", () => {
+     expect(cleanDoubleSlashes()).toBe("");
+   });

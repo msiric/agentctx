@@ -1,0 +1,189 @@
+diff --git a/README.md b/README.md
+index d752132..58f2156 100644
+--- a/README.md
++++ b/README.md
+@@ -43,6 +43,17 @@ ms(-3 * 60000, { long: true })        // "-3 minutes"
+ ms(ms('10 hours'), { long: true })    // "10 hours"
+ ```
+ 
++### Time Format Compound
++
++```ts
++ms(5400000, { compound: true })        // "1h 30m"
++ms(90061000, { compound: true })       // "1d 1h 1m 1s"
++ms(-5400000, { compound: true })       // "-1h 30m"
++```
++
++Largest unit first, zero parts are skipped, and units go from days down to
++seconds (leftover milliseconds are dropped). Ignored when `long` is `true`.
++
+ ### Input Formats (Units)
+ 
+ ```ts
+diff --git a/src/format.test.ts b/src/format.test.ts
+index cdabb0f..06836f2 100644
+--- a/src/format.test.ts
++++ b/src/format.test.ts
+@@ -1,5 +1,5 @@
+ import { describe, expect, it } from '@jest/globals';
+-import { format } from './index';
++import { format, ms } from './index';
+ 
+ // numbers
+ 
+@@ -259,3 +259,69 @@ describe('format(invalid inputs)', () => {
+     }).toThrow();
+   });
+ });
++
++describe('format(number, { compound: true })', () => {
++  it('should combine units, largest first', () => {
++    expect(format(5400000, { compound: true })).toBe('1h 30m');
++    expect(format(90061000, { compound: true })).toBe('1d 1h 1m 1s');
++    expect(format(8 * 86400000, { compound: true })).toBe('8d');
++  });
++
++  it('should skip zero parts and drop milliseconds', () => {
++    expect(format(3600000 + 5000, { compound: true })).toBe('1h 5s');
++    expect(format(1999, { compound: true })).toBe('1s');
++    expect(format(500, { compound: true })).toBe('0s');
++  });
++
++  it('should handle negatives', () => {
++    expect(format(-5400000, { compound: true })).toBe('-1h 30m');
++    expect(format(-500, { compound: true })).toBe('0s');
++  });
++});
++
++describe('compound option edge cases', () => {
++  it('should be ignored when long is true', () => {
++    expect(format(5400000, { long: true, compound: true })).toBe('2 hours');
++  });
++
++  it('should not change output when false', () => {
++    expect(format(5400000, { compound: false })).toBe('2h');
++  });
++
++  it('should roll over exact boundaries', () => {
++    expect(format(60000, { compound: true })).toBe('1m');
++    expect(format(86400000, { compound: true })).toBe('1d');
++    expect(format(0, { compound: true })).toBe('0s');
++  });
++
++  it('should work through ms()', () => {
++    expect(ms(5400000, { compound: true })).toBe('1h 30m');
++  });
++});
++
++describe('compound option additional cases', () => {
++  it('should throw on non-finite values', () => {
++    expect(() => format(NaN, { compound: true })).toThrow();
++    expect(() => format(Infinity, { compound: true })).toThrow();
++  });
++
++  it('should handle fractional milliseconds', () => {
++    expect(format(1500.9, { compound: true })).toBe('1s');
++    expect(format(59999.9, { compound: true })).toBe('59s');
++  });
++
++  it('should not roll days into larger units', () => {
++    expect(format(400 * 86400000 + 3600000, { compound: true })).toBe(
++      '400d 1h',
++    );
++  });
++
++  it('should round-trip through parse for whole seconds', () => {
++    const value = 90061000;
++    const text = format(value, { compound: true });
++    const total = text
++      .split(' ')
++      .reduce((sum, part) => sum + (ms(part as never) as number), 0);
++    expect(total).toBe(value);
++  });
++});
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..c4194d3 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -36,6 +36,12 @@ interface Options {
+    * Set to `true` to use verbose formatting. Defaults to `false`.
+    */
+   long?: boolean;
++  /**
++   * Set to `true` to format as multiple parts, largest unit first (e.g.
++   * `1h 30m`). Units range from days down to seconds; leftover milliseconds
++   * are dropped. Ignored when `long` is `true`. Defaults to `false`.
++   */
++  compound?: boolean;
+ }
+ 
+ /**
+@@ -76,7 +82,7 @@ export function parse(str: string): number {
+   }
+   const match =
+     /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
+-      str,
++      str.trim(),
+     );
+ 
+   if (!match?.groups) {
+@@ -186,6 +192,30 @@ function fmtShort(ms: number): StringValue {
+   return `${ms}ms`;
+ }
+ 
++/**
++ * Compound format for `ms`, e.g. `1h 30m`.
++ */
++function fmtCompound(ms: number): StringValue {
++  let rest = Math.floor(Math.abs(ms) / s) * s;
++  const parts: string[] = [];
++  for (const [size, name] of [
++    [d, 'd'],
++    [h, 'h'],
++    [m, 'm'],
++    [s, 's'],
++  ] as const) {
++    const count = Math.floor(rest / size);
++    rest -= count * size;
++    if (count > 0) {
++      parts.push(`${count}${name}`);
++    }
++  }
++  if (parts.length === 0) {
++    return '0s';
++  }
++  return `${ms < 0 ? '-' : ''}${parts.join(' ')}` as StringValue;
++}
++
+ /**
+  * Long format for `ms`.
+  */
+@@ -227,7 +257,10 @@ export function format(ms: number, options?: Options): string {
+     throw new Error('Value provided to ms.format() must be of type number.');
+   }
+ 
+-  return options?.long ? fmtLong(ms) : fmtShort(ms);
++  if (options?.long) {
++    return fmtLong(ms);
++  }
++  return options?.compound ? fmtCompound(ms) : fmtShort(ms);
+ }
+ 
+ /**
+diff --git a/src/parse.test.ts b/src/parse.test.ts
+index 9182411..88b21f0 100644
+--- a/src/parse.test.ts
++++ b/src/parse.test.ts
+@@ -206,3 +206,12 @@ describe('parse(invalid inputs)', () => {
+     }).toThrow();
+   });
+ });
++
++describe('surrounding whitespace', () => {
++  it('tolerates leading and trailing whitespace', () => {
++    expect(parse(' 2d')).toBe(parse('2d'));
++    expect(parse('1.5h ')).toBe(parse('1.5h'));
++    expect(parse('\t 10 s\n')).toBe(10000);
++    expect(parse('   ')).toBeNaN();
++  });
++});

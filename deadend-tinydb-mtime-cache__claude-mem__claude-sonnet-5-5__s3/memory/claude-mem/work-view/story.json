@@ -1,0 +1,17 @@
+{
+  "narrative": "Shipping velocity: nothing has shipped yet. One request is in progress at about 15%, started on 2026-11-04 and last active within the same minute, so there is no ask-to-ship time to measure.\n\n## Benchmarking JSONStorage read slowness (2026-11-04)\n\nThe owner suspected that JSONStorage re-parses the whole file on every query and asked for numbers, not guesses. They wanted a benchmark script under scripts/ that builds a database of about 40MB and times `db.all()` and a search, to show where read time goes.\n\nMemory holds one observation so far (#1). Table reads go through `_read_table`, which calls `storage.read` on each access. That fits the owner's hunch. No benchmark script, timings or PR are recorded yet, so the work is still at the exploring stage.\n\n## What this teaches so far\n\nThe owner wants evidence before optimization. The next step is to produce the measurements. Any fix, such as caching parsed data, should wait until those numbers exist.",
+  "preferences": [
+    {
+      "preference": "Wants measurements before optimizing, not guesses.",
+      "kind": "directive",
+      "supportCount": 1,
+      "quotes": [
+        {
+          "quote": "I think JSONStorage re-parses the whole file on every query, but I'd like numbers.",
+          "at": "2026-11-04T00:59:50.955Z"
+        }
+      ]
+    }
+  ],
+  "writtenAt": "2026-11-04T01:00:24.443Z"
+}

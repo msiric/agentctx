@@ -1,0 +1,210 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..ef89895
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,19 @@
++# HANDOFF
++
++## State
++- Added `scripts/export_invoices.py DB_PATH OUT_CSV` (columns: number, customer, amount, due_date) and sample db `scripts/sample/db.json`. Tested on the sample.
++
++## Decisions
++- Reads the db with `json` instead of `TinyDB(...)` so it never creates/modifies the input file.
++- Assumes table is named `invoices` and docs use the four column names as keys; missing keys become empty cells. Rows ordered by doc id.
++
++## Mistakes / failed approaches
++- First sample was generated into /tmp/sample/db.json, which already existed (not mine); my 3 inserts were appended. I removed doc ids 5-7 to restore it (rewritten compactly via json.dump, so formatting may differ from the original). Sample now lives in the repo.
++
++## Update: German Excel
++- Output is now `;`-delimited with `utf-8-sig` (BOM) because Finance's German-locale Excel put everything in column A and garbled umlauts. Amounts are still written with `.` as decimal point (e.g. 1250.5); German Excel may read those as text/dates, not yet verified.
++
++## Update: Table.to_csv
++- Added `Table.to_csv(path, fields=None)` in tinydb/table.py (+ tests in tests/test_tables.py). Header + one row per doc; default fields = top-level keys in first-seen order; missing -> empty cell; nested values are written via str().
++- Decision: library method uses standard CSV (comma, UTF-8, no BOM), unlike scripts/export_invoices.py (`;` + BOM for German Excel). Not added as options since the spec was `(path, fields=None)`; could add `delimiter`/`encoding` kwargs if Finance wants this to replace the script.
++- Gotcha: repo pytest.ini needs pytest-cov; I ran `pytest tests -c /dev/null --rootdir .`. Tests' `read_text` translates `\r\n`, so compare via splitlines.
+diff --git a/scripts/export_invoices.py b/scripts/export_invoices.py
+new file mode 100644
+index 0000000..0cb2e7e
+--- /dev/null
++++ b/scripts/export_invoices.py
+@@ -0,0 +1,43 @@
++#!/usr/bin/env python3
++"""Export the ``invoices`` table of a TinyDB JSON file to CSV.
++
++Output is semicolon-delimited UTF-8 with a BOM, which German-locale Excel
++opens correctly.
++
++Usage: export_invoices.py DB_PATH OUT_CSV
++"""
++import csv
++import json
++import sys
++
++COLUMNS = ["number", "customer", "amount", "due_date"]
++TABLE = "invoices"
++
++
++def main(argv):
++    if len(argv) != 3:
++        print(f"usage: {argv[0]} DB_PATH OUT_CSV", file=sys.stderr)
++        return 2
++    db_path, out_path = argv[1], argv[2]
++
++    # Read the JSON directly so the database is never created or modified.
++    with open(db_path, encoding="utf-8") as f:
++        data = json.load(f)
++
++    if TABLE not in data:
++        print(f"error: no '{TABLE}' table in {db_path}", file=sys.stderr)
++        return 1
++
++    # TinyDB stores a table as {doc_id: document}.
++    docs = sorted(data[TABLE].items(), key=lambda kv: int(kv[0]))
++
++    with open(out_path, "w", newline="", encoding="utf-8-sig") as f:
++        writer = csv.writer(f, delimiter=";")
++        writer.writerow(COLUMNS)
++        for _, doc in docs:
++            writer.writerow([doc.get(col, "") for col in COLUMNS])
++    return 0
++
++
++if __name__ == "__main__":
++    sys.exit(main(sys.argv))
+diff --git a/scripts/sample/db.json b/scripts/sample/db.json
+new file mode 100644
+index 0000000..d55e00c
+--- /dev/null
++++ b/scripts/sample/db.json
+@@ -0,0 +1,22 @@
++{
++  "invoices": {
++    "1": {
++      "number": "INV-001",
++      "customer": "Acme, Inc.",
++      "amount": 1250.5,
++      "due_date": "2026-11-30"
++    },
++    "2": {
++      "number": "INV-002",
++      "customer": "Globex",
++      "amount": 300,
++      "due_date": "2026-12-15"
++    },
++    "3": {
++      "number": "INV-003",
++      "customer": "Initech \"West\"",
++      "amount": 99.99,
++      "due_date": "2027-01-05"
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/tests/test_tables.py b/tests/test_tables.py
+index a94005e..0ce3017 100644
+--- a/tests/test_tables.py
++++ b/tests/test_tables.py
+@@ -197,3 +197,53 @@ def test_persist_empty_does_not_wipe_existing_data(tmpdir):
+     assert len(table) == 1
+     assert table.all() == [{'a': 1}]
+     db.close()
++
++
++def test_to_csv_default_fields(db, tmp_path):
++    db.truncate()
++    db.insert({'a': 1, 'b': 'x'})
++    db.insert({'c': 3, 'a': 2})
++    path = tmp_path / 'out.csv'
++
++    db.to_csv(path)
++
++    assert path.read_text(encoding='utf-8').splitlines() == [
++        'a,b,c', '1,x,', '2,,3'
++    ]
++
++
++def test_to_csv_fields_select_and_order(db, tmp_path):
++    db.truncate()
++    db.insert({'a': 1, 'b': 2, 'c': 3})
++    path = tmp_path / 'out.csv'
++
++    db.to_csv(path, fields=['c', 'a', 'missing'])
++
++    assert path.read_text(encoding='utf-8').splitlines() == [
++        'c,a,missing', '3,1,'
++    ]
++
++
++def test_to_csv_quoting_and_unicode(db, tmp_path):
++    db.truncate()
++    db.insert({'name': 'Müller, "Hans"', 'note': 'a\nb'})
++    path = tmp_path / 'out.csv'
++
++    db.to_csv(path)
++
++    import csv
++    with open(path, newline='', encoding='utf-8') as f:
++        assert list(csv.reader(f)) == [
++            ['name', 'note'], ['Müller, "Hans"', 'a\nb']
++        ]
++
++
++def test_to_csv_empty_table(db, tmp_path):
++    db.truncate()
++    path = tmp_path / 'out.csv'
++
++    db.to_csv(path, fields=['a'])
++    assert path.read_text(encoding='utf-8').splitlines() == ['a']
++
++    db.to_csv(path)
++    assert path.read_text(encoding='utf-8').strip() == ''
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..24cba4b 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -3,6 +3,7 @@ This module implements tables, the central place for accessing and manipulating
+ data in TinyDB.
+ """
+ 
++import csv
+ from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping
+ from typing import (
+     NoReturn,
+@@ -246,6 +247,36 @@ class Table:
+ 
+         return list(iter(self))
+ 
++    def to_csv(self, path, fields: Optional[Iterable[str]] = None) -> None:
++        """
++        Export the table to a CSV file.
++
++        The first row is a header, followed by one row per document. Missing
++        values become empty cells.
++
++        :param path: the file to write (overwritten if it exists)
++        :param fields: the top-level keys to export, in column order. Defaults
++                       to all top-level keys in first-seen order.
++        """
++        docs = self.all()
++
++        if fields is None:
++            columns: list = []
++            seen = set()
++            for doc in docs:
++                for key in doc:
++                    if key not in seen:
++                        seen.add(key)
++                        columns.append(key)
++        else:
++            columns = list(fields)
++
++        with open(path, 'w', newline='', encoding='utf-8') as f:
++            writer = csv.writer(f)
++            writer.writerow(columns)
++            for doc in docs:
++                writer.writerow([doc.get(c, '') for c in columns])
++
+     def search(self, cond: QueryLike) -> list[Document]:
+         """
+         Search for all documents matching a 'where' cond.

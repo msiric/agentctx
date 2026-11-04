@@ -1,0 +1,147 @@
+diff --git a/README.md b/README.md
+index d752132..1a7a7e3 100644
+--- a/README.md
++++ b/README.md
+@@ -43,6 +43,22 @@ ms(-3 * 60000, { long: true })        // "-3 minutes"
+ ms(ms('10 hours'), { long: true })    // "10 hours"
+ ```
+ 
++### Time Format Compound
++
++Pass `compound: true` to format as several units glued together, using hours as
++the largest unit. The output has no spaces and no day unit, so it can be parsed
++by Go's `time.ParseDuration`.
++
++```ts
++ms(5400000, { compound: true })           // "1h30m"
++ms(91800000, { compound: true })          // "25h30m"
++ms(-5400000, { compound: true })          // "-1h30m"
++ms(999, { compound: true })               // "0s"
++```
++
++Leftover milliseconds are dropped, and `compound` takes precedence over `long`.
++Note that `ms()` can't parse compound strings back into a number.
++
+ ### Input Formats (Units)
+ 
+ ```ts
+diff --git a/src/format.test.ts b/src/format.test.ts
+index cdabb0f..ae00d52 100644
+--- a/src/format.test.ts
++++ b/src/format.test.ts
+@@ -259,3 +259,42 @@ describe('format(invalid inputs)', () => {
+     }).toThrow();
+   });
+ });
++
++describe('format(compound)', () => {
++  it.each([
++    [5400000, '1h30m'],
++    [7200000, '2h'],
++    [90061000, '25h1m1s'],
++    [91800000, '25h30m'],
++    [86400000 * 10 + 1000, '240h1s'],
++    [3601999, '1h1s'],
++    [60000, '1m'],
++    [1000, '1s'],
++    [999, '0s'],
++    [0, '0s'],
++    [-5400000, '-1h30m'],
++    [-999, '0s'],
++  ])('format(%d, { compound: true }) === %s', (input, expected) => {
++    expect(format(input, { compound: true })).toBe(expected);
++  });
++});
++
++describe('format(compound) options', () => {
++  it('takes precedence over long', () => {
++    expect(format(5400000, { compound: true, long: true })).toBe('1h30m');
++  });
++
++  it('drops fractional milliseconds', () => {
++    expect(format(61999.9, { compound: true })).toBe('1m1s');
++  });
++
++  it('never contains spaces or a day unit (time.ParseDuration compatible)', () => {
++    const out = format(86400000 * 3 + 5400000, { compound: true });
++    expect(out).toBe('73h30m');
++    expect(out).toMatch(/^-?(\d+h)?(\d+m)?(\d+s)?$/);
++  });
++
++  it('is unchanged when compound is false', () => {
++    expect(format(5400000, { compound: false })).toBe('2h');
++  });
++});
+diff --git a/src/index.test.ts b/src/index.test.ts
+index 5035ab9..682a302 100644
+--- a/src/index.test.ts
++++ b/src/index.test.ts
+@@ -385,3 +385,9 @@ describe('ms(invalid inputs)', () => {
+     }).toThrow();
+   });
+ });
++
++describe('ms() compound option', () => {
++  it('passes compound through when formatting numbers', () => {
++    expect(ms(5400000, { compound: true })).toBe('1h30m');
++  });
++});
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..484464f 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -36,6 +36,13 @@ interface Options {
+    * Set to `true` to use verbose formatting. Defaults to `false`.
+    */
+   long?: boolean;
++  /**
++   * Set to `true` to format as multiple units glued together, e.g. `25h30m`.
++   * Uses hours, minutes and seconds only (leftover milliseconds are dropped),
++   * so the output is compatible with Go's `time.ParseDuration`. Takes
++   * precedence over `long`. Defaults to `false`.
++   */
++  compound?: boolean;
+ }
+ 
+ /**
+@@ -186,6 +193,29 @@ function fmtShort(ms: number): StringValue {
+   return `${ms}ms`;
+ }
+ 
++/**
++ * Compound format for `ms`, e.g. `25h30m`. Compatible with Go's `time.ParseDuration`.
++ */
++function fmtCompound(ms: number): string {
++  let rest = Math.floor(Math.abs(ms) / s) * s;
++  const parts: string[] = [];
++  for (const [size, name] of [
++    [h, 'h'],
++    [m, 'm'],
++    [s, 's'],
++  ] as const) {
++    const count = Math.floor(rest / size);
++    rest -= count * size;
++    if (count > 0) {
++      parts.push(`${count}${name}`);
++    }
++  }
++  if (parts.length === 0) {
++    return '0s';
++  }
++  return `${ms < 0 ? '-' : ''}${parts.join('')}`;
++}
++
+ /**
+  * Long format for `ms`.
+  */
+@@ -227,6 +257,10 @@ export function format(ms: number, options?: Options): string {
+     throw new Error('Value provided to ms.format() must be of type number.');
+   }
+ 
++  if (options?.compound) {
++    return fmtCompound(ms);
++  }
++
+   return options?.long ? fmtLong(ms) : fmtShort(ms);
+ }
+ 

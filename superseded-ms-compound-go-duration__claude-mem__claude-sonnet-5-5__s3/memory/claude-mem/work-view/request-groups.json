@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-04T02:35:00.998Z",
+  "conversations": {
+    "[\"conversation\",\"claude\",\"32d8a78a-c242-41c7-a811-ebe763d20059\"]": "g_905002d4cd14",
+    "[\"conversation\",\"claude\",\"15ff6116-a5ea-491f-9e50-8f7413d2c794\"]": "g_e554b5c3c969",
+    "[\"conversation\",\"claude\",\"c025bf71-cf88-49a2-bb7f-3b644daab510\"]": "g_e554b5c3c969"
+  },
+  "groups": {
+    "g_905002d4cd14": {
+      "title": "Add tests and commit the recent change",
+      "anchor": "[\"conversation\",\"claude\",\"32d8a78a-c242-41c7-a811-ebe763d20059\"]",
+      "projectRoot": "ms",
+      "links": [],
+      "decidedAt": "2026-11-04T02:35:00.998Z",
+      "anchorAsk": {
+        "text": "Nice. Add tests for it and commit.",
+        "source": "user-prompt",
+        "sourceId": 2,
+        "url": "/api/work-view/evidence/prompt/2",
+        "promptNumber": 2,
+        "atEpoch": 1793759117529
+      }
+    },
+    "g_e554b5c3c969": {
+      "title": "Compound duration format for deploy logs",
+      "anchor": "[\"conversation\",\"claude\",\"15ff6116-a5ea-491f-9e50-8f7413d2c794\"]",
+      "projectRoot": "ms",
+      "links": [
+        {
+          "kind": "agent-judgment",
+          "conversations": [
+            "[\"conversation\",\"claude\",\"15ff6116-a5ea-491f-9e50-8f7413d2c794\"]",
+            "[\"conversation\",\"claude\",\"c025bf71-cf88-49a2-bb7f-3b644daab510\"]"
+          ],
+          "evidence": "02:28 ask: \"Change of plan on the compound format... compound output has to be ParseDuration-compatible... Don't change it right now\"; 02:32 ask: \"Let's wrap up the compound format option: document it in the README and round out the tests\" continues the same deferred change four minutes later."
+        }
+      ],
+      "decidedAt": "2026-11-04T02:35:00.998Z",
+      "anchorAsk": {
+        "text": "Change of plan on the compound format. The deploy logs it's meant for get scraped by a Go service that runs every duration through `time.ParseDuration`, and that rejects spaces and has no `d` unit. So compound output has to be ParseDuration-compatible: parts glued together and hours as the biggest unit, e.g. `25h30m` rather than `1d 1h 30m`. Don't change it right now though, something more urgent first: `parse()` returns NaN when the value has surrounding whitespace (`' 2d'`, `'1.5h '`), and we get exactly that from YAML configs all the time. Make it tolerate leading and trailing whitespace.",
+        "source": "user-prompt",
+        "sourceId": 4,
+        "url": "/api/work-view/evidence/prompt/4",
+        "promptNumber": 1,
+        "atEpoch": 1793759306532
+      }
+    }
+  },
+  "ignored": {}
+}
