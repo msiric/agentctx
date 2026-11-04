@@ -207,3 +207,15 @@ Bug found: agents sometimes write their own date, giving
 
 Small sample (one seed per difference); read as "no regression", not as an
 improvement. Released as 0.5.0.
+
+## 7. Change after held-out set 2: check before finishing (2026-11-04)
+
+Held-out set 2 tied trailkeep with the handoff file (79% each). 6 of
+trailkeep's 7 failures were capture misses. The handoff instruction ends with
+"Update it before you finish", so every session writes something. The capture
+rule now adds: "Before you finish a task, check that nothing from this
+session is left unrecorded."
+
+Validated as arm `trailkeep@finish` (plan `dev-finish`) on the 12 dev traps
+and set 2's 11 traps. Set 2 has now been seen, so it counts as dev from here
+on. Any claim about this change needs a fresh held-out set.
