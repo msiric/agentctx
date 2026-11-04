@@ -86,7 +86,10 @@ def main():
     ap.add_argument("--plan", action="append", required=True)
     ap.add_argument("--arm", default=ARM)
     ap.add_argument("--out")
+    ap.add_argument("--compare", action="append", metavar="NAME=ARM",
+                    help="primary comparisons (default: H1=none, H2a=native, H2b=handoff)")
     a = ap.parse_args()
+    primary = [tuple(c.split("=", 1)) for c in a.compare] if a.compare else PRIMARY
     traps, arms = [], []
     for p in a.plan:
         j = json.load(open(p))
@@ -133,12 +136,12 @@ def main():
     w("")
 
     # primary hypotheses
-    w(f"Primary hypotheses: {a.arm} minus comparator, paired by trap and seed (fact traps).")
+    w(f"Primary hypotheses: {a.arm} minus comparator, paired by trap and seed (fact traps). Holm correction across {', '.join(n for n, _ in primary)}.")
     w("")
     w("| | Comparator | Pairs | Difference (95% CI) | p (one-sided) | Holm-adjusted p | Significant at 0.05 | Trap-level p (sensitivity) |")
     w("|---|---|---|---|---|---|---|---|")
     ps, info = [], []
-    for name, comp in PRIMARY:
+    for name, comp in primary:
         g = defaultdict(list)
         for t in fact:
             for s in sorted({s for (tt, ar, s) in idx if tt == t}):
