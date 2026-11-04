@@ -1,0 +1,186 @@
+diff --git a/README.md b/README.md
+index d752132..c1ef98a 100644
+--- a/README.md
++++ b/README.md
+@@ -43,6 +43,20 @@ ms(-3 * 60000, { long: true })        // "-3 minutes"
+ ms(ms('10 hours'), { long: true })    // "10 hours"
+ ```
+ 
++### Compound Format
++
++Pass `compound: true` to combine units, largest first, with zero-valued units skipped.
++
++```ts
++ms(5400000, { compound: true })       // "1h 30m"
++ms(90061000, { compound: true })      // "1d 1h 1m 1s"
++ms(-5400000, { compound: true })      // "-1h 30m"
++ms(500, { compound: true })           // "0s"
++```
++
++> [!NOTE]
++> Compound output uses days, hours, minutes and seconds only: it never goes above days, and leftover milliseconds are dropped. The `long` option takes precedence if both are set.
++
+ ### Input Formats (Units)
+ 
+ ```ts
+diff --git a/src/format.test.ts b/src/format.test.ts
+index cdabb0f..5cea780 100644
+--- a/src/format.test.ts
++++ b/src/format.test.ts
+@@ -259,3 +259,69 @@ describe('format(invalid inputs)', () => {
+     }).toThrow();
+   });
+ });
++
++describe('format(number, { compound: true })', () => {
++  it('should combine units, largest first, skipping zeros', () => {
++    expect(format(5400000, { compound: true })).toBe('1h 30m');
++    expect(format(90061000, { compound: true })).toBe('1d 1h 1m 1s');
++    expect(format(86400000 + 5000, { compound: true })).toBe('1d 5s');
++    expect(format(1000, { compound: true })).toBe('1s');
++  });
++
++  it('should cap at days and drop milliseconds', () => {
++    expect(format(40 * 86400000 + 999, { compound: true })).toBe('40d');
++    expect(format(1999, { compound: true })).toBe('1s');
++    expect(format(500, { compound: true })).toBe('0s');
++  });
++
++  it('should support negative values', () => {
++    expect(format(-5400000, { compound: true })).toBe('-1h 30m');
++  });
++});
++
++describe('compound option edge cases', () => {
++  it('should be reachable through ms()', async () => {
++    const { ms } = await import('./index');
++    expect(ms(5400000, { compound: true })).toBe('1h 30m');
++  });
++
++  it('should be ignored when long is set', () => {
++    expect(format(5400000, { long: true, compound: true })).toBe('2 hours');
++  });
++
++  it('should not add a sign for negative sub-second values', () => {
++    expect(format(-500, { compound: true })).toBe('0s');
++  });
++
++  it('should leave the default output unchanged', () => {
++    expect(format(5400000, { compound: false })).toBe('2h');
++  });
++});
++
++describe('format(number, { compound: true }) boundaries', () => {
++  it('should format exact unit boundaries as a single unit', () => {
++    expect(format(60000, { compound: true })).toBe('1m');
++    expect(format(3600000, { compound: true })).toBe('1h');
++    expect(format(86400000, { compound: true })).toBe('1d');
++  });
++
++  it('should roll over just below a boundary', () => {
++    expect(format(59999, { compound: true })).toBe('59s');
++    expect(format(3599999, { compound: true })).toBe('59m 59s');
++  });
++
++  it('should format zero as 0s', () => {
++    expect(format(0, { compound: true })).toBe('0s');
++  });
++
++  it('should drop milliseconds from negative values', () => {
++    expect(format(-1500, { compound: true })).toBe('-1s');
++  });
++
++  it('should still throw on invalid input', () => {
++    expect(() => format(NaN, { compound: true })).toThrow();
++    expect(() => format(Infinity, { compound: true })).toThrow();
++    // @ts-expect-error testing invalid input
++    expect(() => format('1h', { compound: true })).toThrow();
++  });
++});
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..8b6b1a1 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -36,6 +36,12 @@ interface Options {
+    * Set to `true` to use verbose formatting. Defaults to `false`.
+    */
+   long?: boolean;
++  /**
++   * Set to `true` to format as a compound of units, e.g. `1h 30m`. Uses days,
++   * hours, minutes and seconds only (leftover milliseconds are dropped).
++   * Ignored when `long` is set. Defaults to `false`.
++   */
++  compound?: boolean;
+ }
+ 
+ /**
+@@ -76,7 +82,7 @@ export function parse(str: string): number {
+   }
+   const match =
+     /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
+-      str,
++      str.trim(),
+     );
+ 
+   if (!match?.groups) {
+@@ -186,6 +192,30 @@ function fmtShort(ms: number): StringValue {
+   return `${ms}ms`;
+ }
+ 
++/**
++ * Compound format for `ms`, e.g. `1h 30m`.
++ */
++function fmtCompound(ms: number): string {
++  let rest = Math.floor(Math.abs(ms) / s);
++  const parts: string[] = [];
++  for (const [size, name] of [
++    [d / s, 'd'],
++    [h / s, 'h'],
++    [m / s, 'm'],
++    [1, 's'],
++  ] as const) {
++    const count = Math.floor(rest / size);
++    rest -= count * size;
++    if (count > 0) {
++      parts.push(`${count}${name}`);
++    }
++  }
++  if (parts.length === 0) {
++    return '0s';
++  }
++  return `${ms < 0 ? '-' : ''}${parts.join(' ')}`;
++}
++
+ /**
+  * Long format for `ms`.
+  */
+@@ -227,7 +257,10 @@ export function format(ms: number, options?: Options): string {
+     throw new Error('Value provided to ms.format() must be of type number.');
+   }
+ 
+-  return options?.long ? fmtLong(ms) : fmtShort(ms);
++  if (options?.long) {
++    return fmtLong(ms);
++  }
++  return options?.compound ? fmtCompound(ms) : fmtShort(ms);
+ }
+ 
+ /**
+diff --git a/src/parse.test.ts b/src/parse.test.ts
+index 9182411..e32c0ce 100644
+--- a/src/parse.test.ts
++++ b/src/parse.test.ts
+@@ -48,6 +48,13 @@ describe('parse(string)', () => {
+     expect(parse('1   s')).toBe(1000);
+   });
+ 
++  it('should tolerate leading and trailing whitespace', () => {
++    expect(parse(' 2d')).toBe(172800000);
++    expect(parse('1.5h ')).toBe(5400000);
++    expect(parse('\t 1 m\n')).toBe(60000);
++    expect(Number.isNaN(parse('   '))).toBe(true);
++  });
++
+   it('should return NaN if invalid', () => {
+     expect(Number.isNaN(parse('☃'))).toBe(true);
+     expect(Number.isNaN(parse('10-.5'))).toBe(true);

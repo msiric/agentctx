@@ -4,6 +4,8 @@
 | basic-memory (control) | claude-sonnet-5-5 | 2 | 6 | 100% (100%-100%) | 182778 | 19224 | - |
 | claude-mem | claude-sonnet-5-5 | 17 | 51 | 35% (16%-57%) | 171434 | 21671 | 4 |
 | claude-mem (control) | claude-sonnet-5-5 | 2 | 6 | 100% (100%-100%) | 174024 | 19392 | - |
+| filler | claude-sonnet-5-5 | 6 | 18 | 6% (0%-17%) | 142631 | 17463 | 4 |
+| filler (control) | claude-sonnet-5-5 | 1 | 3 | 100% (100%-100%) | 224794 | 17504 | - |
 | handoff | claude-sonnet-5-5 | 19 | 57 | 65% (46%-82%) | 138561 | 16141 | 2 |
 | handoff (control) | claude-sonnet-5-5 | 2 | 6 | 100% (100%-100%) | 162911 | 16186 | - |
 | hindsight | claude-sonnet-5-5 | 17 | 51 | 2% (0%-6%) | 150006 | 18735 | 4 |
@@ -28,6 +30,7 @@ Paired difference in pass rate vs `none` (same trap and seed, non-control traps)
 |---|---|---|---|
 | basic-memory | claude-sonnet-5-5 | 51 | -2% (-6% to +0%) |
 | claude-mem | claude-sonnet-5-5 | 51 | +29% (+8% to +53%) |
+| filler | claude-sonnet-5-5 | 18 | -6% (-17% to +0%) |
 | handoff | claude-sonnet-5-5 | 57 | +49% (+30% to +68%) |
 | hindsight | claude-sonnet-5-5 | 51 | -4% (-12% to +0%) |
 | hindsight@modelfix | claude-sonnet-5-5 | 1 | +100% (+100% to +100%) |

@@ -1,0 +1,241 @@
+diff --git a/scripts/bench_read.py b/scripts/bench_read.py
+new file mode 100644
+index 0000000..f1f73e7
+--- /dev/null
++++ b/scripts/bench_read.py
+@@ -0,0 +1,117 @@
++"""
++Benchmark TinyDB read performance on a large JSON database.
++
++Usage: python scripts/bench_read.py [--size-mb 40] [--path /tmp/bench.json] [--keep]
++
++Generates a database of roughly ``--size-mb`` megabytes, then times
++``db.all()`` and ``db.search()`` and breaks the cost down into JSON parsing,
++Document wrapping and query evaluation.
++"""
++import argparse
++import json
++import os
++import random
++import string
++import sys
++import tempfile
++import time
++
++sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
++
++from tinydb import TinyDB, Query  # noqa: E402
++from tinydb.table import Document  # noqa: E402
++
++
++def timed(fn, repeat=3):
++    best = float('inf')
++    result = None
++    for _ in range(repeat):
++        start = time.perf_counter()
++        result = fn()
++        best = min(best, time.perf_counter() - start)
++    return best, result
++
++
++def generate(path, size_mb, seed=0):
++    rng = random.Random(seed)
++    words = [''.join(rng.choices(string.ascii_lowercase, k=8)) for _ in range(500)]
++
++    def make_doc():
++        return {
++            'name': rng.choice(words),
++            'age': rng.randint(0, 100),
++            'tags': rng.sample(words, 5),
++            'bio': ' '.join(rng.choices(words, k=20)),
++            'nested': {'x': rng.random(), 'y': rng.random()},
++        }
++
++    # Estimate the serialized size of one document, then generate enough
++    sample = sum(len(json.dumps(make_doc())) + 10 for _ in range(1000)) / 1000
++    count = int(size_mb * 1024 * 1024 / sample)
++    docs = {str(i): make_doc() for i in range(1, count + 1)}
++    with open(path, 'w') as f:
++        json.dump({'_default': docs}, f)
++    return count
++
++
++def main():
++    ap = argparse.ArgumentParser()
++    ap.add_argument('--size-mb', type=float, default=40)
++    ap.add_argument('--path', default=os.path.join(tempfile.gettempdir(), 'tinydb_bench.json'))
++    ap.add_argument('--keep', action='store_true')
++    args = ap.parse_args()
++
++    t0 = time.perf_counter()
++    n = generate(args.path, args.size_mb)
++    real = os.path.getsize(args.path) / 1024 / 1024
++    print(f'generated {n} docs, {real:.1f} MB in {time.perf_counter() - t0:.1f}s\n')
++
++    db = TinyDB(args.path)
++    q = Query()
++    rows = []
++
++    # Breakdown of the pieces
++    def raw_read():
++        with open(args.path) as f:
++            return f.read()
++    t_io, text = timed(raw_read)
++    t_parse, data = timed(lambda: json.loads(text))
++    table = data['_default']
++    t_wrap = timed(lambda: [Document(d, int(k)) for k, d in table.items()])[0]
++    cond = q.age > 90
++    t_query = timed(lambda: [d for d in table.values() if cond(d)])[0]
++
++    # End-to-end
++    t_storage = timed(db.storage.read)[0]
++    t_all = timed(db.all)[0]
++
++    def search_fresh():
++        db.clear_cache()
++        return db.search(q.age > 90)
++    t_search = timed(search_fresh)[0]
++    db.search(q.age > 90)
++    t_cached = timed(lambda: db.search(q.age > 90))[0]
++    t_other = timed(lambda: db.search(q.name == 'zzz'), repeat=1)[0]
++
++    rows = [
++        ('file read() only', t_io),
++        ('json.loads only', t_parse),
++        ('wrap docs in Document', t_wrap),
++        ('evaluate query on parsed data', t_query),
++        ('--- end to end ---', None),
++        ('storage.read()', t_storage),
++        ('db.all()', t_all),
++        ('db.search() uncached', t_search),
++        ('db.search() same query, cached', t_cached),
++        ('db.search() new query', t_other),
++    ]
++    for label, t in rows:
++        print(f'{label:34s}' + ('' if t is None else f'{t * 1000:10.1f} ms'))
++
++    db.close()
++    if not args.keep:
++        os.remove(args.path)
++
++
++if __name__ == '__main__':
++    main()
+diff --git a/tinydb/middlewares.py b/tinydb/middlewares.py
+index ba6a6c2..be99fb6 100644
+--- a/tinydb/middlewares.py
++++ b/tinydb/middlewares.py
+@@ -64,6 +64,11 @@ class Middleware:
+ 
+         return self
+ 
++    def read_cached(self):
++        # Must not be forwarded to the wrapped storage (see ``__getattr__``),
++        # as that would bypass this middleware's own ``read``.
++        return self.read()
++
+     def __getattr__(self, name):
+         """
+         Forward all unknown attribute calls to the underlying storage, so we
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..2a27d82 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -6,6 +6,7 @@ implementations.
+ import io
+ import json
+ import os
++import time
+ import warnings
+ from abc import ABC, abstractmethod
+ from typing import Any, Optional
+@@ -68,6 +69,17 @@ class Storage(ABC):
+ 
+         raise NotImplementedError('To be overridden!')
+ 
++    def read_cached(self) -> Optional[dict[str, dict[str, Any]]]:
++        """
++        Read the current state for **read-only** use.
++
++        Storages may return a shared, cached object here, so callers must
++        never mutate the result. The default implementation just calls
++        :meth:`read`.
++        """
++
++        return self.read()
++
+     def close(self) -> None:
+         """
+         Optional: Close open file handles, etc.
+@@ -119,9 +131,45 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        self._cache_key = None
++        self._cache_data = None
++
+     def close(self) -> None:
++        self._cache_key = self._cache_data = None
+         self._handle.close()
+ 
++    # Files modified more recently than this may change again without their
++    # mtime changing (coarse timestamp granularity), so they are not cached.
++    _CACHE_SETTLE_NS = 2_000_000_000
++
++    def _stat_key(self):
++        st = os.fstat(self._handle.fileno())
++        return st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns
++
++    def read_cached(self) -> Optional[dict[str, dict[str, Any]]]:
++        """
++        Like :meth:`read`, but reuses the parsed JSON while the file is
++        unchanged (inode, size, mtime and ctime), so changes made by other
++        processes are still picked up. The result must not be mutated.
++        """
++
++        key = self._stat_key()
++        if self._cache_key == key:
++            return self._cache_data
++
++        data = self.read()
++        # Only cache if the file didn't change while parsing and its mtime is
++        # old enough that a further write would be visible in the stat key.
++        if (
++            data is not None
++            and self._stat_key() == key
++            and time.time_ns() - key[2] > self._CACHE_SETTLE_NS
++        ):
++            self._cache_key, self._cache_data = key, data
++        else:
++            self._cache_key = self._cache_data = None
++        return data
++
+     def read(self) -> Optional[dict[str, dict[str, Any]]]:
+         # Get the file size by moving the cursor to the file end and reading
+         # its location
+@@ -140,6 +188,8 @@ class JSONStorage(Storage):
+             return json.load(self._handle)
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
++        self._cache_key = self._cache_data = None
++
+         # Move the cursor to the beginning of the file just in case
+         self._handle.seek(0)
+ 
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..b4dadc2 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -785,8 +785,10 @@ class Table:
+         only one document for example.
+         """
+ 
+-        # Retrieve the tables from the storage
+-        tables = self._storage.read()
++        # Retrieve the tables from the storage. This is read-only, so a
++        # storage may serve it from a cache (``_update_table`` must keep
++        # using ``read()`` as it mutates the data).
++        tables = self._storage.read_cached()
+ 
+         if tables is None:
+             # The database is empty

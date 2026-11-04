@@ -1,0 +1,76 @@
+diff --git a/src/dotenv/cli.py b/src/dotenv/cli.py
+index c06c706..f8e0c5c 100644
+--- a/src/dotenv/cli.py
++++ b/src/dotenv/cli.py
+@@ -140,7 +140,13 @@ def set_value(ctx: click.Context, key: Any, value: Any) -> None:
+ @cli.command()
+ @click.pass_context
+ @click.argument("key", required=True)
+-def get(ctx: click.Context, key: Any) -> None:
++@click.option(
++    "--default",
++    "default",
++    default=None,
++    help="Value to print (with exit code 0) if the key is missing or has no value.",
++)
++def get(ctx: click.Context, key: Any, default: Optional[str]) -> None:
+     """Retrieve the value for the given key."""
+     file = ctx.obj["FILE"]
+ 
+@@ -149,6 +155,9 @@ def get(ctx: click.Context, key: Any) -> None:
+ 
+     # Empty strings are valid values; only missing keys / bare keys (None) fail.
+     if key not in values or values[key] is None:
++        if default is not None:
++            click.echo(default)
++            return
+         sys.exit(1)
+     click.echo(values[key])
+ 
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index 8123c9d..824ea3b 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -91,6 +91,42 @@ def test_get_non_existent_value(cli, dotenv_path):
+     assert (result.exit_code, result.output) == (1, "")
+ 
+ 
++def test_get_default_used_when_key_missing(cli, dotenv_path):
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "get", "a", "--default", "d"])
++
++    assert (result.exit_code, result.output) == (0, "d\n")
++
++
++def test_get_default_used_when_value_without_equals(cli, dotenv_path):
++    dotenv_path.write_text("a")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "get", "a", "--default", "d"])
++
++    assert (result.exit_code, result.output) == (0, "d\n")
++
++
++def test_get_default_ignored_when_value_exists(cli, dotenv_path):
++    dotenv_path.write_text("a=b")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "get", "a", "--default", "d"])
++
++    assert (result.exit_code, result.output) == (0, "b\n")
++
++
++def test_get_default_ignored_when_value_empty(cli, dotenv_path):
++    dotenv_path.write_text("a=\n")
++
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "get", "a", "--default", "d"])
++
++    assert (result.exit_code, result.output) == (0, "\n")
++
++
++def test_get_empty_default(cli, dotenv_path):
++    result = cli.invoke(dotenv_cli, ["--file", dotenv_path, "get", "a", "--default", ""])
++
++    assert (result.exit_code, result.output) == (0, "\n")
++
++
+ def test_get_non_existent_file(cli):
+     result = cli.invoke(dotenv_cli, ["--file", "nx_file", "get", "a"])
+ 

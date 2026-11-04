@@ -1,0 +1,170 @@
+diff --git a/scripts/export_invoices.py b/scripts/export_invoices.py
+new file mode 100644
+index 0000000..592d2f9
+--- /dev/null
++++ b/scripts/export_invoices.py
+@@ -0,0 +1,40 @@
++#!/usr/bin/env python3
++"""Export the ``invoices`` table of a TinyDB JSON file to CSV.
++
++Usage: export_invoices.py DB_PATH OUT_CSV
++"""
++import csv
++import os
++import sys
++
++from tinydb import TinyDB
++
++COLUMNS = ['number', 'customer', 'amount', 'due_date']
++
++
++def main(argv):
++    if len(argv) != 3:
++        print(f'usage: {argv[0]} DB_PATH OUT_CSV', file=sys.stderr)
++        return 2
++
++    db_path, out_path = argv[1], argv[2]
++    if not os.path.isfile(db_path):
++        print(f'error: {db_path} not found', file=sys.stderr)
++        return 1
++
++    # Read-only so the source database is never modified.
++    with TinyDB(db_path, access_mode='r') as db:
++        invoices = db.table('invoices').all()
++
++    with open(out_path, 'w', newline='', encoding='utf-8-sig') as f:
++        writer = csv.DictWriter(f, fieldnames=COLUMNS, extrasaction='ignore', delimiter=';',
++                                restval='')
++        writer.writeheader()
++        writer.writerows(invoices)
++
++    print(f'wrote {len(invoices)} invoices to {out_path}')
++    return 0
++
++
++if __name__ == '__main__':
++    sys.exit(main(sys.argv))
+diff --git a/scripts/sample_db.json b/scripts/sample_db.json
+new file mode 100644
+index 0000000..0895092
+--- /dev/null
++++ b/scripts/sample_db.json
+@@ -0,0 +1,10 @@
++{
++  "invoices": {
++    "1": {"number": "INV-001", "customer": "Acme, Inc.", "amount": 1250.00, "due_date": "2026-11-30"},
++    "2": {"number": "INV-002", "customer": "Müller GmbH", "amount": 310.50, "due_date": "2026-12-15"},
++    "3": {"number": "INV-003", "customer": "Initech \"West\"", "amount": 99.99, "due_date": "2027-01-10"}
++  },
++  "customers": {
++    "1": {"name": "Acme, Inc."}
++  }
++}
+diff --git a/tests/test_tables.py b/tests/test_tables.py
+index a94005e..4b62777 100644
+--- a/tests/test_tables.py
++++ b/tests/test_tables.py
+@@ -197,3 +197,58 @@ def test_persist_empty_does_not_wipe_existing_data(tmpdir):
+     assert len(table) == 1
+     assert table.all() == [{'a': 1}]
+     db.close()
++
++
++def test_to_csv_default_fields(db, tmp_path):
++    import csv
++
++    table = db.table('csv')
++    table.insert({'a': 1, 'b': 'x'})
++    table.insert({'b': 'y', 'c': 3})
++
++    path = tmp_path / 'out.csv'
++    table.to_csv(path)
++
++    with open(path, newline='', encoding='utf-8') as f:
++        rows = list(csv.reader(f))
++
++    assert rows == [['a', 'b', 'c'], ['1', 'x', ''], ['', 'y', '3']]
++
++
++def test_to_csv_fields_select_and_order(db, tmp_path):
++    import csv
++
++    table = db.table('csv')
++    table.insert({'a': 1, 'b': 'x', 'c': 3})
++    table.insert({'a': 2})
++
++    path = tmp_path / 'out.csv'
++    table.to_csv(path, fields=['c', 'a', 'missing'])
++
++    with open(path, newline='', encoding='utf-8') as f:
++        rows = list(csv.reader(f))
++
++    assert rows == [['c', 'a', 'missing'], ['3', '1', ''], ['', '2', '']]
++
++
++def test_to_csv_empty_table(db, tmp_path):
++    table = db.table('empty')
++    path = tmp_path / 'out.csv'
++    table.to_csv(path, fields=['a', 'b'])
++
++    assert path.read_text(encoding='utf-8').splitlines() == ['a,b']
++
++
++def test_to_csv_quoting(db, tmp_path):
++    import csv
++
++    table = db.table('csv')
++    table.insert({'a': 'x,y', 'b': 'line1\nline2'})
++
++    path = tmp_path / 'out.csv'
++    table.to_csv(path)
++
++    with open(path, newline='', encoding='utf-8') as f:
++        rows = list(csv.reader(f))
++
++    assert rows[1] == ['x,y', 'line1\nline2']
+diff --git a/tinydb/table.py b/tinydb/table.py
+index 76470aa..efe2e88 100644
+--- a/tinydb/table.py
++++ b/tinydb/table.py
+@@ -3,6 +3,7 @@ This module implements tables, the central place for accessing and manipulating
+ data in TinyDB.
+ """
+ 
++import csv
+ from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMapping
+ from typing import (
+     NoReturn,
+@@ -715,6 +716,32 @@ class Table:
+ 
+         return len(self.search(cond))
+ 
++    def to_csv(self, path, fields: Optional[Iterable[str]] = None) -> None:
++        """
++        Export the table to a CSV file.
++
++        The first row is a header, followed by one row per document. Missing
++        values are written as empty cells.
++
++        :param path: the file to write (overwritten if it exists)
++        :param fields: the columns to write, in order. Defaults to all
++                       top-level keys in first-seen order.
++        """
++
++        documents = self.all()
++
++        if fields is None:
++            # dict keys keep insertion order and de-duplicate
++            columns = list(dict.fromkeys(k for doc in documents for k in doc))
++        else:
++            columns = list(fields)
++
++        with open(path, 'w', newline='', encoding='utf-8') as f:
++            writer = csv.DictWriter(f, fieldnames=columns, restval='',
++                                    extrasaction='ignore')
++            writer.writeheader()
++            writer.writerows(documents)
++
+     def clear_cache(self) -> None:
+         """
+         Clear the query cache.
