@@ -1,0 +1,8 @@
+# payroll
+
+Branch: payroll · Repo: local__tinydate-2485494060 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: Payroll build: the upcoming quarter token must use Australian financial-year quarters (year starts 1 July, so Jul-Sep is Q1, Oct-Dec Q2, Jan-Mar Q3, Apr-Jun Q4). User will add it as a separate change; do not add it as part of the {MMM} work.
+

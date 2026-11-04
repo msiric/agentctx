@@ -1,0 +1,51 @@
+diff --git a/bottle.py b/bottle.py
+index 2a4b1ac..7e4bd33 100755
+--- a/bottle.py
++++ b/bottle.py
+@@ -1468,6 +1468,23 @@ class BaseRequest:
+         if ruser: return (ruser, None)
+         return None
+ 
++    @property
++    def bearer_token(self):
++        """ The token from an ``Authorization: Bearer <token>`` header, or
++            None if there is no such header or it uses another scheme.
++
++            >>> BaseRequest({'HTTP_AUTHORIZATION': 'Bearer abc123'}).bearer_token
++            'abc123'
++            >>> BaseRequest({'HTTP_AUTHORIZATION': 'Basic dXNlcjpwdw=='}).bearer_token is None
++            True
++            >>> BaseRequest({}).bearer_token is None
++            True
++        """
++        parts = self.environ.get('HTTP_AUTHORIZATION', '').split(None, 1)
++        if len(parts) == 2 and parts[0].lower() == 'bearer':
++            return parts[1].strip()
++        return None
++
+     @property
+     def remote_route(self):
+         """ A list of all IPs that were involved in this request, starting with
+diff --git a/test/test_environ.py b/test/test_environ.py
+index c9f2940..48a9a70 100755
+--- a/test/test_environ.py
++++ b/test/test_environ.py
+@@ -415,6 +415,18 @@ class TestRequest(unittest.TestCase):
+         e['HTTP_X_REQUESTED_WITH'] = 'XMLHttpRequest'
+         self.assertTrue(BaseRequest(e.copy()).is_ajax)
+ 
++    def test_bearer_token(self):
++        r = BaseRequest({})
++        self.assertEqual(r.bearer_token, None)
++        r.environ['HTTP_AUTHORIZATION'] = 'Bearer abc.def-123'
++        self.assertEqual(r.bearer_token, 'abc.def-123')
++        r.environ['HTTP_AUTHORIZATION'] = 'bearer   tok  '
++        self.assertEqual(r.bearer_token, 'tok')
++        r.environ['HTTP_AUTHORIZATION'] = 'Bearer'
++        self.assertEqual(r.bearer_token, None)
++        r.environ['HTTP_AUTHORIZATION'] = 'Basic dXNlcjpwdw=='
++        self.assertEqual(r.bearer_token, None)
++
+     def test_auth(self):
+         user, pwd = 'marc', 'secret'
+         basic = touni(base64.b64encode(tob('%s:%s' % (user, pwd))))

@@ -1,0 +1,247 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..ec82b83
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,49 @@
++# HANDOFF
++
++## Task
++Add a `Length(min=None, max=None, error=None)` validator to this fork of `schema`
++(`schema/__init__.py`). It replaces `And(str, lambda s: len(s) <= 40)` in API
++payload schemas, whose errors are unreadable.
++
++**State: implemented** (`Length` in `schema/__init__.py` after `Regex`, in `__all__`; tests `test_length_*` at end of `test_schema.py`, all passing). Not committed. Still open: the questions below, plus README/CHANGELOG entry not yet written.
++
++## Decisions
++- **min/max count UTF-8 bytes, not characters.** The values go into Oracle
++  `VARCHAR2(n BYTE)` columns. Inserts failed on accented names that passed a
++  `len()` check.
++- **Strings only.** Byte length only makes sense for `str`, so `validate` checks
++  `isinstance(data, str)` and raises `SchemaError` otherwise. `bytes` is not accepted.
++  Compute the length as `len(data.encode("utf-8"))`. Catch `UnicodeEncodeError`
++  (lone surrogates) and raise `SchemaError`.
++- Bounds are inclusive. Reject at construction: negative or non-int (incl. bool)
++  bounds (`TypeError`), neither bound given (`TypeError`), `min > max` (`ValueError`).
++- Plain validator class with no base class, like `Regex`/`Use`: `__init__`,
++  `__repr__`, read-only `min`/`max` properties, `validate(data, **kwargs)`.
++  `Schema._priority` treats anything with `.validate` as a VALIDATOR.
++- **Error slots:** auto message in `autos`, custom `error.format(data)` in `errors`
++  (the `Use` pattern). `Regex` puts the custom error in `autos`, so an outer `error=`
++  overrides it; avoid that. `SchemaError.code` prefers `errors` over `autos`.
++- Don't repeat the field name in the message. Inside a dict, `Schema.validate`
++  already prefixes `Key 'name' error:` (lines ~502-508), but only when no custom error is set.
++- Message should say bytes, e.g. `length 57 bytes is not at most 40 bytes`. Avoid echoing
++  the whole value (long or sensitive payload strings); lean towards omitting it.
++- Export: add `"Length"` to `__all__`. Tests go in `test_schema.py`: boundaries,
++  multibyte input (e.g. 'é' is 2 bytes, an emoji is 4), non-str input, custom
++  `error=`, nesting in dict/`And`/`Or` and checking `.code`.
++
++## Open / to confirm
++- **Oracle charset:** byte counts assume AL32UTF8 (real UTF-8). The older `UTF8`
++  charset stores supplementary characters (emoji) as 6 bytes (CESU-8), so UTF-8 byte
++  counts would under-count there. Confirm which charset the DB uses.
++- **Class name:** `Length` is slightly misleading for a byte count. `Length` is what the
++  user asked for; mention `ByteLength` as an alternative, or make it clear in the docstring.
++
++## Notes from implementation
++- `SchemaError.code` joins all errors, so with an outer `error=` the code is `outer\ninner` (outer first); tests assert on the first line.
++
++## Not doing / rejected
++- **`json_schema()` support:** `Schema.json_schema` special-cases `type(s) == Regex`
++  (line ~772). A `Length` branch emitting `minLength`/`maxLength` would be wrong,
++  because JSON Schema counts characters, not bytes. Leave `Length` unrepresented
++  (falls through with no constraint) unless we add a custom keyword.
++- **Any-sized-value (lists etc.) with `len()`:** dropped when we moved to bytes.
+diff --git a/schema/__init__.py b/schema/__init__.py
+index 10d6e8a..77361b1 100644
+--- a/schema/__init__.py
++++ b/schema/__init__.py
+@@ -40,6 +40,7 @@ __all__ = [
+     "And",
+     "Or",
+     "Regex",
++    "Length",
+     "Optional",
+     "Use",
+     "Forbidden",
+@@ -286,6 +287,81 @@ class Regex:
+             raise SchemaError(error_message)
+ 
+ 
++class Length:
++    """
++    Validates that a string's size is within inclusive bounds.
++
++    Note: the size is measured in UTF-8 *bytes*, not characters, so that values
++    fit byte-sized database columns (e.g. Oracle ``VARCHAR2(n BYTE)``).
++    Only ``str`` is accepted.
++    """
++
++    def __init__(
++        self,
++        min: Union[int, None] = None,
++        max: Union[int, None] = None,
++        error: Union[str, None] = None,
++    ) -> None:
++        if min is None and max is None:
++            raise TypeError("Length requires at least one of min or max")
++        for name, bound in (("min", min), ("max", max)):
++            if bound is None:
++                continue
++            if isinstance(bound, bool) or not isinstance(bound, int):
++                raise TypeError(f"Length {name} must be an int, not {bound!r}")
++            if bound < 0:
++                raise TypeError(f"Length {name} must not be negative, got {bound!r}")
++        if min is not None and max is not None and min > max:
++            raise ValueError(f"Length min ({min}) is greater than max ({max})")
++        self._min: Union[int, None] = min
++        self._max: Union[int, None] = max
++        self._error: Union[str, None] = error
++
++    def __repr__(self) -> str:
++        args = []
++        if self._min is not None:
++            args.append(f"min={self._min!r}")
++        if self._max is not None:
++            args.append(f"max={self._max!r}")
++        return f"{self.__class__.__name__}({', '.join(args)})"
++
++    @property
++    def min(self) -> Union[int, None]:
++        """The inclusive minimum size in UTF-8 bytes, or None"""
++        return self._min
++
++    @property
++    def max(self) -> Union[int, None]:
++        """The inclusive maximum size in UTF-8 bytes, or None"""
++        return self._max
++
++    def validate(self, data: str, **kwargs: Any) -> str:
++        """
++        Validates that the UTF-8 encoded size of data is within the bounds.
++        :param data: Data to be validated.
++        :return: Returns validated data.
++        """
++        e = self._error
++        custom = e.format(data) if e else None
++
++        if not isinstance(data, str):
++            raise SchemaError(f"expected a str, got {type(data).__name__}", custom)
++        try:
++            size = len(data.encode("utf-8"))
++        except UnicodeEncodeError:
++            raise SchemaError("string cannot be encoded as UTF-8", custom)
++
++        if self._min is not None and size < self._min:
++            raise SchemaError(
++                f"length {size} bytes is not at least {self._min} bytes", custom
++            )
++        if self._max is not None and size > self._max:
++            raise SchemaError(
++                f"length {size} bytes is not at most {self._max} bytes", custom
++            )
++        return data
++
++
+ class Use:
+     """
+     For more general use cases, you can use the Use class to transform
+diff --git a/test_schema.py b/test_schema.py
+index 4d78456..d044129 100644
+--- a/test_schema.py
++++ b/test_schema.py
+@@ -24,6 +24,7 @@ from schema import (
+     Literal,
+     Optional,
+     Or,
++    Length,
+     Regex,
+     Schema,
+     SchemaError,
+@@ -2100,3 +2101,85 @@ def test_tuple_key_error_message_does_not_crash():
+     with raises(SchemaError) as exc_info:
+         Schema({("a", "b"): int}).validate({("a", "b"): "not-an-int"})
+     assert "Key '('a', 'b')' error:" in exc_info.value.code
++
++
++def test_length_bounds_inclusive():
++    v = Length(min=2, max=4)
++    assert v.validate("ab") == "ab"
++    assert v.validate("abcd") == "abcd"
++    with raises(SchemaError, match="not at least 2"):
++        v.validate("a")
++    with raises(SchemaError, match="length 5 bytes is not at most 4 bytes"):
++        v.validate("abcde")
++    assert Length(max=0).validate("") == ""
++    assert Length(min=1).validate("x" * 1000)
++
++
++def test_length_counts_utf8_bytes():
++    assert Length(max=2).validate("\u00e9") == "\u00e9"  # 2 bytes
++    with raises(SchemaError):
++        Length(max=1).validate("\u00e9")
++    assert Length(max=4).validate("\U0001f600") == "\U0001f600"  # 4 bytes
++    with raises(SchemaError):
++        Length(max=3).validate("\U0001f600")
++    with raises(SchemaError):
++        Length(min=3).validate("\u00e9")
++
++
++def test_length_rejects_non_str_and_unencodable():
++    for bad in (b"abc", 123, None, ["a"], {}):
++        with raises(SchemaError):
++            Length(max=10).validate(bad)
++    with raises(SchemaError, match="UTF-8"):
++        Length(max=10).validate("\ud800")
++
++
++def test_length_construction_errors():
++    with raises(TypeError):
++        Length()
++    with raises(TypeError):
++        Length(min=-1)
++    with raises(TypeError):
++        Length(max=1.5)
++    with raises(TypeError):
++        Length(max=True)
++    with raises(TypeError):
++        Length(min="1")
++    with raises(ValueError):
++        Length(min=5, max=2)
++    assert Length(min=3, max=3).validate("abc") == "abc"
++
++
++def test_length_repr_and_properties():
++    v = Length(min=1, max=9)
++    assert (v.min, v.max) == (1, 9)
++    assert repr(v) == "Length(min=1, max=9)"
++    assert repr(Length(max=3)) == "Length(max=3)"
++
++
++def test_length_custom_error():
++    with raises(SchemaError) as e:
++        Length(max=2, error="too long: {}").validate("abc")
++    assert e.value.code == "too long: abc"
++    with raises(SchemaError) as e:
++        Schema(Length(max=2, error="too long")).validate("abc")
++    assert e.value.code == "too long"
++    # an outer error= is not lost (it is reported first)
++    with raises(SchemaError) as e:
++        Schema(Length(max=2, error="inner"), error="outer").validate("abc")
++    assert e.value.code.splitlines()[0] == "outer"
++
++
++def test_length_nesting():
++    s = Schema({"name": And(str, Length(max=3))})
++    assert s.validate({"name": "abc"}) == {"name": "abc"}
++    with raises(SchemaError) as e:
++        s.validate({"name": "abcd"})
++    assert "length 4 bytes is not at most 3 bytes" in e.value.code
++    assert "name" in e.value.code
++    assert Schema(Or(Length(max=1), Length(min=5))).validate("abcde") == "abcde"
++    with raises(SchemaError):
++        Schema(Or(Length(max=1), Length(min=5))).validate("abc")
++    with raises(SchemaError) as e:
++        Schema({"name": Length(max=3, error="bad name")}).validate({"name": "abcd"})
++    assert e.value.code == "bad name"

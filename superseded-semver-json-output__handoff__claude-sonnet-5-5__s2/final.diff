@@ -1,0 +1,338 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..2fb7ce9
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,32 @@
++# HANDOFF
++
++## State
++`pysemver sort [VERSION...]` added (src/semver/cli.py `cmd_sort`), with tests in
++tests/test_sort.py, docs in docs/pysemver.rst, changelog.d/505.feature.rst
++(505 is a guessed number; rename to the real PR/issue number).
++
++## Update: `pysemver latest [VERSION...]`
++Added `cmd_latest` (cli.py), tests/test_latest.py, docs section, changelog.d/506.feature.rst
++(506 also a guessed number). Follows the JSON convention below: prints a JSON string
++(`"1.10.0"`). Same args/stdin handling as sort. No stable version (none given, or all
++prereleases) -> ValueError, exit 2, nothing on stdout (chosen over printing `null` so
++callers fail loudly). Build metadata is preserved in output; ordering via Version `max`.
++
++## Decisions
++- Output is plain `"\n".join`, one version per line, for Jenkins `while read v`.
++- No args: read stdin, one version per line, blank lines skipped (args win if given).
++- Zero versions (empty stdin too): prints nothing, exit 0 (returns None; `nargs="*"`), so no blank line.
++- Invalid version (arg or stdin): exit 2, nothing on stdout (all parsed before printing).
++- Not re-exported from `semver/__init__` (those cmd_* names are deprecated shims).
++
++## Failed approaches
++- `pytest` with the repo's .pytest.ini fails here (pytest-cov options not installed);
++  ran with `-c /dev/null --rootdir=.` instead.
++
++## Conventions for future subcommands
++- New pysemver subcommands print their result as JSON on stdout: the release
++  workflow is moving from Jenkins to GitHub Actions, which parses output with
++  `fromJSON()`.
++- `sort` is deliberately left as plain text (one version per line): the old
++  Jenkins job still calls it until the migration finishes. Don't convert it
++  until then.
+diff --git a/changelog.d/505.feature.rst b/changelog.d/505.feature.rst
+new file mode 100644
+index 0000000..1ca06ea
+--- /dev/null
++++ b/changelog.d/505.feature.rst
+@@ -0,0 +1,2 @@
++Add the ``pysemver sort`` subcommand. It prints the given versions sorted
++oldest first, as plain text with one version per line.
+diff --git a/changelog.d/506.feature.rst b/changelog.d/506.feature.rst
+new file mode 100644
+index 0000000..ad03d3d
+--- /dev/null
++++ b/changelog.d/506.feature.rst
+@@ -0,0 +1,2 @@
++Add the ``pysemver latest`` subcommand. It prints the highest version that
++is not a prerelease, as a JSON string.
+diff --git a/docs/pysemver.rst b/docs/pysemver.rst
+index cea32e6..4229a94 100644
+--- a/docs/pysemver.rst
++++ b/docs/pysemver.rst
+@@ -137,6 +137,66 @@ to indicates which is the bigger version:
+ * ``1`` if the first version is greater than the second version.
+ 
+ 
++pysemver sort
++~~~~~~~~~~~~~
++
++Sort versions, oldest first.
++
++.. code:: bash
++
++   pysemver sort [<VERSION>...]
++
++.. option:: <VERSION>
++
++    The versions to sort. All of them must be valid semver strings.
++    If none are given, versions are read from *standard in*, one per
++    line; blank lines are ignored.
++
++The sorted versions are printed on *standard out* as plain text, one
++version per line, which makes the output easy to consume in a shell
++loop::
++
++    $ pysemver sort 1.10.0 1.2.0 1.2.0-rc.1
++    1.2.0-rc.1
++    1.2.0
++    1.10.0
++    $ pysemver sort 1.10.0 1.2.0 | while read v; do echo "release $v"; done
++    release 1.2.0
++    release 1.10.0
++
++If a version is invalid, an error message is printed and nothing is
++sorted. Without any version (arguments or stdin), nothing is printed.
++Versions can be piped in::
++
++    $ printf '1.10.0\n\n1.2.0\n' | pysemver sort
++    1.2.0
++    1.10.0
++
++
++pysemver latest
++~~~~~~~~~~~~~~~
++
++Print the highest version that is not a prerelease.
++
++.. code:: bash
++
++   pysemver latest [<VERSION>...]
++
++.. option:: <VERSION>
++
++    The versions to search. All of them must be valid semver strings.
++    If none are given, versions are read from *standard in*, one per
++    line; blank lines are ignored.
++
++The result is printed on *standard out* as a JSON string::
++
++    $ pysemver latest 1.2.0 2.0.0-rc.1 1.10.0
++    "1.10.0"
++
++If there is no version, or all versions are prereleases, an error
++message is printed and the return code is 2.
++
++
+ Return Code
+ -----------
+ 
+diff --git a/src/semver/cli.py b/src/semver/cli.py
+index 43e101e..40d55e6 100644
+--- a/src/semver/cli.py
++++ b/src/semver/cli.py
+@@ -11,6 +11,7 @@ The result of each command is printed on stdout.
+ """
+ 
+ import argparse
++import json
+ import sys
+ from typing import cast, List, Optional
+ 
+@@ -83,6 +84,48 @@ def cmd_nextver(args: argparse.Namespace) -> str:
+     return str(version.next_version(args.part))
+ 
+ 
++def cmd_sort(args: argparse.Namespace) -> Optional[str]:
++    """
++    Subcommand: Sort versions, oldest first, one per line.
++
++    Synopsis: sort [<VERSION>...]
++
++    Without any ``VERSION``, versions are read from stdin, one per line.
++    Blank lines are ignored.
++
++    :param args: The parsed arguments
++    """
++    raw = args.versions
++    if not raw:
++        raw = [line.strip() for line in sys.stdin if line.strip()]
++    versions = sorted(Version.parse(v) for v in raw)
++    if not versions:
++        return None
++    return "\n".join(str(v) for v in versions)
++
++
++def cmd_latest(args: argparse.Namespace) -> str:
++    """
++    Subcommand: Print the highest version that is not a prerelease.
++
++    Synopsis: latest [<VERSION>...]
++
++    Without any ``VERSION``, versions are read from stdin, one per line.
++    Blank lines are ignored. The result is printed as a JSON string.
++
++    :param args: The parsed arguments
++    :return: the highest non-prerelease version, JSON encoded
++    :raises ValueError: if there is no non-prerelease version
++    """
++    raw = args.versions
++    if not raw:
++        raw = [line.strip() for line in sys.stdin if line.strip()]
++    stable = [v for v in map(Version.parse, raw) if not v.prerelease]
++    if not stable:
++        raise ValueError("no non-prerelease version given")
++    return json.dumps(str(max(stable)))
++
++
+ def createparser() -> argparse.ArgumentParser:
+     """
+     Create an :class:`argparse.ArgumentParser` instance.
+@@ -133,6 +176,20 @@ def createparser() -> argparse.ArgumentParser:
+     parser_nextver.add_argument(
+         "part", help="One of 'major', 'minor', 'patch', or 'prerelease'"
+     )
++
++    # Create the sort subcommand
++    parser_sort = s.add_parser(
++        "sort", help="Sorts versions, oldest first, one per line"
++    )
++    parser_sort.set_defaults(func=cmd_sort)
++    parser_sort.add_argument("versions", nargs="*", help="Versions to sort")
++
++    # Create the latest subcommand
++    parser_latest = s.add_parser(
++        "latest", help="Prints the highest version that is not a prerelease"
++    )
++    parser_latest.set_defaults(func=cmd_latest)
++    parser_latest.add_argument("versions", nargs="*", help="Versions to search")
+     return parser
+ 
+ 
+diff --git a/tests/test_latest.py b/tests/test_latest.py
+new file mode 100644
+index 0000000..ddc0297
+--- /dev/null
++++ b/tests/test_latest.py
+@@ -0,0 +1,58 @@
++import io
++import json
++
++from semver import main
++from semver.cli import cmd_latest, createparser
++
++
++def test_latest_skips_prereleases(capsys):
++    assert main(["latest", "1.2.0", "2.0.0-rc.1", "1.10.0", "1.9.0"]) == 0
++    assert json.loads(capsys.readouterr().out) == "1.10.0"
++
++
++def test_latest_output_is_json_string(capsys):
++    main(["latest", "1.0.0"])
++    assert capsys.readouterr().out == '"1.0.0"\n'
++
++
++def test_latest_keeps_build_metadata(capsys):
++    main(["latest", "1.0.0+b1", "0.9.0"])
++    assert json.loads(capsys.readouterr().out) == "1.0.0+b1"
++
++
++def test_latest_reads_stdin(capsys, monkeypatch):
++    monkeypatch.setattr("sys.stdin", io.StringIO("1.2.0\n\n3.0.0-beta\n1.3.0\n"))
++    assert main(["latest"]) == 0
++    assert json.loads(capsys.readouterr().out) == "1.3.0"
++
++
++def test_latest_args_take_precedence_over_stdin(capsys, monkeypatch):
++    monkeypatch.setattr("sys.stdin", io.StringIO("9.9.9\n"))
++    assert main(["latest", "1.0.0"]) == 0
++    assert json.loads(capsys.readouterr().out) == "1.0.0"
++
++
++def test_latest_only_prereleases(capsys):
++    assert main(["latest", "1.0.0-rc.1", "2.0.0-alpha"]) == 2
++    captured = capsys.readouterr()
++    assert captured.out == ""
++    assert "ERROR" in captured.err
++
++
++def test_latest_no_versions(capsys, monkeypatch):
++    monkeypatch.setattr("sys.stdin", io.StringIO(""))
++    assert main(["latest"]) == 2
++    assert capsys.readouterr().out == ""
++
++
++def test_latest_invalid_version(capsys):
++    assert main(["latest", "1.0.0", "1.2"]) == 2
++    captured = capsys.readouterr()
++    assert captured.out == ""
++    assert "ERROR" in captured.err
++
++
++def test_latest_parser():
++    args = createparser().parse_args(["latest", "1.0.0"])
++    assert args.versions == ["1.0.0"]
++    assert args.func is cmd_latest
+diff --git a/tests/test_sort.py b/tests/test_sort.py
+new file mode 100644
+index 0000000..f5b25ba
+--- /dev/null
++++ b/tests/test_sort.py
+@@ -0,0 +1,61 @@
++import io
++
++import pytest
++
++from semver import main
++from semver.cli import cmd_sort, createparser
++
++
++def test_sort_orders_oldest_first_one_per_line(capsys):
++    assert main(["sort", "1.10.0", "1.2.0", "1.2.0-rc.1", "0.9.9"]) == 0
++    out = capsys.readouterr().out
++    assert out == "0.9.9\n1.2.0-rc.1\n1.2.0\n1.10.0\n"
++
++
++def test_sort_output_has_no_extra_formatting(capsys):
++    main(["sort", "2.0.0", "1.0.0"])
++    assert capsys.readouterr().out.splitlines() == ["1.0.0", "2.0.0"]
++
++
++def test_sort_single_version(capsys):
++    assert main(["sort", "1.2.3"]) == 0
++    assert capsys.readouterr().out == "1.2.3\n"
++
++
++def test_sort_no_versions_prints_nothing(capsys, monkeypatch):
++    monkeypatch.setattr("sys.stdin", io.StringIO(""))
++    assert main(["sort"]) == 0
++    assert capsys.readouterr().out == ""
++
++
++def test_sort_invalid_version(capsys):
++    assert main(["sort", "1.2.3", "1.2"]) == 2
++    captured = capsys.readouterr()
++    assert captured.out == ""
++    assert "ERROR" in captured.err
++
++
++def test_sort_parser():
++    args = createparser().parse_args(["sort", "1.0.0", "0.1.0"])
++    assert args.versions == ["1.0.0", "0.1.0"]
++    assert args.func is cmd_sort
++
++
++def test_sort_reads_stdin_when_no_args(capsys, monkeypatch):
++    monkeypatch.setattr("sys.stdin", io.StringIO("1.10.0\n\n  \n1.2.0\n1.2.0-rc.1\n"))
++    assert main(["sort"]) == 0
++    assert capsys.readouterr().out == "1.2.0-rc.1\n1.2.0\n1.10.0\n"
++
++
++def test_sort_stdin_invalid_version(capsys, monkeypatch):
++    monkeypatch.setattr("sys.stdin", io.StringIO("1.0.0\nnope\n"))
++    assert main(["sort"]) == 2
++    captured = capsys.readouterr()
++    assert captured.out == ""
++    assert "ERROR" in captured.err
++
++
++def test_sort_args_take_precedence_over_stdin(capsys, monkeypatch):
++    monkeypatch.setattr("sys.stdin", io.StringIO("9.9.9\n"))
++    assert main(["sort", "2.0.0", "1.0.0"]) == 0
++    assert capsys.readouterr().out == "1.0.0\n2.0.0\n"

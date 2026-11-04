@@ -1,0 +1,134 @@
+diff --git a/.github/workflows/fork-ci.yml b/.github/workflows/fork-ci.yml
+new file mode 100644
+index 0000000..50d1568
+--- /dev/null
++++ b/.github/workflows/fork-ci.yml
+@@ -0,0 +1,24 @@
++name: Fork CI
++
++on: [push, pull_request]
++
++jobs:
++  test:
++    name: Node.js v${{ matrix.node-version }}
++    runs-on: ubuntu-latest
++    timeout-minutes: 3
++    strategy:
++      fail-fast: false
++      matrix:
++        node-version: [18, 20, 22, 24]
++    steps:
++    - uses: actions/checkout@v4
++    - uses: actions/setup-node@v4
++      with:
++        node-version: ${{ matrix.node-version }}
++
++    - name: Install
++      run: npm install
++
++    - name: Tests
++      run: npm test
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..db69912
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,21 @@
++# Handoff
++
++## State
++Fork CI matrix (Node 18, 20, 22, 24) lives in `.github/workflows/fork-ci.yml`. Done.
++Upstream `ci.yml` (Node 6 only) is left untouched, so it still runs alongside.
++
++## `--` option (minimist parity)
++Done. `src/index.js`: when `opts['--']` is truthy, `out['--']` is initialised to `[]` (like minimist, always present)
++and args after the first bare `--` go there instead of `out._`. Tests in new file `test/dashdash.js`.
++Readme and `index.d.ts` deliberately NOT updated (must match upstream; see below) so the option is undocumented/untyped here.
++`lib/` is gitignored build output (`npm test` rebuilds it via pretest).
++
++## Decisions
++- This fork rebases onto upstream (lukeed/mri) weekly. Only `src/index.js` is patched in upstream files;
++  everything else of ours goes in NEW files (own workflow files, own test files). readme, types
++  (`index.d.ts`) and `package.json` must stay identical to upstream. Hence a separate workflow, not an edit to `ci.yml`.
++- Workflow uses `actions/checkout@v4` / `actions/setup-node@v4` (v2 is deprecated) and `fail-fast: false`.
++- `engines.node` (`>=4`) not changed, since package.json must match upstream.
++
++## Verification
++`npm test` passes locally (100/100, includes new dashdash tests) on Node 24.22.1. Node 18/20/22 not run locally; workflow not yet run on GitHub.
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..f43614a 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -17,6 +17,7 @@ export default function (args, opts) {
+ 	opts = opts || {};
+ 
+ 	var k, arr, arg, name, val, out={ _:[] };
++	if (opts['--']) out['--'] = [];
+ 	var i=0, j=0, idx=0, len=args.length;
+ 
+ 	const alibi = opts.alias !== void 0;
+@@ -65,7 +66,9 @@ export default function (args, opts) {
+ 		arg = args[i];
+ 
+ 		if (arg === '--') {
+-			out._ = out._.concat(args.slice(++i));
++			k = args.slice(++i);
++			if (opts['--']) out['--'] = k;
++			else out._ = out._.concat(k);
+ 			break;
+ 		}
+ 
+diff --git a/test/dashdash.js b/test/dashdash.js
+new file mode 100644
+index 0000000..8a8c98f
+--- /dev/null
++++ b/test/dashdash.js
+@@ -0,0 +1,48 @@
++const test = require('tape');
++const fn = require('../lib');
++
++test('opts["--"] :: args after bare -- go to argv["--"]', t => {
++	const out = fn(['foo', '-a', '--', 'bar', '--baz', '-x'], { '--': true });
++	t.same(out._, ['foo']);
++	t.same(out['--'], ['bar', '--baz', '-x']);
++	t.is(out.a, true);
++	t.false('baz' in out);
++	t.end();
++});
++
++test('opts["--"] :: argv["--"] is empty array when no bare --', t => {
++	const out = fn(['foo', '--a', 'b'], { '--': true });
++	t.same(out._, ['foo']);
++	t.same(out['--'], []);
++	t.is(out.a, 'b');
++	t.end();
++});
++
++test('opts["--"] :: unset keeps legacy behavior', t => {
++	const out = fn(['foo', '--', 'bar', '--baz']);
++	t.same(out._, ['foo', 'bar', '--baz']);
++	t.false('--' in out);
++	t.end();
++});
++
++test('opts["--"] :: only first bare -- is consumed', t => {
++	const out = fn(['--', 'a', '--', 'b'], { '--': true });
++	t.same(out._, []);
++	t.same(out['--'], ['a', '--', 'b']);
++	t.end();
++});
++
++test('opts["--"] :: works with alias, boolean, default', t => {
++	const out = fn(['-v', 'x', '--', 'y'], {
++		'--': true,
++		alias: { v: 'verbose' },
++		boolean: 'verbose',
++		default: { n: 1 }
++	});
++	t.is(out.verbose, true);
++	t.is(out.v, true);
++	t.is(out.n, 1);
++	t.same(out._, ['x']);
++	t.same(out['--'], ['y']);
++	t.end();
++});

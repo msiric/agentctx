@@ -1,0 +1,73 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..8e1d6ae
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,11 @@
++# HANDOFF
++
++## State
++Added `BaseRequest.bearer_token` (bottle.py, next to `auth`) plus `test_bearer_token` in test/test_environ.py. Not committed.
++
++## Decisions
++- Scheme matched case-insensitively (RFC 7235). Empty token -> None.
++- Independent of `auth`/`REMOTE_USER`; only reads HTTP_AUTHORIZATION.
++
++## Failed approaches
++None.
+diff --git a/bottle.py b/bottle.py
+index 2a4b1ac..9d97c4b 100755
+--- a/bottle.py
++++ b/bottle.py
+@@ -1468,6 +1468,24 @@ class BaseRequest:
+         if ruser: return (ruser, None)
+         return None
+ 
++    @property
++    def bearer_token(self):
++        """ The token from an ``Authorization: Bearer <token>`` header, or
++            None if there is no such header or it uses another scheme. The
++            scheme name is matched case-insensitively.
++
++            >>> BaseRequest({'HTTP_AUTHORIZATION': 'Bearer abc.123'}).bearer_token
++            'abc.123'
++            >>> BaseRequest({'HTTP_AUTHORIZATION': 'Basic Zm9vOmJhcg=='}).bearer_token is None
++            True
++        """
++        header = self.environ.get('HTTP_AUTHORIZATION', '')
++        scheme, _, token = header.strip().partition(' ')
++        token = token.strip()
++        if scheme.lower() == 'bearer' and token:
++            return token
++        return None
++
+     @property
+     def remote_route(self):
+         """ A list of all IPs that were involved in this request, starting with
+diff --git a/test/test_environ.py b/test/test_environ.py
+index c9f2940..9af6986 100755
+--- a/test/test_environ.py
++++ b/test/test_environ.py
+@@ -427,6 +427,22 @@ class TestRequest(unittest.TestCase):
+         del r.environ['HTTP_AUTHORIZATION']
+         self.assertEqual(r.auth, (user, None))
+ 
++    def test_bearer_token(self):
++        r = BaseRequest({})
++        self.assertEqual(r.bearer_token, None)
++        r.environ['HTTP_AUTHORIZATION'] = 'Bearer abc.def-123'
++        self.assertEqual(r.bearer_token, 'abc.def-123')
++        r.environ['HTTP_AUTHORIZATION'] = 'bearer   tok '
++        self.assertEqual(r.bearer_token, 'tok')
++        r.environ['HTTP_AUTHORIZATION'] = 'Bearer'
++        self.assertEqual(r.bearer_token, None)
++        r.environ['HTTP_AUTHORIZATION'] = 'Bearer '
++        self.assertEqual(r.bearer_token, None)
++        r.environ['HTTP_AUTHORIZATION'] = 'Basic Zm9vOmJhcg=='
++        self.assertEqual(r.bearer_token, None)
++        r.environ['HTTP_AUTHORIZATION'] = 'Bearerx abc'
++        self.assertEqual(r.bearer_token, None)
++
+     def test_remote_route(self):
+         ips = ['1.2.3.4', '2.3.4.5', '3.4.5.6']
+         r = BaseRequest({})

@@ -1,0 +1,115 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..a47fc0d
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,27 @@
++# HANDOFF
++
++## Task
++Add a `{WW}` week-number token to tinydate (branch `feat/week-number`), built in steps so each can be reviewed alone.
++
++## State
++- DONE, awaiting review: `{DDD}` day-of-year token (001-366). Touches `src/index.js`, `test/index.js`,
++  `index.d.ts`, `readme.md`. 29 tests pass, also under TZ=America/New_York, Pacific/Auckland, UTC.
++- DONE, awaiting review: `{WW}` (src, tests, index.d.ts, readme). Shares a `doy()` helper with `{DDD}`.
++  40 tests pass, also under TZ=America/New_York, Pacific/Auckland, UTC.
++- NOT done: edge cases (2012 -> week 54, 2017 Jan 1 -> week 1) were checked by hand against the Excel
++  rule, not against real Excel. Worth a spot-check by someone with Excel.
++
++## Decisions
++- `{WW}` follows Excel `WEEKNUM(date, 2)` to match finance's spreadsheets: weeks start Monday,
++  week 1 is the week containing Jan 1 (so week 1 may be a partial week). It is NOT ISO 8601.
++  Weeks are counted within the calendar year (no week-year, no rollover into next year's week 1), so there is
++  no week 0, and the range is 1-54: a year starting on Sunday has a one-day week 1, and in a leap year
++  Dec 31 is then week 54 (e.g. 2012). Verify these edge cases against Excel when implementing.
++  Formula idea: week = floor((doy - 1 + mondayBasedWeekdayOfJan1) / 7) + 1, with Mon=0..Sun=6.
++- `{DDD}` uses local-time getters like the other tokens, but computes the day count with `Date.UTC(y, m, d)` on the
++  local y/m/d, so DST changes (23/25-hour days) can't shift the result. Padding reuses the existing
++  `('00' + value).slice(-key.length)` mechanism, same as `{fff}`.
++
++## Failed approaches
++None. One slip: my first test expectation for May 1 2017 was 18; the formula gives 19, and hand-counting
++(Jan 1 = wk1, Jan 2 = wk2, May 1 is 17 weeks after Jan 2) confirms 19. The test was wrong, not the code.
+diff --git a/index.d.ts b/index.d.ts
+index 997d7dd..4bdc954 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -1,5 +1,5 @@
+ declare module 'tinydate' {
+-	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'HH' | 'mm' | 'ss' | 'fff';
++	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'DDD' | 'WW' | 'HH' | 'mm' | 'ss' | 'fff';
+ 	export type Formatter = (date: Date) => string | number;
+ 	export type Dictionary = Record<Defaults | string, Formatter>;
+ 
+diff --git a/readme.md b/readme.md
+index 7c4b332..57ed449 100644
+--- a/readme.md
++++ b/readme.md
+@@ -81,6 +81,8 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{YY}`: short year; eg: **17**
+ - `{MM}`: month; eg: **04**
+ - `{DD}`: day; eg: **01**
++- `{DDD}`: day of the year (001–366); eg: **091**
++- `{WW}`: week of the year (01–54); eg: **14**<br>Matches Excel's `WEEKNUM(date, 2)`: weeks start on Monday and week 1 is the week containing Jan 1 (may be a partial week). This is **not** ISO 8601.
+ - `{HH}`: hours; eg: **06** (24h)
+ - `{mm}`: minutes; eg: **59**
+ - `{ss}`: seconds; eg: **09**
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..337965c 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,5 +1,10 @@
+ var RGX = /([^{]*?)\w(?=\})/g;
+ 
++function doy(d) {
++	// day of year (1-366); uses UTC math on local y/m/d so DST can't skew it
++	return (Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(d.getFullYear(), 0, 1)) / 864e5 + 1;
++}
++
+ var MAP = {
+ 	YYYY: 'getFullYear',
+ 	YY: 'getYear',
+@@ -7,6 +12,12 @@ var MAP = {
+ 		return d.getMonth() + 1;
+ 	},
+ 	DD: 'getDate',
++	DDD: doy,
++	WW: function (d) {
++		// Excel WEEKNUM(date, 2): weeks start Monday, week 1 contains Jan 1 (not ISO 8601); range 1-54
++		var jan1 = (new Date(d.getFullYear(), 0, 1).getDay() + 6) % 7; // Mon=0..Sun=6
++		return Math.floor((doy(d) - 1 + jan1) / 7) + 1;
++	},
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+ 	ss: 'getSeconds',
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..eda9edb 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -19,6 +19,25 @@ test('rendering', t => {
+ 	t.is(render('HH'), 'HH', 'does nothing if no `{}` wrappers');
+ 	t.is(render('{MM}'), '05', 'returns numerical month');
+ 	t.is(render('{DD}'), '01', 'returns numerical day');
++	t.is(render('{DDD}'), '121', 'returns day of year (padded to 3)');
++	t.is(render('{DDD}', new Date(2017, 0, 1)), '001', 'Jan 1 is day 001');
++	t.is(render('{DDD}', new Date(2017, 11, 31)), '365', 'Dec 31 of a common year is 365');
++	t.is(render('{DDD}', new Date(2016, 11, 31)), '366', 'Dec 31 of a leap year is 366');
++	t.is(render('{DDD}', new Date(2016, 2, 1)), '061', 'leap day is counted (Mar 1, 2016)');
++	t.is(render('{DDD}', new Date(2017, 2, 1)), '060', 'Mar 1, 2017 (common year)');
++	t.is(render('{DDD}', new Date(2017, 2, 12, 0, 30)), '071', 'unaffected by DST changes (US spring-forward week)');
++	t.is(render('{DDD}', new Date(2017, 10, 6, 0, 30)), '310', 'unaffected by DST changes (US fall-back week)');
++	t.is(render('{WW}'), '19', 'returns week number (Mon-start, week 1 holds Jan 1)');
++	t.is(render('{WW}', new Date(2017, 0, 1)), '01', 'Jan 1 (Sunday) is week 01');
++	t.is(render('{WW}', new Date(2017, 0, 2)), '02', 'Monday starts a new week (Jan 2, 2017)');
++	t.is(render('{WW}', new Date(2017, 0, 8)), '02', 'Sunday ends the week (Jan 8, 2017)');
++	t.is(render('{WW}', new Date(2017, 11, 31)), '53', 'Dec 31, 2017 is week 53');
++	t.is(render('{WW}', new Date(2018, 0, 1)), '01', 'Monday Jan 1 starts a full week 1 (2018)');
++	t.is(render('{WW}', new Date(2018, 11, 31)), '53', 'Dec 31, 2018 is week 53');
++	t.is(render('{WW}', new Date(2012, 11, 31)), '54', 'leap year starting on Sunday reaches week 54 (2012)');
++	t.is(render('{WW}', new Date(2012, 0, 2)), '02', 'Jan 2, 2012 is week 02');
++	t.is(render('{WW}', new Date(2017, 2, 12, 0, 30)), '11', 'unaffected by DST (US spring-forward)');
++	t.is(render('{WW}', new Date(2017, 10, 6, 0, 30)), '46', 'unaffected by DST (US fall-back)');
+ 	t.is(render('{YY}'), '17', 'returns partial year');
+ 	t.is(render('{YYYY}'), '2017', 'returns full year');
+ 	t.is(render('{HH}'), '16', 'returns full hours (24h)');

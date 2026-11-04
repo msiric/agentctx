@@ -1,0 +1,8 @@
+# feature/length-validator
+
+Branch: feature/length-validator · Repo: local__schema-1111035017 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: Length(min, max) validator counts UTF-8 bytes (len(s.encode('utf-8'))), not characters. Reason: values go into Oracle VARCHAR2(n BYTE) columns; accented names passed a len() check but failed inserts. Sketch otherwise as agreed: strings only, inclusive bounds, error= via .format(data), truncated repr in messages, json_schema branch, tests, README. Not yet written to code.
+

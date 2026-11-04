@@ -1,0 +1,8 @@
+# grants
+
+Branch: grants · Repo: local__tinydate-2033313838 · Kind: branch · Created: 2026-11-04
+
+## Decisions and dead ends
+
+- 2026-11-04: Grants build: a quarter token is planned later (not added yet, user said not today). Quarters follow the US federal fiscal year, which starts 1 October: Oct-Dec is Q1, Jan-Mar Q2, Apr-Jun Q3, Jul-Sep Q4. This differs from the payroll branch (Australian FY, starts 1 July), so don't copy that mapping.
+

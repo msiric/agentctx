@@ -1,0 +1,111 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..a097d8e
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,20 @@
++# HANDOFF
++
++## Task
++Add a `{WW}` week-number token to tinydate (branch `feat/week-number`), matching finance's Excel `WEEKNUM(date, 2)`: weeks start Monday, week 1 is the week containing Jan 1 (NOT ISO 8601).
++
++## State
++- Step 1 DONE (awaiting user review, uncommitted): `{DDD}` day-of-year token, zero-padded to 3. Touches `src/index.js`, `test/index.js`, `readme.md`, `index.d.ts`. 29 tests pass, including with `TZ=America/New_York`.
++- Step 2 DONE (uncommitted): `{WW}` in `src/index.js`, with tests, readme entry and `index.d.ts` type. 41 tests pass, also with `TZ=America/New_York`. The user said to carry on, so I did not wait for a separate DDD review. Nothing is committed yet.
++
++## Decisions
++- `{WW}` follows WEEKNUM(date, 2), per finance. Decided by the user, replacing my earlier ISO proposal.
++- Week-year token: not needed for this rule. Week 1 contains Jan 1, so the week number never belongs to a different year. Late-December days can be week 53 or 54 depending on weekday, but Excel does the same.
++- `{DDD}` uses `Date.UTC` on the local year/month/date fields, then `Math.round(diff / 864e5) + 1`. This avoids DST skew (a local-time diff would be off by an hour on DST days) and stays local-time consistent with the other tokens.
++- Padding reuses the existing `('00' + n).slice(-key.length)` mechanism, so no padding code was added.
++- Tests import `../dist/tinydate`, so run `npm run build` before `npm test`.
++
++- `{WW}` = floor((dayOfYear - 1 + jan1MondayIndex) / 7) + 1, where jan1MondayIndex = (Jan 1 getDay() + 6) % 7. The `dayOfYear` helper is now shared by DDD and WW.
++
++## Failed approaches
++- My first test expected Dec 31, 2017 to be week 54. That was my arithmetic error: it is 53. Week 54 needs a leap year starting on Sunday, e.g. Dec 31, 2012. The code was correct and the test was fixed.
+diff --git a/index.d.ts b/index.d.ts
+index 997d7dd..4bdc954 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -1,5 +1,5 @@
+ declare module 'tinydate' {
+-	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'HH' | 'mm' | 'ss' | 'fff';
++	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'DDD' | 'WW' | 'HH' | 'mm' | 'ss' | 'fff';
+ 	export type Formatter = (date: Date) => string | number;
+ 	export type Dictionary = Record<Defaults | string, Formatter>;
+ 
+diff --git a/readme.md b/readme.md
+index 7c4b332..eb700c3 100644
+--- a/readme.md
++++ b/readme.md
+@@ -81,6 +81,8 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{YY}`: short year; eg: **17**
+ - `{MM}`: month; eg: **04**
+ - `{DD}`: day; eg: **01**
++- `{DDD}`: day of year; eg: **091** (001–366)
++- `{WW}`: week of year; eg: **19** (01–54). Matches Excel `WEEKNUM(date, 2)`: weeks start Monday and week 1 is the week containing Jan 1 (not ISO 8601)
+ - `{HH}`: hours; eg: **06** (24h)
+ - `{mm}`: minutes; eg: **59**
+ - `{ss}`: seconds; eg: **09**
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..fc7772b 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,5 +1,10 @@
+ var RGX = /([^{]*?)\w(?=\})/g;
+ 
++function dayOfYear(d) {
++	// use UTC math on local fields so DST shifts can't skew the day count
++	return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(d.getFullYear(), 0, 1)) / 864e5) + 1;
++}
++
+ var MAP = {
+ 	YYYY: 'getFullYear',
+ 	YY: 'getYear',
+@@ -7,6 +12,12 @@ var MAP = {
+ 		return d.getMonth() + 1;
+ 	},
+ 	DD: 'getDate',
++	DDD: dayOfYear,
++	WW: function (d) {
++		// Excel WEEKNUM(date, 2): weeks start Monday, week 1 contains Jan 1
++		var jan1 = (new Date(d.getFullYear(), 0, 1).getDay() + 6) % 7; // Mon=0..Sun=6
++		return Math.floor((dayOfYear(d) - 1 + jan1) / 7) + 1;
++	},
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+ 	ss: 'getSeconds',
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..d333fa8 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -28,6 +28,28 @@ test('rendering', t => {
+ 	t.is(render('{fff}'), '000', 'returns milliseconds (default 000)');
+ 	t.is(render('{fff}', new Date(1559607289771)), '771', 'returns milliseconds');
+ 
++	t.is(render('{DDD}'), '121', 'returns day of year (padded to 3)');
++	t.is(render('{DDD}', new Date(2017, 0, 1)), '001', 'first day of year is 001');
++	t.is(render('{DDD}', new Date(2017, 11, 31)), '365', 'last day of common year is 365');
++	t.is(render('{DDD}', new Date(2016, 11, 31)), '366', 'last day of leap year is 366');
++	t.is(render('{DDD}', new Date(2016, 2, 1)), '061', 'accounts for leap day (Mar 1, 2016)');
++	t.is(render('{DDD}', new Date(2017, 2, 1)), '060', 'no leap day in common year (Mar 1, 2017)');
++	t.is(render('{DDD}', new Date(2017, 2, 12, 0, 30)), '071', 'unaffected by DST transition days');
++	t.is(render('{DDD}', new Date(2017, 10, 5, 23, 59, 59)), '309', 'unaffected by time of day');
++
++	t.is(render('{WW}'), '19', 'returns week number (default date, Monday)');
++	t.is(render('{WW}', new Date(2017, 0, 1)), '01', 'Jan 1 (Sunday) is week 1');
++	t.is(render('{WW}', new Date(2017, 0, 2)), '02', 'first Monday after Sunday Jan 1 starts week 2');
++	t.is(render('{WW}', new Date(2018, 0, 1)), '01', 'Jan 1 on Monday is week 1');
++	t.is(render('{WW}', new Date(2018, 0, 7)), '01', 'Sunday ends week 1 when Jan 1 is Monday');
++	t.is(render('{WW}', new Date(2018, 0, 8)), '02', 'next Monday starts week 2');
++	t.is(render('{WW}', new Date(2016, 0, 1)), '01', 'Jan 1 on Friday is week 1');
++	t.is(render('{WW}', new Date(2016, 0, 4)), '02', 'Monday after Friday Jan 1 is week 2');
++	t.is(render('{WW}', new Date(2017, 11, 31)), '53', 'Dec 31, 2017 (Sunday) is week 53');
++	t.is(render('{WW}', new Date(2012, 11, 31)), '54', 'Dec 31, 2012 (Monday, leap year starting Sunday) is week 54');
++	t.is(render('{WW}', new Date(2018, 11, 31)), '53', 'Dec 31, 2018 (Monday) is week 53');
++	t.is(render('{WW}', new Date(2017, 2, 12, 0, 30)), '11', 'unaffected by DST transition days');
++
+ 	// formats
+ 	t.is(render('[{HH}:{mm}:{ss}]'), '[16:30:09]', 'returns formatted time string');
+ 	t.is(render('The date is {MM}/{DD}/{YYYY}!'), 'The date is 05/01/2017!', 'returns formatted date string');

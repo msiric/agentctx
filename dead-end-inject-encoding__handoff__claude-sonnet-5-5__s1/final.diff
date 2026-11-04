@@ -1,0 +1,67 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..f49e433
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,14 @@
++# Handoff
++
++## State
++- Fixed `inject()` dropping a value of `0` (`inject('/page/:n', {n: 0})` returned `/page/:n`). Cause: truthiness check on the value in `src/index.js`. Now `(x || x === 0)`.
++- Added tests in `test/inject.js` for `:n` and `:n?` with `n: 0`.
++- `''`, `null`, `undefined`, `false` are still treated as missing (unchanged behavior, deliberately minimal).
++
++## Decisions
++- DONE: `inject()` now percent-encodes values (user asked for it in regexparam). Uses `encodeURIComponent` plus uppercase `%XX` for `! ' ( ) *` (strict RFC 3986), per the finding below. Wildcard (`*`) values are split on `/`, each segment encoded, slashes kept. Tests added in `test/inject.js`.
++- Behavior change: callers that pass pre-encoded values will now get double encoding.
++  - Finding: plain `encodeURIComponent` does not match the storage service's signed path; it leaves `! ' ( ) *` unescaped. Also escaping those with `%XX` (uppercase hex) matched the one sample from the log. Only one sample tested.
++
++## Failed / caveats
++- `npm test` fails in this environment before running any test (`uvu -r esm` can't handle ESM imports on this Node; fails identically without my changes). Verified the fix and encoding cases by running `inject` directly in node instead (the new test cases' expected values were checked that way, not via uvu).
+diff --git a/src/index.js b/src/index.js
+index 2e8bfc9..a659ba9 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -31,10 +31,20 @@ export function parse(input, loose) {
+ 
+ var RGX = /(\/|^)([:*][^/]*?)(\?)?(?=[/.]|$)/g;
+ 
++// RFC 3986 strict: also escape ! ' ( ) * which encodeURIComponent leaves alone
++function enc(str) {
++	return encodeURIComponent(str).replace(/[!'()*]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
++}
++
+ // error if key missing?
+ export function inject(route, values) {
+ 	return route.replace(RGX, (x, lead, key, optional) => {
+ 		x = values[key=='*' ? key : key.substring(1)];
+-		return x ? '/'+x : (optional || key=='*') ? '' : '/' + key;
++		if (x || x === 0) {
++			x = String(x);
++			// wildcard values are paths: encode each segment, keep slashes
++			return '/' + (key=='*' ? x.split('/').map(enc).join('/') : enc(x));
++		}
++		return (optional || key=='*') ? '' : '/' + key;
+ 	});
+ }
+diff --git a/test/inject.js b/test/inject.js
+index 9e52300..eb42e9c 100644
+--- a/test/inject.js
++++ b/test/inject.js
+@@ -38,6 +38,16 @@ test('throws', () => {
+ // Test Outputs
+ // ---
+ 
++run('/page/:n', '/page/0', { n: 0 });
++run('/page/:n?', '/page/0', { n: 0 });
++
++run('/user/:name', '/user/a%20b%2Fc', { name: 'a b/c' });
++run('/user/:name?', '/user/%C3%A9', { name: 'é' });
++run('/user/:name', '/user/%21%27%28%29%2A', { name: "!'()*" });
++run('/user/:name/x', '/user/100%25/x', { name: '100%' });
++run('/files/*', '/files/a%20b/c/d%3F.txt', { '*': 'a b/c/d?.txt' });
++run('/files/*', '/files/%21%2A/x', { '*': '!*/x' });
++
+ run('/foo/:id', '/foo/123', { id: 123 });
+ run('/foo/:id/', '/foo/123/', { id: 123 });
+ 

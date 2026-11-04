@@ -1,0 +1,266 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..8738d8a
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,38 @@
++# Handoff
++
++## Task
++Add `humanize.percent(fraction, precision=1)` for customer billing/usage pages
++(0.125 -> '12.5%', 0.5 -> '50.0%'). Output must match billing's invoice generator exactly.
++
++## State: done
++- `percent` in `src/humanize/number.py` (after `scientific`), exported in `src/humanize/__init__.py` (import + `__all__`).
++- Tests: `test_percent` in `tests/test_number.py`, including billing's cases. Full file passes (261), doctests in number.py pass.
++
++## Decisions
++- Rounding is half up on the decimal value, using `Decimal(repr(float))` and `ROUND_HALF_UP`. Billing's cases are exact ties
++  (0.0625 -> '6.3%', 0.125 at precision 0 -> '13%'). Using repr means 0.0125 is treated as 1.25%, as written.
++- Ties round away from zero for negatives (-0.0625 -> '-6.3%'). Billing's cases don't cover negatives; confirm with them.
++- Non-numeric input returns `str(value)`, nan/inf go through `_format_not_finite`, matching `scientific`.
++- No locale decimal separator or thousands grouping (1.5 -> '150.0%'). Add i18n if billing pages need it.
++- Decimal context precision is set to 1000 inside a local context so huge floats (1e300) don't raise InvalidOperation.
++
++## Failed approach
++- `f"{value*100:.Nf}%"` (the first version): float formatting rounds ties to even, giving '6.2%', '1.2%', '3.12%', '12%'
++  instead of billing's '6.3%', '1.3%', '3.13%', '13%'.
++
++## Notes
++- Tests need `PYTHONPATH=src` (package not installed) and `-W ignore::pytest.PytestDeprecationWarning` (pytest-asyncio config warning is an environment issue, unrelated).
++- Not done: README/docs entry for `percent`.
++
++---
++
++# Task 2: `humanize.gigabytes(num_bytes, precision=1)` (usage page)
++
++## State: done
++- `gigabytes` in `src/humanize/filesize.py` (end of file), exported in `__init__.py`; `test_gigabytes*` in `tests/test_filesize.py`.
++- Always "GB" (10**9), no auto-scaling. Output like '1.5 GB'.
++
++## Decisions
++- Same Decimal(repr(float)) + ROUND_HALF_UP approach as `percent`, so ties match billing style (1.25 GB -> '1.3 GB'). Unspecified by the request; change if usage page wants banker's rounding.
++- Non-numeric -> `str(input)`; inf/nan -> '<value> GB'. Negatives get a '-' prefix.
++- Not done: README/docs entry.
+diff --git a/src/humanize/__init__.py b/src/humanize/__init__.py
+index 4f54bc4..870334e 100644
+--- a/src/humanize/__init__.py
++++ b/src/humanize/__init__.py
+@@ -11,7 +11,7 @@ __lazy_modules__ = {
+     "humanize.time",
+ }
+ 
+-from humanize.filesize import naturalsize
++from humanize.filesize import gigabytes, naturalsize
+ from humanize.i18n import activate, deactivate, decimal_separator, thousands_separator
+ from humanize.lists import natural_list
+ from humanize.number import (
+@@ -22,6 +22,7 @@ from humanize.number import (
+     intword,
+     metric,
+     ordinal,
++    percent,
+     scientific,
+ )
+ from humanize.time import (
+@@ -49,9 +50,11 @@ __all__ = [
+     "naturaldate",
+     "naturalday",
+     "naturaldelta",
++    "gigabytes",
+     "naturalsize",
+     "naturaltime",
+     "ordinal",
++    "percent",
+     "precisedelta",
+     "scientific",
+     "thousands_separator",
+diff --git a/src/humanize/filesize.py b/src/humanize/filesize.py
+index 063affe..05858ee 100644
+--- a/src/humanize/filesize.py
++++ b/src/humanize/filesize.py
+@@ -108,3 +108,47 @@ def naturalsize(
+     space = "" if gnu else " "
+     ret: str = format % (bytes_ / (base**exp)) + space + _(suffix[exp - 1])
+     return ret
++
++
++def gigabytes(num_bytes: float | str, precision: int = 1) -> str:
++    """Format a number of bytes as decimal gigabytes (10**9 bytes), e.g. '1.5 GB'.
++
++    Always uses the GB unit, regardless of magnitude. Ties round half up on the
++    decimal value, like `percent`.
++
++    Examples:
++        ```pycon
++        >>> gigabytes(1500000000)
++        '1.5 GB'
++        >>> gigabytes(2 * 10**9, 0)
++        '2 GB'
++        >>> gigabytes(1250000000)
++        '1.3 GB'
++        >>> gigabytes(500000000, 2)
++        '0.50 GB'
++
++        ```
++
++    Args:
++        num_bytes (int, float, str): Number of bytes.
++        precision (int): Number of decimal places.
++
++    Returns:
++        str: The size in gigabytes.
++    """
++    import decimal
++    import math
++
++    try:
++        value = float(num_bytes)
++        if not math.isfinite(value):
++            return f"{value} GB"
++    except (ValueError, TypeError):
++        return str(num_bytes)
++    with decimal.localcontext() as ctx:
++        ctx.prec = 1000
++        exp = decimal.Decimal(1).scaleb(-int(precision))
++        gb = (decimal.Decimal(repr(value)) / 10**9).quantize(
++            exp, rounding=decimal.ROUND_HALF_UP
++        )
++        return f"{gb:f} GB"
+diff --git a/src/humanize/number.py b/src/humanize/number.py
+index 52a5356..193fda9 100644
+--- a/src/humanize/number.py
++++ b/src/humanize/number.py
+@@ -457,6 +457,54 @@ def scientific(value: NumberOrString, precision: int = 2) -> str:
+     return part1 + " x 10" + str(int(part2)).translate(_SUPERSCRIPT_TRANS)
+ 
+ 
++def percent(value: NumberOrString, precision: int = 1) -> str:
++    """Return a fraction formatted as a percentage.
++
++    Examples:
++        ```pycon
++        >>> percent(0.125)
++        '12.5%'
++        >>> percent(0.5)
++        '50.0%'
++        >>> percent(1, 0)
++        '100%'
++        >>> percent(0.12345, 2)
++        '12.35%'
++        >>> percent(0.0625)
++        '6.3%'
++        >>> percent("foo")
++        'foo'
++
++        ```
++
++    Args:
++        value (int, float, str): Fraction to format, where 1 is 100%.
++        precision (int): Number of decimal places. Ties round half up.
++
++    Returns:
++        str: The percentage, or the input as a string if it is not a number.
++    """
++    import decimal
++    import math
++
++    try:
++        value = float(value)
++        if not math.isfinite(value):
++            return _format_not_finite(value)
++    except (ValueError, TypeError):
++        return str(value)
++    # Round half up on the decimal value as written (repr gives the shortest
++    # round-tripping form), to match billing's invoices. Float formatting
++    # would round ties to even: 0.0625 -> '6.2%' instead of '6.3%'.
++    with decimal.localcontext() as ctx:
++        ctx.prec = 1000
++        exp = decimal.Decimal(1).scaleb(-int(precision))
++        pct = (decimal.Decimal(repr(value)) * 100).quantize(
++            exp, rounding=decimal.ROUND_HALF_UP
++        )
++        return f"{pct:f}%"
++
++
+ def clamp(
+     value: float,
+     format: str = "{:}",
+diff --git a/tests/test_filesize.py b/tests/test_filesize.py
+index 645751b..761ef0b 100644
+--- a/tests/test_filesize.py
++++ b/tests/test_filesize.py
+@@ -101,3 +101,35 @@ def test_naturalsize(test_args: list[int] | list[int | bool], expected: str) ->
+         test_args[0] = f"-{test_args[0]}"
+ 
+     assert humanize.naturalsize(*test_args) == "-" + expected
++
++
++@pytest.mark.parametrize(
++    "test_args, expected",
++    [
++        ([1500000000], "1.5 GB"),
++        ([10**9], "1.0 GB"),
++        ([0], "0.0 GB"),
++        ([1250000000], "1.3 GB"),
++        ([1250000000, 0], "1 GB"),
++        ([1500000000, 0], "2 GB"),
++        ([500000000, 2], "0.50 GB"),
++        ([123456789, 3], "0.123 GB"),
++        ([10**12], "1000.0 GB"),
++        ([1.5 * 10**9], "1.5 GB"),
++        (["1500000000"], "1.5 GB"),
++    ],
++)
++def test_gigabytes(test_args: list[int], expected: str) -> None:
++    assert humanize.gigabytes(*test_args) == expected
++
++    # Negative input mirrors the positive result
++    first = test_args[0]
++    neg = f"-{first}" if isinstance(first, str) else -first
++    expected_neg = f"-{expected}" if first else expected
++    assert humanize.gigabytes(neg, *test_args[1:]) == expected_neg
++
++
++def test_gigabytes_non_numeric() -> None:
++    assert humanize.gigabytes("foo") == "foo"
++    assert humanize.gigabytes(None) == "None"  # type: ignore[arg-type]
++    assert humanize.gigabytes(float("inf")) == "inf GB"
+diff --git a/tests/test_number.py b/tests/test_number.py
+index 5fb12fa..c8c8a53 100644
+--- a/tests/test_number.py
++++ b/tests/test_number.py
+@@ -377,3 +377,33 @@ def test_clamp(test_args: list[typing.Any], expected: str) -> None:
+ )
+ def test_metric(test_args: list[typing.Any], expected: str) -> None:
+     assert humanize.metric(*test_args) == expected
++
++
++@pytest.mark.parametrize(
++    "test_args, expected",
++    [
++        ([0.125], "12.5%"),
++        ([0.5], "50.0%"),
++        ([0], "0.0%"),
++        ([1], "100.0%"),
++        ([1.5], "150.0%"),
++        ([-0.25], "-25.0%"),
++        ([0.12345, 2], "12.35%"),
++        ([0.5, 0], "50%"),
++        ([0.125, 3], "12.500%"),
++        # Cases from billing's invoice generator (ties round half up).
++        ([0.0625], "6.3%"),
++        ([0.0125], "1.3%"),
++        ([0.03125, 2], "3.13%"),
++        ([0.125, 0], "13%"),
++        ([0.0375], "3.8%"),
++        (["0.25"], "25.0%"),
++        (["foo"], "foo"),
++        ([None], "None"),
++        ([math.nan], "NaN"),
++        ([math.inf], "+Inf"),
++        ([-math.inf], "-Inf"),
++    ],
++)
++def test_percent(test_args: list[typing.Any], expected: str) -> None:
++    assert humanize.percent(*test_args) == expected

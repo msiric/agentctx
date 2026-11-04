@@ -1,0 +1,47 @@
+diff --git a/src/index.js b/src/index.js
+index 2e8bfc9..ddeb658 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -34,7 +34,13 @@ var RGX = /(\/|^)([:*][^/]*?)(\?)?(?=[/.]|$)/g;
+ // error if key missing?
+ export function inject(route, values) {
+ 	return route.replace(RGX, (x, lead, key, optional) => {
+-		x = values[key=='*' ? key : key.substring(1)];
+-		return x ? '/'+x : (optional || key=='*') ? '' : '/' + key;
++		var wild = key == '*';
++		x = values[wild ? key : key.substring(1)];
++		if (x || x === 0) {
++			x = '' + x;
++			// wildcard values are paths: encode each segment, keep slashes
++			return '/' + (wild ? x.split('/').map(encodeURIComponent).join('/') : encodeURIComponent(x));
++		}
++		return (optional || wild) ? '' : '/' + key;
+ 	});
+ }
+diff --git a/test/inject.js b/test/inject.js
+index 9e52300..8d73a36 100644
+--- a/test/inject.js
++++ b/test/inject.js
+@@ -77,4 +77,22 @@ run('/foo/:id/', '/foo/:id/', { /* empty */ });
+ run('/:a/:b/:c', '/1/:b/:c', { a: 1 });
+ run('/:a/:b/:c', '/1/:b/3', { a: 1, c: 3 });
+ 
++// NOTE: Zero is a valid value
++run('/page/:n', '/page/0', { n: 0 });
++run('/page/:n?', '/page/0', { n: 0 });
++run('/foo/:a/:b', '/foo/0/0', { a: 0, b: 0 });
++
++// NOTE: Values are percent-encoded
++run('/user/:name', '/user/john%20doe', { name: 'john doe' });
++run('/user/:name?', '/user/a%2Fb', { name: 'a/b' });
++run('/q/:term', '/q/%3F%26%3D%23%25', { term: '?&=#%' });
++run('/user/:name', '/user/caf%C3%A9', { name: 'café' });
++run('/user/:name.json', '/user/a%20b.json', { name: 'a b' });
++
++// NOTE: Wildcard values keep slashes, segments are encoded
++run('/files/*', '/files/a/b/c.txt', { '*': 'a/b/c.txt' });
++run('/files/*', '/files/my%20docs/a%23b.txt', { '*': 'my docs/a#b.txt' });
++run('/files/*?', '/files/x%20y/z', { '*': 'x y/z' });
++run('/:org/*', '/a%20b/c%20d/e', { org: 'a b', '*': 'c d/e' });
++
+ test.run();

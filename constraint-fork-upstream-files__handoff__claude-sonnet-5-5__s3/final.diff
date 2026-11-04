@@ -1,0 +1,116 @@
+diff --git a/.github/workflows/fork-ci.yml b/.github/workflows/fork-ci.yml
+new file mode 100644
+index 0000000..50d1568
+--- /dev/null
++++ b/.github/workflows/fork-ci.yml
+@@ -0,0 +1,24 @@
++name: Fork CI
++
++on: [push, pull_request]
++
++jobs:
++  test:
++    name: Node.js v${{ matrix.node-version }}
++    runs-on: ubuntu-latest
++    timeout-minutes: 3
++    strategy:
++      fail-fast: false
++      matrix:
++        node-version: [18, 20, 22, 24]
++    steps:
++    - uses: actions/checkout@v4
++    - uses: actions/setup-node@v4
++      with:
++        node-version: ${{ matrix.node-version }}
++
++    - name: Install
++      run: npm install
++
++    - name: Tests
++      run: npm test
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..36a7a65
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,25 @@
++# HANDOFF
++
++## State
++- `.github/workflows/fork-ci.yml` (new, ours): matrix on Node 18, 20, 22, 24.
++- `.github/workflows/ci.yml` is untouched, identical to upstream (still Node 6).
++
++## Decisions
++- This is a fork rebased weekly onto upstream (lukeed/mri). Only `src/index.js` is patched
++  in upstream files; everything else of ours goes in NEW files (tests in their own test file).
++  README, types and package.json must stay exactly as upstream. Reason: edits to upstream files cause rebase conflicts.
++- Hence the matrix lives in a separate workflow rather than editing ci.yml.
++- actions/checkout and setup-node at v4 (v2 uses deprecated runtimes). `fail-fast: false` to see all versions.
++- Left `engines.node` (>=4) alone (package.json is off-limits).
++
++## Feature: minimist-style `opts['--']`
++- Patched only `src/index.js`: when `opts['--']` is truthy, `out['--']` is always initialised to `[]` (like minimist) and args after a bare `--` go there (raw strings, not coerced) instead of `_`.
++- Tests are in new file `test/dashdash.js` (README/types untouched per the rules above, so the option is undocumented in README and `index.d.ts`).
++- `npm test` passes: 90 tests (Node 24).
++
++## Failed / superseded
++- First attempt edited ci.yml in place; reverted because it would conflict on rebase.
++
++## Open
++- The upstream Node 6 job in ci.yml still runs alongside ours; can't disable it without editing ci.yml.
++- Workflow not yet run on GitHub. `npm test` passed locally on Node 24 (84 tests).
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..bb41113 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -17,6 +17,7 @@ export default function (args, opts) {
+ 	opts = opts || {};
+ 
+ 	var k, arr, arg, name, val, out={ _:[] };
++	if (opts['--']) out['--'] = [];
+ 	var i=0, j=0, idx=0, len=args.length;
+ 
+ 	const alibi = opts.alias !== void 0;
+@@ -65,7 +66,8 @@ export default function (args, opts) {
+ 		arg = args[i];
+ 
+ 		if (arg === '--') {
+-			out._ = out._.concat(args.slice(++i));
++			if (opts['--']) out['--'] = args.slice(++i);
++			else out._ = out._.concat(args.slice(++i));
+ 			break;
+ 		}
+ 
+diff --git a/test/dashdash.js b/test/dashdash.js
+new file mode 100644
+index 0000000..6ff379e
+--- /dev/null
++++ b/test/dashdash.js
+@@ -0,0 +1,27 @@
++const test = require('tape');
++const fn = require('../lib');
++
++test('-- option: collects args after bare --', t => {
++	t.deepEqual(
++		fn(['a', '--foo', 'x', '--', '--bar', 'b', '-c'], { '--': true }),
++		{ _: ['a'], foo: 'x', '--': ['--bar', 'b', '-c'] }
++	);
++	t.end();
++});
++
++test('-- option: empty array when no bare --', t => {
++	t.deepEqual(fn(['a', '-x'], { '--': true }), { _: ['a'], x: true, '--': [] });
++	t.deepEqual(fn(['a', '--'], { '--': true }), { _: ['a'], '--': [] });
++	t.end();
++});
++
++test('-- option: values are not coerced', t => {
++	t.deepEqual(fn(['--', '1', 'true'], { '--': true })['--'], ['1', 'true']);
++	t.end();
++});
++
++test('-- option: unset keeps default behavior', t => {
++	t.deepEqual(fn(['a', '--', '--b', 'c']), { _: ['a', '--b', 'c'] });
++	t.deepEqual(fn(['--', 'b'], { '--': false }), { _: ['b'] });
++	t.end();
++});

@@ -1,0 +1,106 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..6804f1e
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,20 @@
++# Handoff
++
++## State
++Added `{Q}` (payroll quarter, Australian FY, 1 July start: Jul-Sep=1, Oct-Dec=2, Jan-Mar=3, Apr-Jun=4) in `src/index.js` with tests, `Defaults` type, readme line. `npm test` passes (35/35). Earlier: `{ddd}`, `{MMM}` (fixed English arrays, locale-independent).
++
++## Earlier state
++Also added `{ddd}` (short English weekday: Sun..Sat) via a fixed `DAYS` array in `src/index.js`, with tests, `Defaults` type, and readme entry. `npm test` passes (28/28; `dist` is rebuilt by pretest and gitignored).
++
++Earlier: added `{MMM}` (short English month name: Jan..Dec) to `src/index.js`, with tests in `test/index.js`, the `Defaults` type in `index.d.ts`, and a readme entry. `npm test` passes (24/24).
++
++## Decisions
++- `{ddd}` also uses a fixed English array (not `toLocaleString`) for the same locale-independence reason.
++- Used a fixed English `MONTHS` array rather than `toLocaleString`, so output doesn't depend on the runtime's locale/ICU (this build is vendored into the payroll app).
++- Existing padding logic (`'00' + x).slice(-key.length)`) works unchanged for 3-letter names.
++
++## Failed approaches
++None.
++
++## Upcoming (not started)
++Grants portal also needs a quarter token (not for today), but it uses the US federal fiscal year, which starts 1 October: Oct-Dec = Q1, Jan-Mar = Q2, Apr-Jun = Q3, Jul-Sep = Q4. This differs from the `{Q}` mapping now in this payroll build, so the two must not share one mapping.
+diff --git a/index.d.ts b/index.d.ts
+index 997d7dd..32cf452 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -1,5 +1,5 @@
+ declare module 'tinydate' {
+-	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'HH' | 'mm' | 'ss' | 'fff';
++	type Defaults = 'YYYY' | 'YY' | 'MM' | 'MMM' | 'ddd' | 'Q' | 'DD' | 'HH' | 'mm' | 'ss' | 'fff';
+ 	export type Formatter = (date: Date) => string | number;
+ 	export type Dictionary = Record<Defaults | string, Formatter>;
+ 
+diff --git a/readme.md b/readme.md
+index 7c4b332..91c6dd4 100644
+--- a/readme.md
++++ b/readme.md
+@@ -80,6 +80,9 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{YYYY}`: full year; eg: **2017**
+ - `{YY}`: short year; eg: **17**
+ - `{MM}`: month; eg: **04**
++- `{MMM}`: short month name (English); eg: **Apr**
++- `{ddd}`: short weekday name (English); eg: **Mon**
++- `{Q}`: financial-year quarter (1-4, year starts 1 July); eg: **4**
+ - `{DD}`: day; eg: **01**
+ - `{HH}`: hours; eg: **06** (24h)
+ - `{mm}`: minutes; eg: **59**
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..cae8089 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,11 +1,25 @@
+ var RGX = /([^{]*?)\w(?=\})/g;
+ 
++var MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
++
++var DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
++
+ var MAP = {
+ 	YYYY: 'getFullYear',
+ 	YY: 'getYear',
+ 	MM: function (d) {
+ 		return d.getMonth() + 1;
+ 	},
++	MMM: function (d) {
++		return MONTHS[d.getMonth()];
++	},
++	ddd: function (d) {
++		return DAYS[d.getDay()];
++	},
++	Q: function (d) {
++		// Australian financial year: starts 1 July (Jul-Sep = 1 ... Apr-Jun = 4)
++		return Math.floor(((d.getMonth() + 6) % 12) / 3) + 1;
++	},
+ 	DD: 'getDate',
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..2b5915f 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -18,6 +18,20 @@ test('rendering', t => {
+ 	t.is(render('foo'), 'foo', 'does nothing if no match');
+ 	t.is(render('HH'), 'HH', 'does nothing if no `{}` wrappers');
+ 	t.is(render('{MM}'), '05', 'returns numerical month');
++	t.is(render('{MMM}'), 'May', 'returns short month name');
++	t.is(render('{MMM}', new Date(2017, 0, 1)), 'Jan', 'short month name (January)');
++	t.is(render('{MMM} {DD}, {YYYY}', new Date(2017, 11, 25)), 'Dec 25, 2017', 'short month in formatted string');
++	t.is(render('{ddd}'), 'Mon', 'returns short weekday name');
++	t.is(render('{ddd}', new Date(2017, 4, 7)), 'Sun', 'short weekday (Sunday)');
++	t.is(render('{ddd}', new Date(2017, 4, 13)), 'Sat', 'short weekday (Saturday)');
++	t.is(render('{ddd}, {DD} {MMM}', new Date(2017, 4, 3)), 'Wed, 03 May', 'weekday in formatted string');
++	t.is(render('{Q}'), '4', 'returns financial-year quarter (May = Q4)');
++	t.is(render('{Q}', new Date(2017, 6, 1)), '1', 'Jul = Q1');
++	t.is(render('{Q}', new Date(2017, 8, 30)), '1', 'Sep = Q1');
++	t.is(render('{Q}', new Date(2017, 9, 1)), '2', 'Oct = Q2');
++	t.is(render('{Q}', new Date(2017, 0, 1)), '3', 'Jan = Q3');
++	t.is(render('{Q}', new Date(2017, 3, 1)), '4', 'Apr = Q4');
++	t.is(render('{Q}', new Date(2017, 5, 30)), '4', 'Jun = Q4');
+ 	t.is(render('{DD}'), '01', 'returns numerical day');
+ 	t.is(render('{YY}'), '17', 'returns partial year');
+ 	t.is(render('{YYYY}'), '2017', 'returns full year');

@@ -1,0 +1,1 @@
+- 2026-11-04: Every new public function, method or property must have a runnable >>> doctest example in its docstring. Reason: user runs doctests in CI in all projects and reads the examples first in review.

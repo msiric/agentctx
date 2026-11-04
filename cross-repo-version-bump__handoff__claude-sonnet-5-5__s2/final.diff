@@ -1,0 +1,144 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..b263d38
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,13 @@
++# HANDOFF
++
++## State
++`opts.count` implemented in `src/index.js`, typed in `index.d.ts`, documented in `readme.md`, tested in `test/count.js`. All 95 tests pass (`npm test`; tests run against the built `lib/`).
++
++## Decisions
++- Count keys are also pushed onto `opts.boolean`, so they never swallow the next arg (`-v foo` -> `foo` goes to `_`).
++- Counting happens in `toVal`; all aliases of a key are set to the same total there, so the end-of-parse alias copy can't overwrite with a stale count.
++- `--no-<key>` on a count key sets `0` (not `false`).
++- Absent count flags are omitted unless given in `opts.default`.
++
++## Failed approaches
++- First version summed the counts of every alias name; since all aliases already hold the same total, that double-counted (`-vv --verbose` gave 7). Fixed by using only the current key's total.
+diff --git a/index.d.ts b/index.d.ts
+index a46e43d..b009839 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -7,6 +7,7 @@ declare function mri<T=Default>(args?: string[], options?: mri.Options): mri.Arg
+ declare namespace mri {
+ 	export interface Options {
+ 		boolean?: Arrayable<string>;
++		count?: Arrayable<string>;
+ 		string?: Arrayable<string>;
+ 		alias?: Dict<Arrayable<string>>;
+ 		default?: Dict<any>;
+diff --git a/readme.md b/readme.md
+index bff4a04..319dcbd 100644
+--- a/readme.md
++++ b/readme.md
+@@ -63,6 +63,12 @@ Default: `[]`
+ 
+ A single key (or array of keys) that should be parsed as `Boolean`s.
+ 
++#### options.count
++Type: `Array|String`<br>
++Default: `[]`
++
++A single key (or array of keys) whose value is the number of times the flag was given. Counted flags never consume a value, so `-vvv` yields `{ v: 3 }` and `--verbose --verbose` yields `{ verbose: 2 }`. Aliases share a single count, and `--no-<key>` resets it to `0`.
++
+ #### options.default
+ Type: `Object`<br>
+ Default: `{}`
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..fefc11a 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -9,6 +9,12 @@ function toVal(out, key, val, opts) {
+ 		: !!~opts.boolean.indexOf(key) ? (val === 'false' ? false : val === 'true' || (out._.push((x = +val,x * 0 === 0) ? x : val),!!val))
+ 		: (x = +val,x * 0 === 0) ? x : val
+ 	);
++	if (!!~opts.count.indexOf(key)) {
++		// every alias is kept in sync, so the current total lives on `key`
++		var names = [key].concat(opts.alias[key] || []), m, n = (old > 0 ? old : 0) + (nxt ? 1 : 0);
++		for (m=0; m < names.length; m++) out[names[m]] = n;
++		return;
++	}
+ 	out[key] = old == null ? nxt : (Array.isArray(old) ? old.concat(nxt) : [old, nxt]);
+ }
+ 
+@@ -26,6 +32,7 @@ export default function (args, opts) {
+ 	opts.alias = opts.alias || {};
+ 	opts.string = toArr(opts.string);
+ 	opts.boolean = toArr(opts.boolean);
++	opts.count = toArr(opts.count);
+ 
+ 	if (alibi) {
+ 		for (k in opts.alias) {
+@@ -36,6 +43,13 @@ export default function (args, opts) {
+ 		}
+ 	}
+ 
++	// counted flags never consume a value, and aliases share the count
++	for (i=opts.count.length; i-- > 0;) {
++		arr = opts.alias[opts.count[i]] || [];
++		for (j=arr.length; j-- > 0;) opts.count.push(arr[j]);
++		opts.boolean.push(opts.count[i]);
++	}
++
+ 	for (i=opts.boolean.length; i-- > 0;) {
+ 		arr = opts.alias[opts.boolean[i]] || [];
+ 		for (j=arr.length; j-- > 0;) opts.boolean.push(arr[j]);
+@@ -80,7 +94,7 @@ export default function (args, opts) {
+ 			if (strict && !~keys.indexOf(name)) {
+ 				return opts.unknown(arg);
+ 			}
+-			out[name] = false;
++			out[name] = !!~opts.count.indexOf(name) ? 0 : false;
+ 		} else {
+ 			for (idx=j+1; idx < arg.length; idx++) {
+ 				if (arg.charCodeAt(idx) === 61) break; // "="
+diff --git a/test/count.js b/test/count.js
+new file mode 100644
+index 0000000..b9814d0
+--- /dev/null
++++ b/test/count.js
+@@ -0,0 +1,42 @@
++const test = require('tape');
++const fn = require('../lib');
++
++test('count :: short flags', t => {
++	t.same(fn(['-vvv'], { count: 'v' }), { _: [], v: 3 });
++	t.same(fn(['-v', '-v'], { count: ['v'] }), { _: [], v: 2 });
++	t.same(fn(['-v'], { count: 'v' }), { _: [], v: 1 });
++	t.end();
++});
++
++test('count :: long flags', t => {
++	t.same(fn(['--verbose', '--verbose'], { count: 'verbose' }), { _: [], verbose: 2 });
++	t.end();
++});
++
++test('count :: does not consume values', t => {
++	t.same(fn(['-v', 'foo', '-v'], { count: 'v' }), { _: ['foo'], v: 2 });
++	t.end();
++});
++
++test('count :: mixed with other flags', t => {
++	t.same(fn(['-vvx', '--name', 'bob'], { count: 'v' }), { _: [], v: 2, x: true, name: 'bob' });
++	t.end();
++});
++
++test('count :: aliases share one count', t => {
++	const argv = fn(['-vv', '--verbose'], { count: 'v', alias: { v: 'verbose' } });
++	t.same(argv, { _: [], v: 3, verbose: 3 });
++	t.same(fn(['-v'], { count: 'verbose', alias: { v: 'verbose' } }), { _: [], v: 1, verbose: 1 });
++	t.end();
++});
++
++test('count :: absent flag and defaults', t => {
++	t.same(fn([], { count: 'v' }), { _: [] });
++	t.same(fn([], { count: 'v', default: { v: 0 } }), { _: [], v: 0 });
++	t.end();
++});
++
++test('count :: --no- resets to zero', t => {
++	t.same(fn(['-vv', '--no-v'], { count: 'v' }), { _: [], v: 0 });
++	t.end();
++});

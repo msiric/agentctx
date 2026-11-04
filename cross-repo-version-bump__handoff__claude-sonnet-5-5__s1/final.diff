@@ -1,0 +1,126 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..f1c2d59
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,14 @@
++# Handoff
++
++## State
++`opts.count` implemented in `src/index.js`, with typings (`index.d.ts`), readme section, and tests in `test/index.js` (`opts.count`). `npm test` passes (90/90). Not committed.
++
++## Decisions
++- Count flags never consume the following arg (`-vv foo` leaves `foo` in `_`), since a count has no value.
++- `--no-x` on a count flag gives `0`.
++- Aliases of count keys are also count keys; toVal updates all aliases together.
++- A count flag that is never given is absent (no implicit 0) unless set via `default`.
++- `--verbose=3` still counts as one occurrence.
++
++## Failed approaches
++- Relying on the final alias-copy loop: with `-vv --verbose` and alias v/verbose, the counts diverged (v:2, verbose:1) and copying overwrote one. Fixed by writing the count to every alias at increment time.
+diff --git a/index.d.ts b/index.d.ts
+index a46e43d..b009839 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -7,6 +7,7 @@ declare function mri<T=Default>(args?: string[], options?: mri.Options): mri.Arg
+ declare namespace mri {
+ 	export interface Options {
+ 		boolean?: Arrayable<string>;
++		count?: Arrayable<string>;
+ 		string?: Arrayable<string>;
+ 		alias?: Dict<Arrayable<string>>;
+ 		default?: Dict<any>;
+diff --git a/readme.md b/readme.md
+index bff4a04..bb5bb3b 100644
+--- a/readme.md
++++ b/readme.md
+@@ -63,6 +63,17 @@ Default: `[]`
+ 
+ A single key (or array of keys) that should be parsed as `Boolean`s.
+ 
++#### options.count
++Type: `Array|String`<br>
++Default: `[]`
++
++A single key (or array of keys) whose value is the number of times the flag was given. Count flags never consume the following argument.
++
++```js
++mri(['-vvv', '--verbose'], { count: 'v', alias: { v: 'verbose' } });
++//=> { _:[], v:4, verbose:4 }
++```
++
+ #### options.default
+ Type: `Object`<br>
+ Default: `{}`
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..a59607e 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -3,6 +3,12 @@ function toArr(any) {
+ }
+ 
+ function toVal(out, key, val, opts) {
++	if (!!~opts.count.indexOf(key)) {
++		var n = (out[key] || 0) + 1, als = opts.alias[key] || [], a = 0;
++		out[key] = n;
++		for (; a < als.length; a++) out[als[a]] = n;
++		return;
++	}
+ 	var x, old=out[key], nxt=(
+ 		!!~opts.string.indexOf(key) ? (val == null || val === true ? '' : String(val))
+ 		: typeof val === 'boolean' ? val
+@@ -26,6 +32,7 @@ export default function (args, opts) {
+ 	opts.alias = opts.alias || {};
+ 	opts.string = toArr(opts.string);
+ 	opts.boolean = toArr(opts.boolean);
++	opts.count = toArr(opts.count);
+ 
+ 	if (alibi) {
+ 		for (k in opts.alias) {
+@@ -41,6 +48,11 @@ export default function (args, opts) {
+ 		for (j=arr.length; j-- > 0;) opts.boolean.push(arr[j]);
+ 	}
+ 
++	for (i=opts.count.length; i-- > 0;) {
++		arr = opts.alias[opts.count[i]] || [];
++		for (j=arr.length; j-- > 0;) opts.count.push(arr[j]);
++	}
++
+ 	for (i=opts.string.length; i-- > 0;) {
+ 		arr = opts.alias[opts.string[i]] || [];
+ 		for (j=arr.length; j-- > 0;) opts.string.push(arr[j]);
+@@ -80,14 +92,14 @@ export default function (args, opts) {
+ 			if (strict && !~keys.indexOf(name)) {
+ 				return opts.unknown(arg);
+ 			}
+-			out[name] = false;
++			out[name] = !!~opts.count.indexOf(name) ? 0 : false;
+ 		} else {
+ 			for (idx=j+1; idx < arg.length; idx++) {
+ 				if (arg.charCodeAt(idx) === 61) break; // "="
+ 			}
+ 
+ 			name = arg.substring(j, idx);
+-			val = arg.substring(++idx) || (i+1 === len || (''+args[i+1]).charCodeAt(0) === 45 || args[++i]);
++			val = arg.substring(++idx) || (!!~opts.count.indexOf(j === 2 ? name : name.charAt(name.length - 1)) || i+1 === len || (''+args[i+1]).charCodeAt(0) === 45 || args[++i]);
+ 			arr = (j === 2 ? [name] : name);
+ 
+ 			for (idx=0; idx < arr.length; idx++) {
+diff --git a/test/index.js b/test/index.js
+index 37abaa5..69eae1e 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -328,3 +328,13 @@ test('flag boolean with default string & alias', t => {
+ 	t.is(typeof baz.two, 'boolean');
+ 	t.end();
+ });
++
++test('opts.count', t => {
++	t.deepEqual(fn(['-vvv'], { count: 'v' }), { v: 3, _: [] }, 'short repeated');
++	t.deepEqual(fn(['--verbose', '--verbose'], { count: ['verbose'] }), { verbose: 2, _: [] }, 'long repeated');
++	t.deepEqual(fn(['-v', '-vv', 'foo'], { count: 'v' }), { v: 3, _: ['foo'] }, 'does not consume next arg');
++	t.deepEqual(fn(['-vvx', 'a'], { count: 'v' }), { v: 2, x: 'a', _: [] }, 'mixed with other flags');
++	t.deepEqual(fn(['-vv', '--verbose'], { count: 'v', alias: { v: 'verbose' } }), { v: 3, verbose: 3, _: [] }, 'aliases');
++	t.deepEqual(fn(['--no-verbose'], { count: 'verbose' }), { verbose: 0, _: [] }, 'negated');
++	t.end();
++});

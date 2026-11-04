@@ -1,0 +1,84 @@
+diff --git a/index.d.ts b/index.d.ts
+index 997d7dd..4bdc954 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -1,5 +1,5 @@
+ declare module 'tinydate' {
+-	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'HH' | 'mm' | 'ss' | 'fff';
++	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'DDD' | 'WW' | 'HH' | 'mm' | 'ss' | 'fff';
+ 	export type Formatter = (date: Date) => string | number;
+ 	export type Dictionary = Record<Defaults | string, Formatter>;
+ 
+diff --git a/readme.md b/readme.md
+index 7c4b332..33cee3f 100644
+--- a/readme.md
++++ b/readme.md
+@@ -81,6 +81,8 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{YY}`: short year; eg: **17**
+ - `{MM}`: month; eg: **04**
+ - `{DD}`: day; eg: **01**
++- `{DDD}`: day of the year; eg: **091**
++- `{WW}`: ISO 8601 week of the year (weeks start on Monday); eg: **17**
+ - `{HH}`: hours; eg: **06** (24h)
+ - `{mm}`: minutes; eg: **59**
+ - `{ss}`: seconds; eg: **09**
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..410dc8b 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -7,6 +7,16 @@ var MAP = {
+ 		return d.getMonth() + 1;
+ 	},
+ 	DD: 'getDate',
++	DDD: function (d) {
++		// UTC math keeps DST shifts from skewing the day count
++		return Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(d.getFullYear(), 0, 0)) / 864e5);
++	},
++	WW: function (d) {
++		// ISO 8601 week: weeks start Monday, week 1 contains the year's first Thursday
++		var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
++		t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
++		return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7);
++	},
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+ 	ss: 'getSeconds',
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..eca7b33 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -19,6 +19,7 @@ test('rendering', t => {
+ 	t.is(render('HH'), 'HH', 'does nothing if no `{}` wrappers');
+ 	t.is(render('{MM}'), '05', 'returns numerical month');
+ 	t.is(render('{DD}'), '01', 'returns numerical day');
++	t.is(render('{DDD}'), '121', 'returns padded day of the year');
+ 	t.is(render('{YY}'), '17', 'returns partial year');
+ 	t.is(render('{YYYY}'), '2017', 'returns full year');
+ 	t.is(render('{HH}'), '16', 'returns full hours (24h)');
+@@ -28,6 +29,26 @@ test('rendering', t => {
+ 	t.is(render('{fff}'), '000', 'returns milliseconds (default 000)');
+ 	t.is(render('{fff}', new Date(1559607289771)), '771', 'returns milliseconds');
+ 
++	// day of year
++	t.is(render('{DDD}', new Date(2017, 0, 1)), '001', 'DDD: first day of year');
++	t.is(render('{DDD}', new Date(2017, 11, 31)), '365', 'DDD: last day of common year');
++	t.is(render('{DDD}', new Date(2016, 11, 31)), '366', 'DDD: last day of leap year');
++	t.is(render('{DDD}', new Date(2016, 1, 29)), '060', 'DDD: leap day');
++	t.is(render('{DDD}', new Date(2017, 2, 1)), '060', 'DDD: Mar 1 in common year');
++	t.is(render('{DDD}', new Date(2016, 2, 1)), '061', 'DDD: Mar 1 in leap year');
++	t.is(render('{DDD}', new Date(2017, 2, 12, 0, 30)), '071', 'DDD: unaffected by DST changeover');
++	t.is(render('{DDD}', new Date(2017, 10, 5, 23, 59, 59)), '309', 'DDD: unaffected by time of day');
++
++	// week of year (ISO 8601)
++	t.is(render('{WW}'), '18', 'returns padded week of the year');
++	t.is(render('{WW}', new Date(2017, 0, 1)), '52', 'WW: Sunday Jan 1 belongs to previous ISO year');
++	t.is(render('{WW}', new Date(2017, 0, 2)), '01', 'WW: first Monday starts week 1');
++	t.is(render('{WW}', new Date(2016, 0, 3)), '53', 'WW: week 53 of a long year');
++	t.is(render('{WW}', new Date(2018, 11, 31)), '01', 'WW: late December can be week 1 of next year');
++	t.is(render('{WW}', new Date(2020, 11, 31)), '53', 'WW: Dec 31 2020 is week 53');
++	t.is(render('{WW}', new Date(2017, 2, 12, 0, 30)), '10', 'WW: unaffected by DST changeover');
++	t.is(render('{WW}', new Date(2017, 4, 7, 23, 59, 59)), '18', 'WW: Sunday night stays in same week');
++
+ 	// formats
+ 	t.is(render('[{HH}:{mm}:{ss}]'), '[16:30:09]', 'returns formatted time string');
+ 	t.is(render('The date is {MM}/{DD}/{YYYY}!'), 'The date is 05/01/2017!', 'returns formatted date string');

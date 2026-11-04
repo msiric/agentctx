@@ -1,0 +1,1 @@
+- 2026-11-04: Every new public function, method or property gets a runnable >>> doctest example in its docstring (user runs doctests in CI everywhere and reads examples first in review). Stated 2026-11-04.

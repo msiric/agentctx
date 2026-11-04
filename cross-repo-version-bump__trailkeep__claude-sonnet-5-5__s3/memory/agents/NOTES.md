@@ -1,0 +1,1 @@
+- 2026-11-04: User publishes straight from main after merge, so every change bumps the version in package.json: patch for fixes, minor for new features.
