@@ -2,7 +2,7 @@
 
 Context for coding agents that works the same in **Claude Code**, **Codex CLI** and **GitHub Copilot CLI**. It keeps three kinds of knowledge apart: what's always true about you, what's always true about a repo, and what matters only for the branch you're on. It also keeps an append-only log of why things were decided.
 
-It's a single POSIX shell script that needs only `git`. It never changes your repos' tracked files. In a repo with no notes, effort or log, it adds one short capture rule to a session (about 130 tokens), and nothing at all with `TRAILKEEP_HINT=0`.
+It's a single POSIX shell script that needs only `git`. It never changes your repos' tracked files. In a repo with no notes, effort or log, it adds one short capture rule to a session (about 160 tokens), and nothing at all with `TRAILKEEP_HINT=0`.
 
 ## Install (one command, once per machine)
 

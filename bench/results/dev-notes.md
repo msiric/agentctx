@@ -248,3 +248,26 @@ Reading: the change removes the failure it targeted and costs nothing
 measurable on the dev traps (30 vs 31 of 33 is one run). Released as 0.5.1
 and frozen for held-out set 3. A candidate for later, not part of 0.5.1:
 ask notes to keep a rule as broad as the user stated it.
+
+## 8. Change after held-out set 3: how notes are worded (2026-11-05)
+
+Set 3's trailkeep failures were mostly notes the agent had but misapplied,
+and the dev runs showed a note narrower than the user's rule. Three shapes:
+
+- Too narrow: the user said everything must match billing's rounding, and
+  the note said percent() rounds half up.
+- A status misread as a rule: "switching to -2 is deferred" was read as
+  "keep throwing".
+- The agent's own design stored as a rule: "don't change the default
+  rounding" was the agent's idea, and the next session treated it as the
+  user's.
+
+The capture rule now adds: "Write each note as what the next session should
+do: keep a user's rule as broad as they stated it, and mark choices you made
+yourself as yours." Context in a bare repo goes from 585 to 729 characters
+(about 160 tokens).
+
+Checked as arm `trailkeep@wording` (plan `dev-wording`) on all 34 fact traps
+used so far plus the control, 2 seeds, against 0.5.1 on the same traps
+(`trailkeep@finish` for the dev and set-2 traps, `trailkeep` for set 3). Set 3
+counts as dev from here on.
