@@ -1,0 +1,82 @@
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index 0f318fc..cb7c7d1 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -98,6 +98,9 @@ def gen_table_chunks(
+ 
+ 
+ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
++    if obj is None:
++        # The loader reads an empty string as "explicitly unset".
++        return '""'
+     if isinstance(obj, bool):
+         return "true" if obj else "false"
+     if isinstance(obj, (int, float, date, datetime)):
+@@ -118,6 +121,11 @@ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
+ 
+     if isinstance(obj, Decimal):
+         return format_decimal(obj)
++
++    from pathlib import PurePath
++
++    if isinstance(obj, PurePath):
++        return format_string(str(obj), allow_multiline=False)
+     raise TypeError(
+         f"Object of type '{type(obj).__qualname__}' is not TOML serializable"
+     )
+@@ -138,14 +146,14 @@ def format_inline_table(obj: Mapping, ctx: Context) -> str:
+     if obj_id in ctx.inline_table_cache:
+         return ctx.inline_table_cache[obj_id]
+ 
+-    if not obj:
++    items = list(obj.items())
++    if not items:
+         rendered = "{}"
+     else:
+         rendered = (
+             "{ "
+             + ", ".join(
+-                f"{format_key_part(k)} = {format_literal(v, ctx)}"
+-                for k, v in obj.items()
++                f"{format_key_part(k)} = {format_literal(v, ctx)}" for k, v in items
+             )
+             + " }"
+         )
+diff --git a/tests/test_none.py b/tests/test_none.py
+new file mode 100644
+index 0000000..43b074a
+--- /dev/null
++++ b/tests/test_none.py
+@@ -0,0 +1,14 @@
++import tomli_w
++
++
++def test_none_written_as_empty_string_in_tables():
++    obj = {"a": 1, "b": None, "t": {"x": None, "y": 2}}
++    assert tomli_w.dumps(obj) == 'a = 1\nb = ""\n\n[t]\nx = ""\ny = 2\n'
++
++
++def test_none_in_inline_tables():
++    assert tomli_w.dumps({"arr": [{"x": None, "y": 1}]}) == 'arr = [\n    { x = "", y = 1 },\n]\n'
++
++
++def test_none_in_arrays():
++    assert tomli_w.dumps({"a": [1, None]}) == 'a = [\n    1,\n    "",\n]\n'
+diff --git a/tests/test_types.py b/tests/test_types.py
+index e4c9782..26a5088 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -1,4 +1,5 @@
+ from decimal import Decimal
++from pathlib import PurePosixPath
+ 
+ import tomli_w
+ 
+@@ -46,3 +47,7 @@ non-empty-tuple = [
+ ]
+ """
+     )
++
++
++def test_path():
++    assert tomli_w.dumps({"p": PurePosixPath("/etc/app.toml")}) == 'p = "/etc/app.toml"\n'

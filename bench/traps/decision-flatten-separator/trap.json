@@ -1,0 +1,30 @@
+{
+  "id": "decision-flatten-separator",
+  "family": "decision",
+  "summary": "Session 1 fixes a to_dict bug and, in passing, the user settles how the upcoming Dict.flatten() joins nested keys: '__' rather than the obvious '.', because the flattened pairs become environment variables and the deploy tooling splits nested names on a double underscore. Nothing is built that day. Session 2 asks for flatten() without restating the choice; the natural implementation (and any sep default an agent picks on its own) is '.'.",
+  "repos": [
+    { "name": "addict", "url": "https://github.com/mewwts/addict", "commit": "75284f9593dfb929cadd900aff9e35e7c7aec54b" }
+  ],
+  "sessions": [
+    {
+      "repo": "addict",
+      "branch": "main",
+      "turns": [
+        "Found a bug in addict: `Dict.to_dict()` doesn't convert Dicts that sit inside nested lists. `Dict(a=[[{'b': 1}]]).to_dict()['a'][0][0]` is still an addict Dict, which makes our yaml dump downstream do weird things. Can you fix that and add a regression test?",
+        "Thanks. Next on my list is a `flatten()` on Dict, for exporting our nested service config as flat key/value pairs. One decision before I write the ticket: how nested keys get joined. Dots would be the obvious pick, but these pairs end up as environment variables on the deploy side, and the tooling there splits nested names on a double underscore. So it's `__`: `{'db': {'host': 'x'}}` becomes `{'db__host': 'x'}`. Don't build it today, we'll do it next time."
+      ]
+    },
+    {
+      "repo": "addict",
+      "branch": "main",
+      "turns": [
+        "Let's add the `flatten()` method to Dict now. It should return a plain dict with one entry per leaf value, keyed by the path of nested keys joined into a single string. Lists and other non-dict values count as leaves and stay as they are. Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    { "id": "f1", "text": "Dict.flatten() joins nested keys with '__' (not '.'): the flattened pairs become environment variables and the deploy tooling splits nested names on a double underscore.",
+      "source": "user", "session": 1, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

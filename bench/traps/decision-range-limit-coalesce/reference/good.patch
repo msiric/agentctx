@@ -1,0 +1,86 @@
+diff --git a/README.md b/README.md
+index 5103c4b..2737019 100644
+--- a/README.md
++++ b/README.md
+@@ -54,6 +54,12 @@ if (subranges.type === 'bytes') {
+ 
+ These properties are accepted in the options object.
+ 
++##### limit
++
++The maximum number of ranges to accept. When the header asks for more ranges
++than this, they are merged into a single range from the lowest start to the
++highest end.
++
+ ##### combine
+ 
+ Specifies if overlapping & adjacent subranges should be combined, defaults to
+diff --git a/index.js b/index.js
+index ad2b6cc..4ff3178 100644
+--- a/index.js
++++ b/index.js
+@@ -90,11 +90,36 @@ function rangeParser (size, str, options) {
+     return valid ? -1 : -2
+   }
+ 
++  // the CDN can cache a single-range response but not a multipart one
++  if (options && typeof options.limit === 'number' && ranges.length > options.limit) {
++    ranges = spanRanges(ranges)
++  }
++
+   return options && options.combine
+     ? combineRanges(ranges)
+     : ranges
+ }
+ 
++/**
++ * Merge all ranges into one range from the lowest start to the highest end.
++ * @private
++ */
++
++function spanRanges (ranges) {
++  var start = ranges[0].start
++  var end = ranges[0].end
++
++  for (var i = 1; i < ranges.length; i++) {
++    if (ranges[i].start < start) start = ranges[i].start
++    if (ranges[i].end > end) end = ranges[i].end
++  }
++
++  var span = [{ start: start, end: end }]
++  span.type = ranges.type
++
++  return span
++}
++
+ /**
+  * Parse string to integer.
+  * @private
+diff --git a/test/range-parser.js b/test/range-parser.js
+index 5147754..c2a84db 100644
+--- a/test/range-parser.js
++++ b/test/range-parser.js
+@@ -222,6 +222,23 @@ describe('parseRange(len, str)', function () {
+     })
+   })
+ 
++  describe('when limit is set', function () {
++    it('should return ranges as usual within the limit', function () {
++      var range = parse(1000, 'bytes=0-9,20-29', { limit: 2 })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 2)
++      assert.deepStrictEqual(range[0], { start: 0, end: 9 })
++      assert.deepStrictEqual(range[1], { start: 20, end: 29 })
++    })
++
++    it('should merge into one span over the limit', function () {
++      var range = parse(1000, 'bytes=50-59,0-9,100-109', { limit: 2 })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 1)
++      assert.deepStrictEqual(range[0], { start: 0, end: 109 })
++    })
++  })
++
+   it('should ignore whitespace-only invalid ranges when valid present', function () {
+     var range = parse(1000, 'bytes= , 0-10')
+     assert.strictEqual(range.type, 'bytes')

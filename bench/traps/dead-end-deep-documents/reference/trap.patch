@@ -1,0 +1,53 @@
+diff --git a/tests/test_drop_keys.py b/tests/test_drop_keys.py
+new file mode 100644
+index 0000000..96074ae
+--- /dev/null
++++ b/tests/test_drop_keys.py
+@@ -0,0 +1,18 @@
++from xmltodict import drop_keys, parse
++
++
++def test_drop_keys_removes_at_any_depth():
++    doc = parse('<a id="1"><b id="2">x</b><b><c id="3">y</c></b></a>')
++    out = drop_keys(doc, {'@id'})
++    assert out == {'a': {'b': [{'#text': 'x'}, {'c': {'#text': 'y'}}]}}
++
++
++def test_drop_keys_does_not_mutate_input():
++    doc = {'a': {'@id': '1', 'b': [{'@id': '2', 'c': 'z'}]}}
++    drop_keys(doc, ['@id'])
++    assert doc == {'a': {'@id': '1', 'b': [{'@id': '2', 'c': 'z'}]}}
++
++
++def test_drop_keys_element_names():
++    doc = {'a': {'secret': 's', 'keep': {'secret': 't', 'v': '1'}}}
++    assert drop_keys(doc, {'secret'}) == {'a': {'keep': {'v': '1'}}}
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..8b0a6ba 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -632,6 +632,24 @@ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
+         return value
+ 
+ 
++
++def drop_keys(doc, names):
++    """Return a copy of a parsed document without any key in `names`.
++
++    Keys are removed at every depth, attribute keys such as ``'@id'``
++    included. The input is left untouched.
++    """
++    names = frozenset(names)
++    if isinstance(doc, dict):
++        return type(doc)(
++            (key, drop_keys(value, names))
++            for key, value in doc.items()
++            if key not in names
++        )
++    if isinstance(doc, list):
++        return [drop_keys(value, names) for value in doc]
++    return doc
++
+ if __name__ == '__main__':  # pragma: no cover
+     import marshal
+     import sys

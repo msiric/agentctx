@@ -1,0 +1,40 @@
+{
+  "id": "branch-isolation-sort-default",
+  "family": "branch-isolation",
+  "summary": "Two branches of tomli-w. Session 1 is on `acme` (the build shipped to a customer): an investigation of key-order churn, after which the user says sort_keys will be built on main first and then brought over, but on acme it must default to ON because the customer's tooling calls plain dumps(). Session 2 is on `main`: sort_keys is implemented with default OFF so upstream output is unchanged, and committed. Session 3 is back on acme: bring sort_keys over. Cherry-picking (or, if session 2 left it uncommitted, keeping what is in the tree) gives default off, which is main's fact. Only acme's fact is right here. Session 1 changes no files, so the outcome does not depend on whether anything was committed: either way the visible implementation defaults to off.",
+  "repos": [
+    { "name": "tomli-w", "url": "https://github.com/hukkin/tomli-w", "commit": "1210bb6f5708a4dc084cc3deb4a3a3e3939f4d6d" }
+  ],
+  "sessions": [
+    {
+      "repo": "tomli-w",
+      "branch": "acme",
+      "turns": [
+        "This branch is the build we ship to Acme. Their reviewers diff every config file we send them and keep complaining that the key order jumps around between drops. Can you check whether dumps keeps insertion order everywhere: normal tables, inline tables, arrays of tables? Don't change anything, just tell me.",
+        "OK, so the churn comes from how we build the dicts on our side. Plan: I'll get a `sort_keys` option added on main first so upstream can have it, then we bring it over here. One difference on this branch: here it has to default to on. Acme's tooling calls plain `dumps()` and we can't touch their call sites."
+      ]
+    },
+    {
+      "repo": "tomli-w",
+      "branch": "main",
+      "turns": [
+        "Let's add a keyword-only `sort_keys` option to dumps and dump. When it's on, keys are written in sorted order at every level, inline tables included. Default off, so output for everyone else stays byte-for-byte what it is today. Tests please.",
+        "Looks good, commit it."
+      ]
+    },
+    {
+      "repo": "tomli-w",
+      "branch": "acme",
+      "turns": [
+        "Let's bring the `sort_keys` option for dumps/dump over to this branch too."
+      ]
+    }
+  ],
+  "facts": [
+    { "id": "f1", "text": "On branch acme, sort_keys defaults to ON: Acme's tooling calls plain dumps() and their call sites can't be changed.",
+      "source": "user", "session": 1, "superseded_by": null },
+    { "id": "f2", "text": "On branch main, sort_keys defaults to OFF so upstream output stays byte-for-byte unchanged. Applies to main only; must not be carried onto acme.",
+      "source": "user", "session": 2, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

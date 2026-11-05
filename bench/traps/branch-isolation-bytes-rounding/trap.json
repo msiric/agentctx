@@ -1,0 +1,49 @@
+{
+  "id": "branch-isolation-bytes-rounding",
+  "family": "branch-isolation",
+  "summary": "bytes.format(1048575) gives '1024KB'. On branch billing-ui the user says finance never wants more than actual usage shown: cut decimals, never round up (1023.99KB). On branch capacity-alerts the user says ops want the opposite: round up, never under-report (1MB, 1025 -> 1.01KB). Neither session changes code. The last session, back on billing-ui, makes the fix. The textbook fix (move up to 1MB) and the alerts rule both violate billing's rule; only billing's own fact passes.",
+  "repos": [
+    { "name": "bytes", "url": "https://github.com/visionmedia/bytes.js", "commit": "9ddc13b6c66e0cb293616fba246e05db4b6cef4d" }
+  ],
+  "sessions": [
+    {
+      "repo": "bytes",
+      "branch": "billing-ui",
+      "turns": [
+        "Support says the billing page sometimes shows '1024KB', which comes straight from bytes.format. Can you find out which inputs do that and why? Don't change anything yet.",
+        "For billing, finance's rule is that we never display more than what was actually used. So no rounding up anywhere, cut the extra decimals off instead: 1048575 bytes should show as 1023.99KB, not 1MB, and 2047 bytes as 1.99KB. Finance still has to sign off the wording on the page, so leave the code alone for now."
+      ]
+    },
+    {
+      "repo": "bytes",
+      "branch": "capacity-alerts",
+      "turns": [
+        "This branch is for the capacity-alerts dashboard. It uses bytes.format too and has the same '1024KB' problem. Ops want it the other way round from billing: never show less than the real usage, so round up to the shown precision. 1048575 should be 1MB, 1025 bytes 1.01KB, 2047 bytes 2KB. Can you work out what that change would look like? Just describe it, no code changes yet, ops are still reviewing the alert thresholds."
+      ]
+    },
+    {
+      "repo": "bytes",
+      "branch": "billing-ui",
+      "turns": [
+        "We're cleared to fix the '1024KB' thing in format() now. Let's do it, with tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "On billing-ui: format must never display more than the actual value (finance rule). Extra decimals are cut off everywhere, never rounded up: 1048575 -> 1023.99KB, 2047 -> 1.99KB.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    },
+    {
+      "id": "f2",
+      "text": "On capacity-alerts only: format must never under-report, so it rounds up to the shown precision (1048575 -> 1MB, 1025 -> 1.01KB). Must not be applied on billing-ui.",
+      "source": "user",
+      "session": 2,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

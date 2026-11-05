@@ -1,0 +1,75 @@
+diff --git a/Readme.md b/Readme.md
+index 5790e23..a383303 100644
+--- a/Readme.md
++++ b/Readme.md
+@@ -111,6 +111,8 @@ Supported units and abbreviations are as follows and are case-insensitive:
+   * `tb` for terabytes
+   * `pb` for petabytes
+ 
++The IEC spellings `kib`, `mib`, `gib`, `tib` and `pib` are accepted too and mean the same.
++
+ The units are in powers of two, not ten. This means 1kb = 1024b according to this parser.
+ 
+ **Arguments**
+diff --git a/index.js b/index.js
+index 6f2d0f8..af45496 100644
+--- a/index.js
++++ b/index.js
+@@ -147,6 +147,8 @@ function parse(val) {
+     return null;
+   }
+ 
++  val = stripIecInfix(val);
++
+   // Test if the string passed is valid
+   var results = parseRegExp.exec(val);
+   var floatValue;
+@@ -168,3 +170,29 @@ function parse(val) {
+ 
+   return Math.floor(map[unit] * floatValue);
+ }
++
++/**
++ * Turn an IEC unit ("KiB", "mib", ...) into the matching unit ("KB", "mb", ...).
++ *
++ * @param {string} val
++ * @returns {string}
++ * @private
++ */
++
++function stripIecInfix(val) {
++  var len = val.length;
++
++  if (len < 4) {
++    return val;
++  }
++
++  var last = val.charAt(len - 1).toLowerCase();
++  var infix = val.charAt(len - 2).toLowerCase();
++  var prefix = val.charAt(len - 3).toLowerCase();
++
++  if (last === 'b' && infix === 'i' && 'kmgtp'.indexOf(prefix) !== -1) {
++    return val.slice(0, len - 2) + val.charAt(len - 1);
++  }
++
++  return val;
++}
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..663804e 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -108,4 +108,14 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  it('Should parse IEC units', function(){
++    assert.equal(bytes.parse('1KiB'), 1024);
++    assert.equal(bytes.parse('1kib'), 1024);
++    assert.equal(bytes.parse('1.5 MiB'), 1.5 * Math.pow(1024, 2));
++    assert.equal(bytes.parse('2GiB'), 2 * Math.pow(1024, 3));
++    assert.equal(bytes.parse('1TiB'), Math.pow(1024, 4));
++    assert.equal(bytes.parse('1PiB'), Math.pow(1024, 5));
++    assert.equal(bytes.parse('-1KiB'), -1024);
++  });
+ });

@@ -1,0 +1,84 @@
+diff --git a/tests/test_drop_keys.py b/tests/test_drop_keys.py
+new file mode 100644
+index 0000000..4e626ef
+--- /dev/null
++++ b/tests/test_drop_keys.py
+@@ -0,0 +1,31 @@
++from xmltodict import drop_keys, parse
++
++
++def test_drop_keys_removes_at_any_depth():
++    doc = parse('<a id="1"><b id="2">x</b><b><c id="3">y</c></b></a>')
++    out = drop_keys(doc, {'@id'})
++    assert out == {'a': {'b': [{'#text': 'x'}, {'c': {'#text': 'y'}}]}}
++
++
++def test_drop_keys_does_not_mutate_input():
++    doc = {'a': {'@id': '1', 'b': [{'@id': '2', 'c': 'z'}]}}
++    drop_keys(doc, ['@id'])
++    assert doc == {'a': {'@id': '1', 'b': [{'@id': '2', 'c': 'z'}]}}
++
++
++def test_drop_keys_element_names():
++    doc = {'a': {'secret': 's', 'keep': {'secret': 't', 'v': '1'}}}
++    assert drop_keys(doc, {'secret'}) == {'a': {'keep': {'v': '1'}}}
++
++
++def test_drop_keys_deep_document():
++    n = 3000
++    xml = ('<catalog>' + ''.join(f'<part id="{i}"><name>p{i}</name>' for i in range(n))
++           + '</part>' * n + '</catalog>')
++    out = drop_keys(parse(xml), {'@id'})
++    node, depth = out['catalog'], 0
++    while 'part' in node:
++        node = node['part']
++        assert '@id' not in node
++        depth += 1
++    assert depth == n
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..7e5f04b 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -632,6 +632,42 @@ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
+         return value
+ 
+ 
++
++def drop_keys(doc, names):
++    """Return a copy of a parsed document without any key in `names`.
++
++    Keys are removed at every depth, attribute keys such as ``'@id'``
++    included. The input is left untouched.
++    """
++    names = frozenset(names)
++
++    def shell(obj):
++        if isinstance(obj, dict):
++            return type(obj)()
++        if isinstance(obj, list):
++            return []
++        return obj
++
++    root = shell(doc)
++    stack = [(doc, root)] if root is not doc else []
++    while stack:
++        src, dst = stack.pop()
++        if isinstance(src, dict):
++            for key, value in src.items():
++                if key in names:
++                    continue
++                new = shell(value)
++                dst[key] = new
++                if new is not value:
++                    stack.append((value, new))
++        else:
++            for value in src:
++                new = shell(value)
++                dst.append(new)
++                if new is not value:
++                    stack.append((value, new))
++    return root
++
+ if __name__ == '__main__':  # pragma: no cover
+     import marshal
+     import sys

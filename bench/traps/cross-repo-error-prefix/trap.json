@@ -1,0 +1,36 @@
+{
+  "id": "cross-repo-error-prefix",
+  "family": "cross-repo-preference",
+  "summary": "While adding an options check in pretty-ms, the user asks for error messages to start with the package name ('pretty-ms: Expected ...') in all of his packages, because their log collector drops stack traces. The last session is in parse-ms, whose code uses plain 'Expected ...' messages; the task adds a `largestUnit` option that throws a TypeError for bad values. A no-memory agent copies parse-ms's existing message style.",
+  "repos": [
+    { "name": "pretty-ms", "url": "https://github.com/sindresorhus/pretty-ms", "commit": "a0410bb189906b25000fc118ce06ba84c07971c6" },
+    { "name": "parse-ms", "url": "https://github.com/sindresorhus/parse-ms", "commit": "c065907a36031d0ec5eadd99d93d5a4caf48c376" }
+  ],
+  "sessions": [
+    {
+      "repo": "pretty-ms",
+      "branch": "feature/options-check",
+      "turns": [
+        "People keep calling prettyMilliseconds(ms, 2) thinking the second argument is unitCount, and it gets silently ignored. Make it throw a TypeError when options is passed but isn't an object. Add a test.",
+        "Can you start the error messages with the package name, like 'pretty-ms: Expected …'? I want that in all my packages: a lot of our logs come through a collector that drops stack traces, and then I can't tell which dependency threw. Change the existing one too."
+      ]
+    },
+    {
+      "repo": "parse-ms",
+      "branch": "feature/largest-unit",
+      "turns": [
+        "Let's add a `largestUnit` option to parseMilliseconds: 'days' (the default), 'hours', 'minutes' or 'seconds'. Bigger units roll into it, so {largestUnit: 'hours'} gives hours: 26 instead of days: 1, hours: 2. It should work for bigint input too, and throw a TypeError for any other value. Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "In all of the user's packages, error messages start with the package name (e.g. 'pretty-ms: Expected …'), because their log collector drops stack traces.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

@@ -1,0 +1,31 @@
+{
+  "id": "dead-end-deep-documents",
+  "family": "dead-end",
+  "summary": "Session 1 evaluates xmltodict on a generated supplier catalog shaped like the real ones (parts nested inside parts, 3000 levels). The agent runs it: parse() copes (it is SAX-based), but walking the parsed dict recursively, and unparse(), die with RecursionError. Session 2 asks for a drop_keys() helper over parsed documents 'for the catalog work'. The natural implementation is a short recursive copy (or deepcopy-and-delete), matching unparse's recursive style; it passes every shallow test and dies on a real catalog.",
+  "repos": [
+    { "name": "xmltodict", "url": "https://github.com/martinblech/xmltodict", "commit": "6e29fba282e68631034dd2722a413b4e35276584" }
+  ],
+  "sessions": [
+    {
+      "repo": "xmltodict",
+      "branch": "main",
+      "turns": [
+        "I'm evaluating xmltodict for a supplier's catalog feed before we build anything on it. This one-liner makes a file shaped like their big ones:\n\n    python3 -c \"n=3000; print('<catalog>' + ''.join('<part id=%s><name>p%d</name>' % (repr(str(i)), i) for i in range(n)) + '</part>'*n + '</catalog>')\" > /tmp/catalog.xml\n\nCan you parse it with xmltodict and then, in a scratch script outside the repo, walk the parsed result and collect every part's id? Tell me how it goes.",
+        "And can `unparse` write the parsed document back out?",
+        "OK, thanks. Parsing is what we need for now. Clean up the scratch files."
+      ]
+    },
+    {
+      "repo": "xmltodict",
+      "branch": "main",
+      "turns": [
+        "Let's add a helper to xmltodict for the catalog work: `drop_keys(doc, names)`, which returns a copy of a parsed document with every key in `names` removed at any depth, attribute keys like '@id' included. It must not mutate the input. Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    { "id": "f1", "text": "The supplier catalog documents nest thousands of levels deep (parts inside parts). xmltodict.parse copes, but a recursive walk over the parsed dict (and unparse) fails with RecursionError, so helpers that traverse parsed catalogs must not recurse per level.",
+      "source": "discovered", "session": 1, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

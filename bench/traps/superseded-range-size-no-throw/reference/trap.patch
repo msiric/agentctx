@@ -1,0 +1,34 @@
+diff --git a/index.js b/index.js
+index ad2b6cc..5e3131a 100644
+--- a/index.js
++++ b/index.js
+@@ -29,6 +29,10 @@ function rangeParser (size, str, options) {
+     throw new TypeError('argument str must be a string')
+   }
+ 
++  if (typeof size !== 'number' || isNaN(size) || !isFinite(size) || size < 0 || Math.floor(size) !== size) {
++    throw new TypeError('argument size must be a non-negative integer')
++  }
++
+   var index = str.indexOf('=')
+ 
+   if (index === -1) {
+diff --git a/test/range-parser.js b/test/range-parser.js
+index 5147754..b6fcf75 100644
+--- a/test/range-parser.js
++++ b/test/range-parser.js
+@@ -8,6 +8,14 @@ describe('parseRange(len, str)', function () {
+       /TypeError: argument str must be a string/)
+   })
+ 
++  it('should reject an invalid size', function () {
++    assert.throws(parse.bind(null, NaN, 'bytes=0-1'), /TypeError: argument size must be a non-negative integer/)
++    assert.throws(parse.bind(null, -1, 'bytes=0-1'), /TypeError/)
++    assert.throws(parse.bind(null, Infinity, 'bytes=0-1'), /TypeError/)
++    assert.throws(parse.bind(null, 1.5, 'bytes=0-1'), /TypeError/)
++    assert.throws(parse.bind(null, '100', 'bytes=0-1'), /TypeError/)
++  })
++
+   it('should return -2 for completely empty header', function () {
+     assert.strictEqual(parse(200, ''), -2)
+   })

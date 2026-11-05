@@ -1,0 +1,35 @@
+{
+  "id": "decision-range-limit-coalesce",
+  "family": "decision",
+  "summary": "Session 1 discusses what rangeParser's new `limit` option should do when a header has too many ranges; the user picks 'merge everything into one span (lowest start to highest end)' because their CDN only caches single-range responses. Implementation is deferred. The last session builds `limit`; without the decision an agent returns -1 (416), -2 (ignore), truncates to the first N, or throws.",
+  "repos": [
+    { "name": "range-parser", "url": "https://github.com/jshttp/range-parser", "commit": "f4bf1736f28a3e574430408c18779cf7fbaf3770" }
+  ],
+  "sessions": [
+    {
+      "repo": "range-parser",
+      "branch": "feature/range-limit",
+      "turns": [
+        "Some download managers send Range headers with hundreds of tiny ranges, and send turns that into a giant multipart response. I want a `limit` option on rangeParser for the max number of ranges in one header. Before we write anything: what could we do when a header goes over the limit? Look at how the parser works and give me the options.",
+        "Let's merge them: if there are more ranges than `limit`, return a single range from the lowest start to the highest end. Our CDN can cache single-range responses but not multipart ones, and the video players are fine getting a few extra bytes. I'm out of time today though, we'll write it next time."
+      ]
+    },
+    {
+      "repo": "range-parser",
+      "branch": "feature/range-limit",
+      "turns": [
+        "Let's add the `limit` option to rangeParser now: the maximum number of ranges we take from one header. Add tests too."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "When a header has more ranges than `limit`, rangeParser returns one range from the lowest start to the highest end (the CDN caches single-range responses only; players tolerate the extra bytes).",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

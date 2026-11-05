@@ -1,0 +1,333 @@
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index 0f318fc..dfa5a4b 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -31,10 +31,11 @@ COMPACT_ESCAPES = MappingProxyType(
+ 
+ 
+ class Context:
+-    def __init__(self, allow_multiline: bool, indent: int):
++    def __init__(self, allow_multiline: bool, indent: int, sort_keys: bool = False):
+         if indent < 0:
+             raise ValueError("Indent width must be non-negative")
+         self.allow_multiline: Final = allow_multiline
++        self.sort_keys: Final = sort_keys
+         # cache rendered inline tables (mapping from object id to rendered inline table)
+         self.inline_table_cache: Final[dict[int, str]] = {}
+         self.indent_str: Final = " " * indent
+@@ -47,16 +48,22 @@ def dump(
+     *,
+     multiline_strings: bool = False,
+     indent: int = 4,
++    sort_keys: bool = True,
+ ) -> None:
+-    ctx = Context(multiline_strings, indent)
++    ctx = Context(multiline_strings, indent, sort_keys)
+     for chunk in gen_table_chunks(obj, ctx, name=""):
+         fp.write(chunk.encode())
+ 
+ 
+ def dumps(
+-    obj: Mapping[str, Any], /, *, multiline_strings: bool = False, indent: int = 4
++    obj: Mapping[str, Any],
++    /,
++    *,
++    multiline_strings: bool = False,
++    indent: int = 4,
++    sort_keys: bool = True,
+ ) -> str:
+-    ctx = Context(multiline_strings, indent)
++    ctx = Context(multiline_strings, indent, sort_keys)
+     return "".join(gen_table_chunks(obj, ctx, name=""))
+ 
+ 
+@@ -70,7 +77,7 @@ def gen_table_chunks(
+     yielded = False
+     literals = []
+     tables: list[tuple[str, Any, bool]] = []  # => [(key, value, inside_aot)]
+-    for k, v in table.items():
++    for k, v in items_of(table, ctx):
+         if isinstance(v, Mapping):
+             tables.append((k, v, False))
+         elif is_aot(v) and not all(is_suitable_inline_table(t, ctx) for t in v):
+@@ -145,7 +152,7 @@ def format_inline_table(obj: Mapping, ctx: Context) -> str:
+             "{ "
+             + ", ".join(
+                 f"{format_key_part(k)} = {format_literal(v, ctx)}"
+-                for k, v in obj.items()
++                for k, v in items_of(obj, ctx)
+             )
+             + " }"
+         )
+@@ -212,6 +219,12 @@ def format_string(s: str, *, allow_multiline: bool) -> str:
+         pos += 1
+ 
+ 
++def items_of(table: Mapping[str, Any], ctx: Context) -> Any:
++    if ctx.sort_keys:
++        return sorted(table.items(), key=lambda kv: kv[0])
++    return table.items()
++
++
+ def is_aot(obj: Any) -> bool:
+     """Decides if an object behaves as an array of tables (i.e. a nonempty list
+     of dicts)."""
+diff --git a/tests/test_sort_keys.py b/tests/test_sort_keys.py
+new file mode 100644
+index 0000000..7e68158
+--- /dev/null
++++ b/tests/test_sort_keys.py
+@@ -0,0 +1,40 @@
++import tomli_w
++
++OBJ = {"b": 1, "a": {"y": 2, "x": 1}, "c": [{"q": 1, "p": 2}]}
++
++
++def test_sort_keys_on():
++    assert tomli_w.dumps(OBJ, sort_keys=True) == """\
++b = 1
++c = [
++    { p = 2, q = 1 },
++]
++
++[a]
++x = 1
++y = 2
++"""
++
++
++def test_sort_keys_off_keeps_insertion_order():
++    assert tomli_w.dumps(OBJ, sort_keys=False) == """\
++b = 1
++c = [
++    { q = 1, p = 2 },
++]
++
++[a]
++y = 2
++x = 1
++"""
++
++
++def test_dump_sort_keys(tmp_path):
++    path = tmp_path / "out.toml"
++    with path.open("wb") as f:
++        tomli_w.dump({"b": 1, "a": 2}, f, sort_keys=True)
++    assert path.read_text() == "a = 2\nb = 1\n"
++
++
++def test_sorted_by_default():
++    assert tomli_w.dumps({"b": 1, "a": 2}) == "a = 2\nb = 1\n"
+diff --git a/tests/test_style.py b/tests/test_style.py
+index ca10db3..229d46f 100644
+--- a/tests/test_style.py
++++ b/tests/test_style.py
+@@ -2,6 +2,11 @@ import sys
+ 
+ import tomli_w
+ 
++
++def dumps_unsorted(obj, **kwargs):
++    # These tests pin insertion-order output; this branch sorts by default.
++    return tomli_w.dumps(obj, sort_keys=False, **kwargs)
++
+ if sys.version_info >= (3, 11):
+     import tomllib as tomli
+ else:
+@@ -9,11 +14,11 @@ else:
+ 
+ 
+ def test_newline_before_table():
+-    actual = tomli_w.dumps({"table": {}})
++    actual = dumps_unsorted({"table": {}})
+     expected = "[table]\n"
+     assert actual == expected
+ 
+-    actual = tomli_w.dumps({"table": {"nested": {}, "val3": 3}, "val2": 2, "val1": 1})
++    actual = dumps_unsorted({"table": {"nested": {}, "val3": 3}, "val2": 2, "val1": 1})
+     expected = """\
+ val2 = 2
+ val1 = 1
+@@ -27,11 +32,11 @@ val3 = 3
+ 
+ 
+ def test_empty_doc():
+-    assert tomli_w.dumps({}) == ""
++    assert dumps_unsorted({}) == ""
+ 
+ 
+ def test_dont_write_redundant_tables():
+-    actual = tomli_w.dumps({"tab1": {"tab2": {"tab3": {}}}})
++    actual = dumps_unsorted({"tab1": {"tab2": {"tab3": {}}}})
+     expected = "[tab1.tab2.tab3]\n"
+     assert actual == expected
+ 
+@@ -41,7 +46,7 @@ def test_multiline():
+         "This is longer than threshold!\n"
+         "Should be formatted as a multiline basic string"
+     )
+-    actual = tomli_w.dumps({"ml_string": multiline_string}, multiline_strings=True)
++    actual = dumps_unsorted({"ml_string": multiline_string}, multiline_strings=True)
+     expected = '''\
+ ml_string = """
+ This is longer than threshold!
+@@ -51,7 +56,7 @@ Should be formatted as a multiline basic string"""
+ 
+ 
+ def test_only_tables():
+-    actual = tomli_w.dumps({"tab1": {}, "tab2": {}})
++    actual = dumps_unsorted({"tab1": {}, "tab2": {}})
+     expected = """\
+ [tab1]
+ 
+@@ -61,7 +66,7 @@ def test_only_tables():
+ 
+ 
+ def test_tricky_keys():
+-    actual = tomli_w.dumps({"f": 1, "tab1": {}, "": {"f": 2, "": {"": 1}}, "tab3": {}})
++    actual = dumps_unsorted({"f": 1, "tab1": {}, "": {"f": 2, "": {"": 1}}, "tab3": {}})
+     expected = """\
+ f = 1
+ 
+@@ -79,7 +84,7 @@ f = 2
+ 
+ 
+ def test_nested_keys():
+-    actual = tomli_w.dumps(
++    actual = dumps_unsorted(
+         {
+             "k": 1,
+             "a": {"b": {"c": {"d": {"e": {"f": {}}, "e2": {"f2": {}}}, "d_key1": 1}}},
+@@ -109,7 +114,7 @@ a = [
+     3,
+ ]
+ """
+-    actual = tomli_w.dumps(example)
++    actual = dumps_unsorted(example)
+     assert actual == expected
+     assert tomli.loads(actual) == example
+ 
+@@ -123,7 +128,7 @@ a = [
+     3,
+ ]
+ """
+-    actual = tomli_w.dumps(example)
++    actual = dumps_unsorted(example)
+     assert actual == expected
+ 
+ 
+@@ -143,7 +148,7 @@ long-value = "Lorem ipsum sith"
+ another-long-value = "consectetur adipis"
+ simple-value = 3
+ """
+-    actual = tomli_w.dumps(example)
++    actual = dumps_unsorted(example)
+     assert actual == expected
+     assert tomli.loads(actual) == example
+ 
+@@ -159,7 +164,7 @@ nested-array = [
+     {{ c = 2 }},
+ ]
+ """
+-    actual = tomli_w.dumps(example)
++    actual = dumps_unsorted(example)
+     assert actual == expected
+ 
+ 
+@@ -190,7 +195,7 @@ another_array = [
+ [[table.nested_table]]
+ c = 3
+ """
+-    actual = tomli_w.dumps(example)
++    actual = dumps_unsorted(example)
+     assert actual == expected
+     assert tomli.loads(actual) == example
+ 
+@@ -202,7 +207,7 @@ def test_table_with_empty_array():
+ [table]
+ array = []
+ """
+-    actual = tomli_w.dumps(example)
++    actual = dumps_unsorted(example)
+     assert actual == expected
+     assert tomli.loads(actual) == example
+ 
+@@ -253,7 +258,7 @@ another-long-value = "consectetur adipiscing elit"
+ a-third-one = "sed do eiusmod tempor incididunt ut labore et dolore magna"
+ simple-value = 3
+ """
+-    actual = tomli_w.dumps(example)
++    actual = dumps_unsorted(example)
+     assert actual == expected
+     assert tomli.loads(actual) == example
+ 
+@@ -261,7 +266,7 @@ simple-value = 3
+ def test_multiline_in_aot():
+     data = {"aot": [{"multiline_string": "line1\nline2"}]}
+     assert (
+-        tomli_w.dumps(data, multiline_strings=True)
++        dumps_unsorted(data, multiline_strings=True)
+         == '''\
+ [[aot]]
+ multiline_string = """
+@@ -270,7 +275,7 @@ line2"""
+ '''
+     )
+     assert (
+-        tomli_w.dumps(data, multiline_strings=False)
++        dumps_unsorted(data, multiline_strings=False)
+         == """\
+ aot = [
+     { multiline_string = "line1\\nline2" },
+@@ -282,7 +287,7 @@ aot = [
+ def test_array_indent_override():
+     data = {"k0": ["v1", "v2", ["v3", "v4"]]}
+     assert (
+-        tomli_w.dumps(data, indent=2)
++        dumps_unsorted(data, indent=2)
+         == """\
+ k0 = [
+   "v1",
+@@ -295,7 +300,7 @@ k0 = [
+ """
+     )
+     assert (
+-        tomli_w.dumps(data, indent=0)
++        dumps_unsorted(data, indent=0)
+         == """\
+ k0 = [
+ "v1",
+diff --git a/tests/test_types.py b/tests/test_types.py
+index e4c9782..82a4d7c 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -3,6 +3,11 @@ from decimal import Decimal
+ import tomli_w
+ 
+ 
++def dumps_unsorted(obj, **kwargs):
++    # These tests pin insertion-order output; this branch sorts by default.
++    return tomli_w.dumps(obj, sort_keys=False, **kwargs)
++
++
+ def test_decimal():
+     obj = {
+         "decimal-0": Decimal("0"),
+@@ -16,7 +21,7 @@ def test_decimal():
+         "float-2E16": float("2E16"),
+     }
+     assert (
+-        tomli_w.dumps(obj)
++        dumps_unsorted(obj)
+         == """\
+ decimal-0 = 0.0
+ decimal-4 = 4.0
+@@ -34,7 +39,7 @@ float-2E16 = 2e+16
+ def test_tuple():
+     obj = {"empty-tuple": (), "non-empty-tuple": (1, (2, 3))}
+     assert (
+-        tomli_w.dumps(obj)
++        dumps_unsorted(obj)
+         == """\
+ empty-tuple = []
+ non-empty-tuple = [

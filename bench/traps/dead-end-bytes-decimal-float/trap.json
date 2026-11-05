@@ -1,0 +1,36 @@
+{
+  "id": "dead-end-bytes-decimal-float",
+  "family": "dead-end",
+  "summary": "Session 1 spikes decimal (SI) units for bytes.parse by multiplying the parsed float by 1000^n and flooring, the way parse already does for 1024-based units. Running it on the vendor's values shows it loses a byte ('2.01 kB' -> 2009, '4.1 MB' -> 4099999) because of binary float error; the agent has to scale the decimal string exactly. The spike is reverted. The last session builds the feature for real; a no-memory agent repeats the multiply-and-floor approach, which passes ordinary tests like '1.5 kB'.",
+  "repos": [
+    { "name": "bytes", "url": "https://github.com/visionmedia/bytes.js", "commit": "9ddc13b6c66e0cb293616fba246e05db4b6cef4d" }
+  ],
+  "sessions": [
+    {
+      "repo": "bytes",
+      "branch": "feature/decimal-units",
+      "turns": [
+        "Our storage vendor reports sizes in decimal units, 1 kB = 1000 bytes. Can you spike `bytes.parse(str, {decimal: true})` so kB/MB/GB/TB/PB are powers of 1000? Fractional bytes should be floored like parse does today. Quick and dirty is fine, I just want to see what it looks like.",
+        "Try it on a few values from their last export: '2.01 kB', '4.1 MB', '8.2 GB' and '16.9 TB'. On their side those are all exact byte counts.",
+        "Good to know. Throw the spike away for now though, revert everything. Product hasn't decided yet whether this goes into parse() or gets its own function."
+      ]
+    },
+    {
+      "repo": "bytes",
+      "branch": "feature/decimal-units",
+      "turns": [
+        "Product decided: decimal units go into parse() as `bytes.parse(value, {decimal: true})`. With the option, kB, MB, GB, TB and PB are powers of 1000 and fractional bytes get floored like today; without it nothing changes. Let's build it, with tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Multiplying the parsed float by 1000^n and flooring is off by one byte for many decimal inputs ('2.01 kB' -> 2009, '4.1 MB' -> 4099999); the decimal value has to be scaled exactly (e.g. by moving the decimal point in the string) before flooring.",
+      "source": "discovered",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

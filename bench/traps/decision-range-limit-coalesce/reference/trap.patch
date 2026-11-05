@@ -1,0 +1,38 @@
+diff --git a/index.js b/index.js
+index ad2b6cc..4b89032 100644
+--- a/index.js
++++ b/index.js
+@@ -90,6 +90,11 @@ function rangeParser (size, str, options) {
+     return valid ? -1 : -2
+   }
+ 
++  // too many ranges: treat the header as unsatisfiable
++  if (options && options.limit !== undefined && ranges.length > options.limit) {
++    return -1
++  }
++
+   return options && options.combine
+     ? combineRanges(ranges)
+     : ranges
+diff --git a/test/range-parser.js b/test/range-parser.js
+index 5147754..cb30786 100644
+--- a/test/range-parser.js
++++ b/test/range-parser.js
+@@ -222,6 +222,17 @@ describe('parseRange(len, str)', function () {
+     })
+   })
+ 
++  describe('when limit is set', function () {
++    it('should return ranges within the limit', function () {
++      var range = parse(1000, 'bytes=0-9,20-29', { limit: 2 })
++      assert.strictEqual(range.length, 2)
++    })
++
++    it('should return -1 over the limit', function () {
++      assert.strictEqual(parse(1000, 'bytes=0-9,20-29,40-49', { limit: 2 }), -1)
++    })
++  })
++
+   it('should ignore whitespace-only invalid ranges when valid present', function () {
+     var range = parse(1000, 'bytes= , 0-10')
+     assert.strictEqual(range.type, 'bytes')

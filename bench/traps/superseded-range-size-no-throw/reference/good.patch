@@ -1,0 +1,52 @@
+diff --git a/index.js b/index.js
+index ad2b6cc..6c4ca1d 100644
+--- a/index.js
++++ b/index.js
+@@ -29,6 +29,11 @@ function rangeParser (size, str, options) {
+     throw new TypeError('argument str must be a string')
+   }
+ 
++  // the edge worker dies on an exception, so a bad size means "ignore the header"
++  if (!isValidSize(size)) {
++    return -2
++  }
++
+   var index = str.indexOf('=')
+ 
+   if (index === -1) {
+@@ -95,6 +100,15 @@ function rangeParser (size, str, options) {
+     : ranges
+ }
+ 
++/**
++ * Check that size is a non-negative integer.
++ * @private
++ */
++
++function isValidSize (size) {
++  return typeof size === 'number' && size >= 0 && isFinite(size) && Math.floor(size) === size
++}
++
+ /**
+  * Parse string to integer.
+  * @private
+diff --git a/test/range-parser.js b/test/range-parser.js
+index 5147754..4510533 100644
+--- a/test/range-parser.js
++++ b/test/range-parser.js
+@@ -8,6 +8,15 @@ describe('parseRange(len, str)', function () {
+       /TypeError: argument str must be a string/)
+   })
+ 
++  it('should return -2 for an invalid size', function () {
++    assert.strictEqual(parse(NaN, 'bytes=0-1'), -2)
++    assert.strictEqual(parse(-1, 'bytes=0-1'), -2)
++    assert.strictEqual(parse(Infinity, 'bytes=0-1'), -2)
++    assert.strictEqual(parse(1.5, 'bytes=0-1'), -2)
++    assert.strictEqual(parse('100', 'bytes=0-1'), -2)
++    assert.strictEqual(parse(undefined, 'bytes=0-1'), -2)
++  })
++
+   it('should return -2 for completely empty header', function () {
+     assert.strictEqual(parse(200, ''), -2)
+   })

@@ -1,0 +1,87 @@
+diff --git a/Readme.md b/Readme.md
+index 5790e23..532fdd3 100644
+--- a/Readme.md
++++ b/Readme.md
+@@ -97,7 +97,7 @@ bytes.format(1024, {unitSeparator: ' '});
+ // output: '1 KB'
+ ```
+ 
+-#### bytes.parse(string｜number value): number｜null
++#### bytes.parse(string｜number value, [options]): number｜null
+ 
+ Parse the string value into an integer in bytes. If no unit is given, or `value`
+ is a number, it is assumed the value is in bytes.
+@@ -112,6 +112,7 @@ Supported units and abbreviations are as follows and are case-insensitive:
+   * `pb` for petabytes
+ 
+ The units are in powers of two, not ten. This means 1kb = 1024b according to this parser.
++Pass `{decimal: true}` to use powers of ten instead (1kB = 1000b).
+ 
+ **Arguments**
+ 
+diff --git a/index.js b/index.js
+index 6f2d0f8..dea02a5 100644
+--- a/index.js
++++ b/index.js
+@@ -34,6 +34,15 @@ var map = {
+   pb: Math.pow(1024, 5),
+ };
+ 
++var decimalMap = {
++  b:  1,
++  kb: 1e3,
++  mb: 1e6,
++  gb: 1e9,
++  tb: 1e12,
++  pb: 1e15,
++};
++
+ var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
+ 
+ /**
+@@ -133,12 +142,14 @@ function format(value, options) {
+  * If no unit is given, it is assumed the value is in bytes.
+  *
+  * @param {number|string} val
++ * @param {object} [options]
++ * @param {boolean} [options.decimal=false] use powers of 1000 for units
+  *
+  * @returns {number|null}
+  * @public
+  */
+ 
+-function parse(val) {
++function parse(val, options) {
+   if (typeof val === 'number' && !isNaN(val)) {
+     return val;
+   }
+@@ -166,5 +177,7 @@ function parse(val) {
+     return null;
+   }
+ 
+-  return Math.floor(map[unit] * floatValue);
++  var units = options && options.decimal ? decimalMap : map;
++
++  return Math.floor(units[unit] * floatValue);
+ }
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..144a395 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -108,4 +108,16 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  it('Should use powers of 1000 with decimal option', function(){
++    assert.equal(bytes.parse('1kB', {decimal: true}), 1000);
++    assert.equal(bytes.parse('1.5 kB', {decimal: true}), 1500);
++    assert.equal(bytes.parse('2MB', {decimal: true}), 2000000);
++    assert.equal(bytes.parse('3GB', {decimal: true}), 3000000000);
++    assert.equal(bytes.parse('1TB', {decimal: true}), 1e12);
++    assert.equal(bytes.parse('1PB', {decimal: true}), 1e15);
++    assert.equal(bytes.parse('1.0007kB', {decimal: true}), 1000);
++    assert.equal(bytes.parse('100', {decimal: true}), 100);
++    assert.equal(bytes.parse('1kb', {decimal: false}), 1024);
++  });
+ });

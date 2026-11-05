@@ -1,0 +1,93 @@
+diff --git a/Readme.md b/Readme.md
+index 5790e23..d493252 100644
+--- a/Readme.md
++++ b/Readme.md
+@@ -52,8 +52,8 @@ bytes('1KB');
+ 
+ #### bytes.format(number value, [options]): string｜null
+ 
+-Format the given value in bytes into a string. If the value is negative, it is kept as such. If it is a float, it is
+- rounded.
++Format the given value in bytes into a string. If the value is negative, it is kept as such. Extra decimal places
++ are cut off, never rounded up, so the output is never more than the value.
+ 
+ **Arguments**
+ 
+diff --git a/index.js b/index.js
+index 6f2d0f8..5bf94f0 100644
+--- a/index.js
++++ b/index.js
+@@ -66,8 +66,8 @@ function bytes(value, options) {
+ /**
+  * Format the given value in bytes into a string.
+  *
+- * If the value is negative, it is kept as such. If it is a float,
+- * it is rounded.
++ * If the value is negative, it is kept as such. Extra decimal places
++ * are cut off, never rounded up.
+  *
+  * @param {number} value
+  * @param {object} [options]
+@@ -110,7 +110,7 @@ function format(value, options) {
+   }
+ 
+   var val = value / map[unit.toLowerCase()];
+-  var str = val.toFixed(decimalPlaces);
++  var str = truncate(val, decimalPlaces);
+ 
+   if (!fixedDecimals) {
+     str = str.replace(formatDecimalsRegExp, '$1');
+@@ -127,6 +127,25 @@ function format(value, options) {
+   return str + unitSeparator + unit;
+ }
+ 
++/**
++ * Cut a number down to the given decimal places without rounding up.
++ * Billing must never show more than was actually used.
++ *
++ * @param {number} value
++ * @param {number} decimalPlaces
++ * @returns {string}
++ * @private
++ */
++
++function truncate(value, decimalPlaces) {
++  var factor = Math.pow(10, decimalPlaces);
++  // toPrecision drops float noise like 11004.999999999998 before the digits are cut
++  var scaled = Number((Math.abs(value) * factor).toPrecision(15));
++  var cut = Math.floor(scaled) / factor;
++
++  return (value < 0 ? -cut : cut).toFixed(decimalPlaces);
++}
++
+ /**
+  * Parse the string value into an integer in bytes.
+  *
+diff --git a/test/byte-format.js b/test/byte-format.js
+index 7e82cee..17ff72d 100644
+--- a/test/byte-format.js
++++ b/test/byte-format.js
+@@ -90,14 +90,21 @@ describe('Test byte format function', function(){
+     assert.equal(bytes.format(kb - 1, {decimalPlaces: 0}).toLowerCase(), '1023b');
+     assert.equal(bytes.format(kb, {decimalPlaces: 0}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(1.4 * kb, {decimalPlaces: 0}).toLowerCase(), '1kb');
+-    assert.equal(bytes.format(1.5 * kb, {decimalPlaces: 0}).toLowerCase(), '2kb');
++    assert.equal(bytes.format(1.5 * kb, {decimalPlaces: 0}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(kb - 1, {decimalPlaces: 1}).toLowerCase(), '1023b');
+     assert.equal(bytes.format(kb, {decimalPlaces: 1}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(1.04 * kb, {decimalPlaces: 1}).toLowerCase(), '1kb');
+-    assert.equal(bytes.format(1.05 * kb, {decimalPlaces: 1}).toLowerCase(), '1.1kb');
++    assert.equal(bytes.format(1.05 * kb, {decimalPlaces: 1}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(1.1005 * kb, {decimalPlaces: 4}).toLowerCase(), '1.1005kb');
+   });
+ 
++  it('Should never show more than the actual value', function(){
++    assert.equal(bytes.format(mb - 1), '1023.99KB');
++    assert.equal(bytes.format(gb - 1), '1023.99MB');
++    assert.equal(bytes.format(2 * kb - 1), '1.99KB');
++    assert.equal(bytes.format(-(mb - 1)), '-1023.99KB');
++  });
++
+   it('Should support fixed decimal places', function(){
+     assert.equal(bytes.format(kb, {decimalPlaces: 3, fixedDecimals: true}).toLowerCase(), '1.000kb');
+   });

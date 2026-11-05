@@ -1,0 +1,31 @@
+{
+  "id": "cross-repo-keyword-only-options",
+  "family": "cross-repo-preference",
+  "summary": "In xmltodict (repo A) the user adds an unparse option and states a personal rule for all their projects: every new optional parameter is keyword-only (after a bare `*`). The last session is in addict (repo B), whose methods all take plain positional-or-keyword parameters (e.g. freeze(self, shouldFreeze=True)), and asks for a skip_none flag on Dict.to_dict(). The natural signature, matching addict's style, is to_dict(self, skip_none=False).",
+  "repos": [
+    { "name": "xmltodict", "url": "https://github.com/martinblech/xmltodict", "commit": "6e29fba282e68631034dd2722a413b4e35276584" },
+    { "name": "addict", "url": "https://github.com/mewwts/addict", "commit": "75284f9593dfb929cadd900aff9e35e7c7aec54b" }
+  ],
+  "sessions": [
+    {
+      "repo": "xmltodict",
+      "branch": "main",
+      "turns": [
+        "Add a `sort_attributes` option to `unparse` that writes each element's attributes in sorted name order instead of dict order. Off by default. Tests please.",
+        "Make sure the new option is keyword-only. That's a rule for all my projects, not just this one: any new optional parameter goes after a `*`. Positional booleans at call sites are unreadable and they make reordering parameters a breaking change."
+      ]
+    },
+    {
+      "repo": "addict",
+      "branch": "main",
+      "turns": [
+        "Add a `skip_none` flag to `Dict.to_dict()` that leaves out keys whose value is None, at every level, including dicts inside lists. Off by default. Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    { "id": "f1", "text": "Personal rule across all the user's projects: every new optional parameter is keyword-only (placed after a bare `*`).",
+      "source": "user", "session": 1, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

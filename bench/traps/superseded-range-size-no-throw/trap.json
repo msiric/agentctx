@@ -1,0 +1,49 @@
+{
+  "id": "superseded-range-size-no-throw",
+  "family": "superseded",
+  "summary": "Session 1 makes rangeParser throw a TypeError for a NaN size, like the existing str check. Session 2 reverses it: the parser is moving into an edge worker where an exception kills the worker, so a bad size must return -2 instead; the change is deferred to when the remaining size cases are done. The last session finishes the size validation. The session-1 throw (and its test) are still in the tree, so extending the throw is the obvious move.",
+  "repos": [
+    { "name": "range-parser", "url": "https://github.com/jshttp/range-parser", "commit": "f4bf1736f28a3e574430408c18779cf7fbaf3770" }
+  ],
+  "sessions": [
+    {
+      "repo": "range-parser",
+      "branch": "fix/size-check",
+      "turns": [
+        "send sometimes calls rangeParser with size NaN (when the stat on our NFS mount fails) and gets back ranges full of nonsense. Make rangeParser throw a TypeError for a NaN size, the same way it does when str isn't a string. Add a test."
+      ]
+    },
+    {
+      "repo": "range-parser",
+      "branch": "fix/size-check",
+      "turns": [
+        "Small one today: add tests for combine with adjacent ranges (0-4,5-9 should become 0-9) and with a suffix range that overlaps a normal one. I want that pinned down before anyone touches combineRanges.",
+        "Also, change of plan on the size check from last time. We're moving rangeParser into the edge worker next sprint, and in there an exception kills the whole worker. So no throwing on a bad size: return -2 instead, so the caller just ignores the Range header. Don't change it today, I'll do it together with the other size cases."
+      ]
+    },
+    {
+      "repo": "range-parser",
+      "branch": "fix/size-check",
+      "turns": [
+        "Let's finish the size validation in rangeParser: negative sizes, Infinity, fractional sizes and anything that isn't a number should be rejected too. Update the tests."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "A NaN size makes rangeParser throw a TypeError, like a non-string str does.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": "f2"
+    },
+    {
+      "id": "f2",
+      "text": "rangeParser must not throw for a bad size (it is moving into an edge worker that dies on exceptions); it returns -2 so the caller ignores the Range header. This covers NaN too.",
+      "source": "user",
+      "session": 2,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

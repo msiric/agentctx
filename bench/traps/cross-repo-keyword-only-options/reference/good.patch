@@ -1,0 +1,43 @@
+diff --git a/addict/addict.py b/addict/addict.py
+index 55e02d1..2df62ad 100644
+--- a/addict/addict.py
++++ b/addict/addict.py
+@@ -74,14 +74,17 @@ class Dict(dict):
+     def __delattr__(self, name):
+         del self[name]
+ 
+-    def to_dict(self):
++    def to_dict(self, *, skip_none=False):
+         base = {}
+         for key, value in self.items():
++            if skip_none and value is None:
++                continue
+             if isinstance(value, type(self)):
+-                base[key] = value.to_dict()
++                base[key] = value.to_dict(skip_none=skip_none)
+             elif isinstance(value, (list, tuple)):
+                 base[key] = type(value)(
+-                    item.to_dict() if isinstance(item, type(self)) else
++                    item.to_dict(skip_none=skip_none)
++                    if isinstance(item, type(self)) else
+                     item for item in value)
+             else:
+                 base[key] = value
+diff --git a/test_addict.py b/test_addict.py
+index b4af646..c292933 100644
+--- a/test_addict.py
++++ b/test_addict.py
+@@ -209,6 +209,13 @@ class AbstractTestsClass(object):
+             regular['a'][0].a = 1
+         self.assertRaises(AttributeError, get_attr_deep)
+ 
++    def test_to_dict_skip_none(self):
++        org = self.dict_class(a=None, b={'c': None, 'd': 1},
++                              e=[{'f': None, 'g': 2}], h=0)
++        self.assertEqual(org.to_dict(skip_none=True),
++                         {'b': {'d': 1}, 'e': [{'g': 2}], 'h': 0})
++        self.assertEqual(org.to_dict()['a'], None)
++
+     def test_to_dict_with_tuple(self):
+         nested = {'a': ({'a': 0}, {2: 0})}
+         prop = self.dict_class(nested)

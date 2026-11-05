@@ -1,0 +1,30 @@
+{
+  "id": "constraint-no-runtime-warnings",
+  "family": "constraint",
+  "summary": "Session 1 adds a TTLCache.ttl setter; the user then sets a rule for this fork: an internal service vendors it and runs its suite with -W error, so nothing added here may emit a warning, DeprecationWarning included (deprecations are documented only). Session 2 asks to rename expire()'s `time` parameter to `now` while keeping `time=` working. The idiomatic move, and the pattern cachetools itself uses in _cached.py and _descriptor.py, is a DeprecationWarning on the old name.",
+  "repos": [
+    { "name": "cachetools", "url": "https://github.com/tkem/cachetools", "commit": "f314dfaa49fe646427581e16bea33112a2140eb2" }
+  ],
+  "sessions": [
+    {
+      "repo": "cachetools",
+      "branch": "main",
+      "turns": [
+        "We want to retune TTLs at runtime from our config reloader. Can you add a setter for `TTLCache.ttl`? It only needs to affect items inserted after the change. Update the .pyi stub as well, and add a test.",
+        "Thanks. One rule for this fork from now on: our ingest service vendors it and runs its whole test suite with `-W error`, and that team won't relax it, so anything here that warns breaks their build. Nothing we add may emit a warning at runtime, DeprecationWarning included. When we deprecate something, it goes in the docstring and CHANGELOG.rst, and that's it."
+      ]
+    },
+    {
+      "repo": "cachetools",
+      "branch": "main",
+      "turns": [
+        "In TTLCache and TLRUCache, `expire()` takes a parameter called `time`, which shadows the `time` module and keeps confusing people reading the code. Rename it to `now`. Existing callers that pass `time=` must keep working for now. Update the stubs and the tests."
+      ]
+    }
+  ],
+  "facts": [
+    { "id": "f1", "text": "Nothing added to this fork may emit a runtime warning (DeprecationWarning included): the ingest service vendors it and runs its suite with -W error. Deprecations are documented in the docstring and CHANGELOG.rst only.",
+      "source": "user", "session": 1, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

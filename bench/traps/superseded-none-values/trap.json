@@ -1,0 +1,39 @@
+{
+  "id": "superseded-none-values",
+  "family": "superseded",
+  "summary": "Session 1 makes tomli_w skip keys whose value is None (tables and inline tables), with None in arrays still raising. Session 2 does unrelated work (pathlib values) and then the user reverses the None rule with a reason (dropped keys hid a misconfiguration): None is to be written as an empty string, and the switch happens together with the array case next time. Session 3 asks for None inside arrays. The session-1 skip code is still in the tree, so the natural move is to skip None array items too; the newer rule needs \"\" in arrays and the table code switched over.",
+  "repos": [
+    { "name": "tomli-w", "url": "https://github.com/hukkin/tomli-w", "commit": "1210bb6f5708a4dc084cc3deb4a3a3e3939f4d6d" }
+  ],
+  "sessions": [
+    {
+      "repo": "tomli-w",
+      "branch": "main",
+      "turns": [
+        "tomli_w.dumps raises a TypeError as soon as it hits a None value. Our config objects have a lot of optional fields that are simply None when unset. Make dumps (and dump) skip keys whose value is None, in normal tables and in inline tables. None inside arrays should keep raising for now. Tests please."
+      ]
+    },
+    {
+      "repo": "tomli-w",
+      "branch": "main",
+      "turns": [
+        "Can you make dumps accept `pathlib` paths as values? Write them out as plain strings. Tests too.",
+        "Thanks. Also a change of plan on None that I need you to keep in mind. Skipping the keys bit us: the loader on the other end can't tell a dropped key from one we never set, and in staging a None `timeout` quietly fell back to the 30s default. New rule: a None value is written as an empty string, `key = \"\"`, which the loader treats as explicitly unset. Leave the code as it is today; we'll switch it over together with the array case next time."
+      ]
+    },
+    {
+      "repo": "tomli-w",
+      "branch": "main",
+      "turns": [
+        "Let's carry on with None support in dumps: None inside arrays should work now as well, at the moment it still raises. Add tests."
+      ]
+    }
+  ],
+  "facts": [
+    { "id": "f1", "text": "Keys whose value is None are skipped (tables and inline tables); None in arrays raises.",
+      "source": "user", "session": 1, "superseded_by": "f2" },
+    { "id": "f2", "text": "None is written as an empty string (key = \"\"), which the loader reads as explicitly unset; skipping keys hid a misconfiguration in staging. Applies to arrays too, and the table code is to be switched over when the array case is done.",
+      "source": "user", "session": 2, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}
