@@ -1,0 +1,112 @@
+diff --git a/tests/test_drop_keys.py b/tests/test_drop_keys.py
+new file mode 100644
+index 0000000..8396f6b
+--- /dev/null
++++ b/tests/test_drop_keys.py
+@@ -0,0 +1,57 @@
++import copy
++
++from xmltodict import drop_keys, parse
++
++
++def test_removes_keys_at_any_depth_including_attributes():
++    doc = parse('<a id="1"><b id="2" k="v"><c>x</c></b><b id="3"/></a>')
++    assert drop_keys(doc, ['@id']) == {
++        'a': {'b': [{'@k': 'v', 'c': 'x'}, {}]}}
++
++
++def test_removes_element_keys_inside_lists():
++    doc = {'a': [{'x': 1, 'y': 2}, {'x': 3}]}
++    assert drop_keys(doc, {'x'}) == {'a': [{'y': 2}, {}]}
++
++
++def test_does_not_mutate_input_or_share_containers():
++    doc = {'a': {'@id': '1', 'b': [{'@id': '2', 'c': 'd'}]}}
++    original = copy.deepcopy(doc)
++    out = drop_keys(doc, ['@id'])
++    assert doc == original
++    assert out['a'] is not doc['a']
++    assert out['a']['b'] is not doc['a']['b']
++    assert out['a']['b'][0] is not doc['a']['b'][0]
++
++
++def test_no_names_returns_equal_copy():
++    doc = {'a': [{'b': '1'}]}
++    out = drop_keys(doc, [])
++    assert out == doc and out is not doc
++
++
++def test_string_names_is_single_key_not_substring_set():
++    assert drop_keys({'id': 1, 'i': 2, 'd': 3}, 'id') == {'i': 2, 'd': 3}
++
++
++def test_non_container_input_returned_as_is():
++    assert drop_keys('text', ['a']) == 'text'
++
++
++def test_preserves_key_order():
++    assert list(drop_keys({'a': 1, 'b': 2, 'c': 3}, ['b'])) == ['a', 'c']
++
++
++def test_very_deep_document_no_recursion_error():
++    depth = 5000
++    xml = '<p id="1">' * depth + 'x' + '</p>' * depth
++    doc = parse(xml)
++    out = drop_keys(doc, ['@id'])
++    node, n = out, 0
++    while 'p' in node:
++        assert '@id' not in node
++        node = node['p']
++        n += 1
++    assert n == depth and node == {'#text': 'x'}
++    # input untouched
++    assert '@id' in doc['p']
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..9e1903f 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -655,3 +655,44 @@ if __name__ == '__main__':  # pragma: no cover
+             handle_item([], root)
+     except KeyboardInterrupt:
+         pass
++
++
++def drop_keys(doc, names):
++    """Return a copy of a parsed document with every key in ``names``
++    removed at any depth (attribute keys such as ``'@id'`` included).
++
++    The input is never mutated. Only dicts and lists are copied; other
++    values are shared. The walk is iterative, so arbitrarily deeply
++    nested documents do not hit the recursion limit.
++    """
++    if isinstance(names, (str, bytes)):
++        names = (names,)
++    names = frozenset(names)
++
++    def shell(value):
++        if isinstance(value, dict):
++            return {}
++        if isinstance(value, list):
++            return []
++        return None
++
++    root = shell(doc)
++    if root is None:
++        return doc
++    stack = [(doc, root)]
++    while stack:
++        src, dst = stack.pop()
++        if isinstance(src, dict):
++            items = [(k, v) for k, v in src.items() if k not in names]
++            for k, v in items:
++                child = shell(v)
++                dst[k] = v if child is None else child
++                if child is not None:
++                    stack.append((v, child))
++        else:
++            for v in src:
++                child = shell(v)
++                dst.append(v if child is None else child)
++                if child is not None:
++                    stack.append((v, child))
++    return root

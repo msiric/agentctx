@@ -1,0 +1,77 @@
+diff --git a/index.js b/index.js
+index 6f2d0f8..e444efc 100644
+--- a/index.js
++++ b/index.js
+@@ -147,6 +147,16 @@ function parse(val) {
+     return null;
+   }
+ 
++  // Normalize IEC units (KiB, MiB, ...) to their equivalent KB, MB, ... form
++  // using plain string handling.
++  var last = val.length - 1;
++  if (last >= 2 &&
++    val.charAt(last).toLowerCase() === 'b' &&
++    val.charAt(last - 1).toLowerCase() === 'i' &&
++    'kmgtp'.indexOf(val.charAt(last - 2).toLowerCase()) !== -1) {
++    val = val.slice(0, last - 1) + val.charAt(last);
++  }
++
+   // Test if the string passed is valid
+   var results = parseRegExp.exec(val);
+   var floatValue;
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..21073ba 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -108,4 +108,51 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  it('Should parse IEC units (KiB, MiB, GiB, TiB, PiB)', function(){
++    ['kib', 'mib', 'gib', 'tib', 'pib'].forEach(function (unit, i) {
++      var expected = Math.pow(1024, i + 1);
++      assert.strictEqual(bytes.parse('1' + unit), expected);
++      assert.strictEqual(bytes.parse('1' + unit.toUpperCase()), expected);
++      assert.strictEqual(bytes.parse('1 ' + unit[0].toUpperCase() + 'iB'), expected);
++      assert.strictEqual(bytes.parse('1.5' + unit), 1.5 * expected);
++      assert.strictEqual(bytes.parse('1' + unit), bytes.parse('1' + unit.replace('i', '')));
++    });
++  });
++
++  it('Should not parse invalid IEC units', function(){
++    assert.strictEqual(bytes.parse('kib'), null);
++    assert.strictEqual(bytes.parse('1xib'), 1);
++    assert.strictEqual(bytes.parse('1bib'), 1);
++    assert.strictEqual(bytes.parse('1ib'), 1);
++  });
++
++  it('Should reject long junk strings quickly', function(){
++    var junk = [
++      'x'.repeat(100000),
++      '+'.repeat(100000) + '1kb',
++      '.1'.repeat(50000) + 'x',
++      ' '.repeat(100000) + 'x'
++    ];
++
++    // Leading digits fall back to parseInt, so these are not rejected,
++    // but they must not be slow to process either.
++    var slow = [
++      '1'.repeat(100000) + 'x',
++      '1.' + '1'.repeat(100000) + 'x',
++      '1' + ' '.repeat(100000) + 'x'
++    ];
++
++    var start = Date.now();
++
++    junk.forEach(function (str) {
++      assert.strictEqual(bytes.parse(str), null);
++    });
++
++    slow.forEach(function (str) {
++      bytes.parse(str);
++    });
++
++    assert.ok(Date.now() - start < 500, 'parse() took too long on junk input');
++  });
+ });

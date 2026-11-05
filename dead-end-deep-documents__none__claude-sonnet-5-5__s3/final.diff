@@ -1,0 +1,89 @@
+diff --git a/tests/test_drop_keys.py b/tests/test_drop_keys.py
+new file mode 100644
+index 0000000..ea945a9
+--- /dev/null
++++ b/tests/test_drop_keys.py
+@@ -0,0 +1,51 @@
++import copy
++
++from xmltodict import drop_keys, parse
++
++
++def test_drops_top_level_and_nested():
++    doc = {'a': {'b': '1', 'c': {'b': '2', 'd': '3'}}, 'b': 'x'}
++    assert drop_keys(doc, ['b']) == {'a': {'c': {'d': '3'}}}
++
++
++def test_drops_attribute_keys():
++    doc = parse('<r id="1"><i id="2" n="x">t</i><i id="3"/></r>')
++    assert drop_keys(doc, ['@id']) == {
++        'r': {'i': [{'@n': 'x', '#text': 't'}, {}]}}
++
++
++def test_drops_inside_lists_and_tuples():
++    doc = {'a': [{'x': 1, 'y': 2}, [{'x': 3}], ({'x': 4, 'z': 5},)]}
++    assert drop_keys(doc, {'x'}) == {'a': [{'y': 2}, [{}], ({'z': 5},)]}
++
++
++def test_multiple_names_and_missing_names():
++    doc = {'a': 1, 'b': 2, 'c': 3}
++    assert drop_keys(doc, ['a', 'c', 'nope']) == {'b': 2}
++
++
++def test_empty_names_returns_equal_copy():
++    doc = {'a': {'b': [1, 2]}}
++    result = drop_keys(doc, [])
++    assert result == doc
++    assert result is not doc
++    assert result['a'] is not doc['a']
++    assert result['a']['b'] is not doc['a']['b']
++
++
++def test_string_names_is_single_name():
++    assert drop_keys({'ab': 1, 'a': 2, 'b': 3}, 'ab') == {'a': 2, 'b': 3}
++
++
++def test_does_not_mutate_input():
++    doc = {'a': {'@id': '1', 'b': [{'@id': '2', 'c': 'x'}]}, '@id': '0'}
++    snapshot = copy.deepcopy(doc)
++    result = drop_keys(doc, ['@id', 'c'])
++    assert doc == snapshot
++    assert result == {'a': {'b': [{}]}}
++
++
++def test_non_dict_inputs():
++    assert drop_keys('text', ['a']) == 'text'
++    assert drop_keys(None, ['a']) is None
++    assert drop_keys([{'a': 1, 'b': 2}], ['a']) == [{'b': 2}]
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..971ca38 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -655,3 +655,27 @@ if __name__ == '__main__':  # pragma: no cover
+             handle_item([], root)
+     except KeyboardInterrupt:
+         pass
++
++
++def drop_keys(doc, names):
++    """Return a copy of `doc` with every key in `names` removed at any depth.
++
++    Attribute keys are matched literally, so pass '@id' (including the
++    `attr_prefix`) to drop an attribute. Dicts nested inside lists/tuples are
++    processed too. The input is never mutated; containers are rebuilt, while
++    leaf values are shared.
++    """
++    if isinstance(names, (str, bytes)):
++        names = [names]
++    names = frozenset(names)
++
++    def _drop(node):
++        if isinstance(node, dict):
++            return {k: _drop(v) for k, v in node.items() if k not in names}
++        if isinstance(node, list):
++            return [_drop(v) for v in node]
++        if isinstance(node, tuple):
++            return tuple(_drop(v) for v in node)
++        return node
++
++    return _drop(doc)

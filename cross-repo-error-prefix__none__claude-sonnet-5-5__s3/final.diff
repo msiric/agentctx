@@ -1,0 +1,179 @@
+diff --git a/index.d.ts b/index.d.ts
+index df9895c..a2c8b46 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -8,6 +8,15 @@ export type TimeComponents<T extends (number | bigint) = number> = {
+ 	nanoseconds: T;
+ };
+ 
++export type Options = {
++	/**
++	The largest unit to include. Bigger units roll into it, so `{largestUnit: 'hours'}` gives `hours: 26` instead of `days: 1, hours: 2`.
++
++	@default 'days'
++	*/
++	readonly largestUnit?: 'days' | 'hours' | 'minutes' | 'seconds';
++};
++
+ /**
+ Parse milliseconds into an object.
+ 
+@@ -27,4 +36,4 @@ parseMilliseconds(1337000001);
+ // }
+ ```
+ */
+-export default function parseMilliseconds<T extends number | bigint>(milliseconds: T): TimeComponents<T>;
++export default function parseMilliseconds<T extends number | bigint>(milliseconds: T, options?: Options): TimeComponents<T>;
+diff --git a/index.js b/index.js
+index 8ece65f..87c5871 100644
+--- a/index.js
++++ b/index.js
+@@ -1,8 +1,9 @@
+ // Scaling a value to nanoseconds carries up to half a ulp of error, which would truncate a whole number of nanoseconds down by one.
+ const SCALING_EPSILON = 0.0000001;
++const UNITS = ['days', 'hours', 'minutes', 'seconds'];
+ const MAX_NANOSECONDS_IN_MILLISECOND = 999_999;
+ 
+-function parseNumber(milliseconds) {
++function parseNumber(milliseconds, largestUnit) {
+ 	// The sub-millisecond parts come from scaling the value to nanoseconds, which recovers its intended decimal best. That scaling leaves the exact integer range above ~9e9ms, so it is reduced modulo a second there to avoid yielding phantom values for what is a whole number of milliseconds.
+ 	const scaledNanoseconds = (Number.isSafeInteger(Math.trunc(milliseconds) * 1e6) ? milliseconds : milliseconds % 1000) * 1e6;
+ 	// The nudge absorbs the scaling error, which would otherwise truncate a whole number of nanoseconds down by one. Clamping stops it from carrying into the next millisecond.
+@@ -16,41 +17,46 @@ function parseNumber(milliseconds) {
+ 	);
+ 
+ 	return {
+-		days: Math.trunc(milliseconds / 86_400_000),
+-		// The sub-day parts come from a remainder, as a large quotient loses the low digits of the part to float error.
+-		hours: Math.trunc(milliseconds % 86_400_000 / 3_600_000),
+-		minutes: Math.trunc(milliseconds % 3_600_000 / 60_000),
+-		seconds: Math.trunc(milliseconds % 60_000 / 1000),
++		days: largestUnit === 'days' ? Math.trunc(milliseconds / 86_400_000) : 0,
++		// The sub-day parts come from a remainder, as a large quotient loses the low digits of the part to float error. The largest unit takes the whole quotient instead, as nothing bigger absorbs the rest.
++		hours: largestUnit === 'hours' ? Math.trunc(milliseconds / 3_600_000) : (UNITS.indexOf(largestUnit) < 1 ? Math.trunc(milliseconds % 86_400_000 / 3_600_000) : 0),
++		minutes: largestUnit === 'minutes' ? Math.trunc(milliseconds / 60_000) : (UNITS.indexOf(largestUnit) < 2 ? Math.trunc(milliseconds % 3_600_000 / 60_000) : 0),
++		seconds: largestUnit === 'seconds' ? Math.trunc(milliseconds / 1000) : Math.trunc(milliseconds % 60_000 / 1000),
+ 		milliseconds: Math.trunc(milliseconds % 1000),
+ 		microseconds: Math.trunc(totalNanoseconds / 1000),
+ 		nanoseconds: totalNanoseconds % 1000,
+ 	};
+ }
+ 
+-function parseBigint(milliseconds) {
++function parseBigint(milliseconds, largestUnit) {
++	const rank = UNITS.indexOf(largestUnit);
+ 	return {
+-		days: milliseconds / 86_400_000n,
+-		hours: milliseconds / 3_600_000n % 24n,
+-		minutes: milliseconds / 60_000n % 60n,
+-		seconds: milliseconds / 1000n % 60n,
++		days: rank === 0 ? milliseconds / 86_400_000n : 0n,
++		hours: rank === 1 ? milliseconds / 3_600_000n : (rank < 1 ? milliseconds / 3_600_000n % 24n : 0n),
++		minutes: rank === 2 ? milliseconds / 60_000n : (rank < 2 ? milliseconds / 60_000n % 60n : 0n),
++		seconds: rank === 3 ? milliseconds / 1000n : milliseconds / 1000n % 60n,
+ 		milliseconds: milliseconds % 1000n,
+ 		microseconds: 0n,
+ 		nanoseconds: 0n,
+ 	};
+ }
+ 
+-export default function parseMilliseconds(milliseconds) {
++export default function parseMilliseconds(milliseconds, {largestUnit = 'days'} = {}) {
++	if (!UNITS.includes(largestUnit)) {
++		throw new TypeError(`Expected \`largestUnit\` to be one of: ${UNITS.join(', ')}`);
++	}
++
+ 	switch (typeof milliseconds) {
+ 		case 'number': {
+ 			if (Number.isFinite(milliseconds)) {
+-				return parseNumber(milliseconds);
++				return parseNumber(milliseconds, largestUnit);
+ 			}
+ 
+ 			break;
+ 		}
+ 
+ 		case 'bigint': {
+-			return parseBigint(milliseconds);
++			return parseBigint(milliseconds, largestUnit);
+ 		}
+ 
+ 		// No default
+diff --git a/readme.md b/readme.md
+index 488cccd..19e2e0e 100644
+--- a/readme.md
++++ b/readme.md
+@@ -40,6 +40,28 @@ parseMilliseconds(1337000001n);
+ */
+ ```
+ 
++## API
++
++### parseMilliseconds(milliseconds, options?)
++
++Accepts a finite number or a bigint.
++
++#### options
++
++##### largestUnit
++
++Type: `'days' | 'hours' | 'minutes' | 'seconds'`\
++Default: `'days'`
++
++The largest unit to include. Bigger units roll into it.
++
++```js
++parseMilliseconds(93_600_000, {largestUnit: 'hours'});
++// {days: 0, hours: 26, minutes: 0, seconds: 0, …}
++```
++
++Throws a `TypeError` for any other value.
++
+ ## Related
+ 
+ - [to-milliseconds](https://github.com/sindresorhus/to-milliseconds) - The inverse of this module
+diff --git a/test.js b/test.js
+index 6314aab..b6b0638 100644
+--- a/test.js
++++ b/test.js
+@@ -292,3 +292,40 @@ test('keep the sub-day parts exact at any magnitude', () => {
+ 		assert.strictEqual(parsed.hours, Number(bigint.hours), `${milliseconds}ms hours against the bigint path`);
+ 	}
+ });
++
++test('largestUnit', () => {
++	const ms = (26 * 3_600_000) + (5 * 60_000) + 7000 + 8;
++	const rest = {milliseconds: 8, microseconds: 0, nanoseconds: 0};
++	const cases = {
++		days: [1, 2, 5, 7],
++		hours: [0, 26, 5, 7],
++		minutes: [0, 0, (26 * 60) + 5, 7],
++		seconds: [0, 0, 0, (26 * 3600) + (5 * 60) + 7],
++	};
++
++	for (const [largestUnit, [days, hours, minutes, seconds]] of Object.entries(cases)) {
++		const expected = {
++			days,
++			hours,
++			minutes,
++			seconds,
++		};
++		assert.deepStrictEqual(parseMilliseconds(ms, {largestUnit}), {...expected, ...rest});
++		assert.deepStrictEqual(
++			parseMilliseconds(BigInt(ms), {largestUnit}),
++			Object.fromEntries(Object.entries({...expected, ...rest}).map(([k, v]) => [k, BigInt(v)])),
++		);
++	}
++
++	assert.deepStrictEqual(parseMilliseconds(ms, {}), parseMilliseconds(ms, {largestUnit: 'days'}));
++	assert.deepStrictEqual(parseMilliseconds(ms), parseMilliseconds(ms, {largestUnit: 'days'}));
++	assert.equal(parseMilliseconds(-ms, {largestUnit: 'hours'}).hours, -26);
++	assert.equal(parseMilliseconds(1e15 + 123, {largestUnit: 'seconds'}).milliseconds, 123);
++});
++
++test('largestUnit rejects invalid values', () => {
++	for (const largestUnit of ['weeks', 'milliseconds', 'Days', '', null, 1, {}]) {
++		assert.throws(() => parseMilliseconds(1000, {largestUnit}), TypeError);
++		assert.throws(() => parseMilliseconds(1000n, {largestUnit}), TypeError);
++	}
++});

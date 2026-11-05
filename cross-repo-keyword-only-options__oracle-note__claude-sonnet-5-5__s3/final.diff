@@ -1,0 +1,52 @@
+diff --git a/addict/addict.py b/addict/addict.py
+index 55e02d1..3eb6113 100644
+--- a/addict/addict.py
++++ b/addict/addict.py
+@@ -74,15 +74,18 @@ class Dict(dict):
+     def __delattr__(self, name):
+         del self[name]
+ 
+-    def to_dict(self):
++    def to_dict(self, *, skip_none=False):
+         base = {}
+         for key, value in self.items():
++            if skip_none and value is None:
++                continue
+             if isinstance(value, type(self)):
+-                base[key] = value.to_dict()
++                base[key] = value.to_dict(skip_none=skip_none)
+             elif isinstance(value, (list, tuple)):
+                 base[key] = type(value)(
+-                    item.to_dict() if isinstance(item, type(self)) else
+-                    item for item in value)
++                    item.to_dict(skip_none=skip_none)
++                    if isinstance(item, type(self)) else item
++                    for item in value)
+             else:
+                 base[key] = value
+         return base
+diff --git a/test_addict.py b/test_addict.py
+index b4af646..c832446 100644
+--- a/test_addict.py
++++ b/test_addict.py
+@@ -209,6 +209,20 @@ class AbstractTestsClass(object):
+             regular['a'][0].a = 1
+         self.assertRaises(AttributeError, get_attr_deep)
+ 
++    def test_to_dict_skip_none(self):
++        prop = Dict({'a': None, 'b': 1,
++                     'c': {'d': None, 'e': 2},
++                     'f': [{'g': None, 'h': 3}, None],
++                     'i': ({'j': None},)})
++        self.assertEqual(
++            prop.to_dict(skip_none=True),
++            {'b': 1, 'c': {'e': 2}, 'f': [{'h': 3}, None], 'i': ({},)})
++
++    def test_to_dict_keeps_none_by_default(self):
++        prop = Dict({'a': None, 'c': {'d': None}, 'f': [{'g': None}]})
++        self.assertEqual(
++            prop.to_dict(), {'a': None, 'c': {'d': None}, 'f': [{'g': None}]})
++
+     def test_to_dict_with_tuple(self):
+         nested = {'a': ({'a': 0}, {2: 0})}
+         prop = self.dict_class(nested)

@@ -1,0 +1,124 @@
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index 0f318fc..7fd7bf4 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -71,6 +71,8 @@ def gen_table_chunks(
+     literals = []
+     tables: list[tuple[str, Any, bool]] = []  # => [(key, value, inside_aot)]
+     for k, v in table.items():
++        if v is None:
++            continue
+         if isinstance(v, Mapping):
+             tables.append((k, v, False))
+         elif is_aot(v) and not all(is_suitable_inline_table(t, ctx) for t in v):
+@@ -113,11 +115,14 @@ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
+     if isinstance(obj, Mapping):
+         return format_inline_table(obj, ctx)
+ 
+-    # Lazy import to improve module import time
++    # Lazy imports to improve module import time
+     from decimal import Decimal
++    from pathlib import PurePath
+ 
+     if isinstance(obj, Decimal):
+         return format_decimal(obj)
++    if isinstance(obj, PurePath):
++        return format_string(str(obj), allow_multiline=ctx.allow_multiline)
+     raise TypeError(
+         f"Object of type '{type(obj).__qualname__}' is not TOML serializable"
+     )
+@@ -138,14 +143,15 @@ def format_inline_table(obj: Mapping, ctx: Context) -> str:
+     if obj_id in ctx.inline_table_cache:
+         return ctx.inline_table_cache[obj_id]
+ 
+-    if not obj:
++    items = [(k, v) for k, v in obj.items() if v is not None]
++    if not items:
+         rendered = "{}"
+     else:
+         rendered = (
+             "{ "
+             + ", ".join(
+                 f"{format_key_part(k)} = {format_literal(v, ctx)}"
+-                for k, v in obj.items()
++                for k, v in items
+             )
+             + " }"
+         )
+@@ -154,6 +160,7 @@ def format_inline_table(obj: Mapping, ctx: Context) -> str:
+ 
+ 
+ def format_inline_array(obj: tuple | list, ctx: Context, nest_level: int) -> str:
++    obj = [item for item in obj if item is not None]
+     if not obj:
+         return "[]"
+     item_indent = ctx.indent_str * (1 + nest_level)
+diff --git a/tests/test_invalid.py b/tests/test_invalid.py
+index 3d5e8e8..89b846e 100644
+--- a/tests/test_invalid.py
++++ b/tests/test_invalid.py
+@@ -38,3 +38,4 @@ def test_invalid_key__truthy():
+         str(exc_info.value)
+         == "Invalid mapping key '2' of type 'int'. A string is required."
+     )
++
+diff --git a/tests/test_style.py b/tests/test_style.py
+index ca10db3..c22cc75 100644
+--- a/tests/test_style.py
++++ b/tests/test_style.py
+@@ -307,3 +307,55 @@ k0 = [
+ ]
+ """
+     )
++
++
++def test_none_values_skipped():
++    obj = {"a": None, "b": 1, "t": {"x": None, "y": 2}, "e": {"z": None}}
++    assert tomli_w.dumps(obj) == "b = 1\n\n[t]\ny = 2\n\n[e]\n"
++
++
++def test_none_values_skipped_inline_table():
++    obj = {"arr": [{"a": None, "b": 1}, {"c": None}], "inl": {"k": {"n": None, "v": 1}}}
++    actual = tomli_w.dumps(obj)
++    assert tomli.loads(actual) == {
++        "arr": [{"b": 1}, {}],
++        "inl": {"k": {"v": 1}},
++    }
++    assert "{ b = 1 }" in actual and "{}" in actual
++
++
++def test_none_values_skipped_dump(tmp_path):
++    path = tmp_path / "f.toml"
++    with path.open("wb") as f:
++        tomli_w.dump({"a": None, "b": 1}, f)
++    assert path.read_text() == "b = 1\n"
++
++
++def test_pathlib_paths():
++    import pathlib
++
++    obj = {
++        "p": pathlib.PurePosixPath("/usr/local/bin"),
++        "rel": pathlib.Path("a/b.txt"),
++        "arr": [pathlib.PurePosixPath("x/y")],
++        "t": {"q": pathlib.PurePosixPath("with \"quote\"")},
++    }
++    actual = tomli_w.dumps(obj)
++    assert tomli.loads(actual) == {
++        "p": "/usr/local/bin",
++        "rel": str(pathlib.Path("a/b.txt")),
++        "arr": ["x/y"],
++        "t": {"q": 'with "quote"'},
++    }
++
++
++def test_none_in_array_skipped():
++    obj = {"a": [1, None, 2], "b": [None], "c": [[None, 1], [None]], "d": (None, "x")}
++    actual = tomli_w.dumps(obj)
++    assert tomli.loads(actual) == {"a": [1, 2], "b": [], "c": [[1], []], "d": ["x"]}
++
++
++def test_none_in_array_of_tables():
++    obj = {"arr": [{"a": 1}, None, {"b": None}]}
++    actual = tomli_w.dumps(obj)
++    assert tomli.loads(actual) == {"arr": [{"a": 1}, {}]}

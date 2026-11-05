@@ -1,0 +1,87 @@
+diff --git a/addict/addict.py b/addict/addict.py
+index 55e02d1..388d359 100644
+--- a/addict/addict.py
++++ b/addict/addict.py
+@@ -77,16 +77,41 @@ class Dict(dict):
+     def to_dict(self):
+         base = {}
+         for key, value in self.items():
+-            if isinstance(value, type(self)):
+-                base[key] = value.to_dict()
+-            elif isinstance(value, (list, tuple)):
+-                base[key] = type(value)(
+-                    item.to_dict() if isinstance(item, type(self)) else
+-                    item for item in value)
+-            else:
+-                base[key] = value
++            base[key] = self._hook_to_dict(value)
+         return base
+ 
++    @classmethod
++    def _hook_to_dict(cls, item):
++        if isinstance(item, cls):
++            return item.to_dict()
++        elif isinstance(item, (list, tuple)):
++            return type(item)(cls._hook_to_dict(i) for i in item)
++        return item
++
++    def flatten(self, separator='__'):
++        """Return a plain dict with one entry per leaf value.
++
++        Nested keys are joined with `separator` (default '__'). Lists and
++        other non-dict values are leaves and are returned unchanged. An empty
++        nested dict is kept as a leaf so no key is silently lost.
++        """
++        flat = {}
++        for key, value in self.items():
++            key = str(key)
++            if isinstance(value, dict) and value:
++                for sub_key, sub_value in self._hook_flatten(
++                        value, separator).items():
++                    flat[key + separator + sub_key] = sub_value
++            else:
++                flat[key] = value
++        return flat
++
++    @classmethod
++    def _hook_flatten(cls, value, separator):
++        if isinstance(value, cls):
++            return value.flatten(separator)
++        return cls(value).flatten(separator)
++
+     def copy(self):
+         return copy.copy(self)
+ 
+diff --git a/test_addict.py b/test_addict.py
+index b4af646..91f56da 100644
+--- a/test_addict.py
++++ b/test_addict.py
+@@ -218,6 +218,28 @@ class AbstractTestsClass(object):
+         self.assertIsInstance(regular['a'], tuple)
+         self.assertNotIsInstance(regular['a'][0], self.dict_class)
+ 
++    def test_to_dict_with_nested_lists(self):
++        prop = self.dict_class(a=[[{'b': 1}], ({'c': [{'d': 2}]},)])
++        regular = prop.to_dict()
++        self.assertIs(type(regular['a'][0][0]), dict)
++        self.assertIs(type(regular['a'][1][0]), dict)
++        self.assertIs(type(regular['a'][1][0]['c'][0]), dict)
++        self.assertIsInstance(regular['a'][1], tuple)
++        self.assertEqual(regular, {'a': [[{'b': 1}], ({'c': [{'d': 2}]},)]})
++
++    def test_flatten(self):
++        d = self.dict_class(a=1, b={'c': 2, 'd': {'e': [1, {'f': 3}]}})
++        flat = d.flatten()
++        self.assertIs(type(flat), dict)
++        self.assertEqual(flat, {'a': 1, 'b__c': 2, 'b__d__e': [1, {'f': 3}]})
++
++    def test_flatten_separator_and_empty(self):
++        d = self.dict_class()
++        self.assertEqual(d.flatten(), {})
++        d.a.b = 1
++        d.x = {}
++        self.assertEqual(d.flatten('.'), {'a.b': 1, 'x': {}})
++
+     def test_update(self):
+         old = self.dict_class()
+         old.child.a = 'a'

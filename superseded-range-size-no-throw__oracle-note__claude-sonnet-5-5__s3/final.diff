@@ -1,0 +1,86 @@
+diff --git a/index.js b/index.js
+index ad2b6cc..cd5fd40 100644
+--- a/index.js
++++ b/index.js
+@@ -29,6 +29,12 @@ function rangeParser (size, str, options) {
+     throw new TypeError('argument str must be a string')
+   }
+ 
++  // invalid size (NaN, Infinity, negative, fractional, non-number): never
++  // throw, signal the caller to ignore the Range header
++  if (typeof size !== 'number' || !isFinite(size) || size < 0 || Math.floor(size) !== size) {
++    return -2
++  }
++
+   var index = str.indexOf('=')
+ 
+   if (index === -1) {
+diff --git a/test/range-parser.js b/test/range-parser.js
+index 5147754..e4a751d 100644
+--- a/test/range-parser.js
++++ b/test/range-parser.js
+@@ -8,6 +8,18 @@ describe('parseRange(len, str)', function () {
+       /TypeError: argument str must be a string/)
+   })
+ 
++  it('should return -2 for invalid size without throwing', function () {
++    var sizes = [NaN, Infinity, -Infinity, -1, -200, 1.5, 0.1, '200', null, undefined, {}, [], true]
++    sizes.forEach(function (size) {
++      assert.strictEqual(parse(size, 'bytes=0-499'), -2, 'size ' + String(size))
++      assert.strictEqual(parse(size, 'bytes=-5', { combine: true }), -2)
++    })
++  })
++
++  it('should accept a size of zero', function () {
++    assert.strictEqual(parse(0, 'bytes=0-10'), -1)
++  })
++
+   it('should return -2 for completely empty header', function () {
+     assert.strictEqual(parse(200, ''), -2)
+   })
+@@ -212,6 +224,45 @@ describe('parseRange(len, str)', function () {
+       deepEqual(range[1], { start: 90, end: 149 })
+     })
+ 
++    it('should combine adjacent ranges', function () {
++      var range = parse(100, 'bytes=0-4,5-9', { combine: true })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 0, end: 9 })
++    })
++
++    it('should combine adjacent ranges given out of order', function () {
++      var range = parse(100, 'bytes=5-9,0-4', { combine: true })
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 0, end: 9 })
++    })
++
++    it('should not combine ranges with a gap of one byte', function () {
++      var range = parse(100, 'bytes=0-4,6-9', { combine: true })
++      assert.strictEqual(range.length, 2)
++      deepEqual(range[0], { start: 0, end: 4 })
++      deepEqual(range[1], { start: 6, end: 9 })
++    })
++
++    it('should combine a suffix range that overlaps a normal range', function () {
++      var range = parse(100, 'bytes=50-90,-20', { combine: true })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 50, end: 99 })
++    })
++
++    it('should combine a suffix range listed before the range it overlaps', function () {
++      var range = parse(100, 'bytes=-20,50-90', { combine: true })
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 50, end: 99 })
++    })
++
++    it('should combine a suffix range that is adjacent to a normal range', function () {
++      var range = parse(100, 'bytes=50-79,-20', { combine: true })
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 50, end: 99 })
++    })
++
+     it('should retain original order', function () {
+       var range = parse(150, 'bytes=-1,20-100,0-1,101-120', { combine: true })
+       assert.strictEqual(range.type, 'bytes')
