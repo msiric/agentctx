@@ -271,3 +271,28 @@ Checked as arm `trailkeep@wording` (plan `dev-wording`) on all 34 fact traps
 used so far plus the control, 2 seeds, against 0.5.1 on the same traps
 (`trailkeep@finish` for the dev and set-2 traps, `trailkeep` for set 3). Set 3
 counts as dev from here on.
+
+Result (run 42064045758, 70 cells, no pauses):
+
+| | trailkeep@wording | 0.5.1 on the same traps |
+|---|---|---|
+| 34 fact traps | 67/68 (99%) | 92/102 (90%) |
+| Control | 2/2 | 3/3 |
+
+Every trap that 0.5.1 failed at least once went to 2/2: dead-end-humanize-half-up
+(was 1/3), deadend-sortkeys-mixed-keys (1/3), superseded-range-size-no-throw
+(2/3), dead-end-deep-documents (2/3), cross-repo-version-bump (2/3),
+xrepo-version-bump-cookie-to-ms (2/3). branch-isolation-bytes-rounding went
+from 1/3 to 1/2; its one failure honoured both facts and missed the task
+('1.19MB' for '1.2MB'), the same miss oracle-note had at the gate. No trap
+went down.
+
+The notes changed the way the sentence asks. The humanize note now says
+"Apply the same rule to any new rounding helper". The range-parser notes mark
+"My choice (not requested by user)" and "User decision: supersedes the
+earlier TypeError choice". The bytes notes split "my suggestions, not decided
+by user" from finance's rule.
+
+Caveats: these are dev traps, and the traps 0.5.1 failed were picked out by
+those failures, so some of the gain is regression to the mean. 2 seeds. Only
+a fresh held-out set can say how much holds. Released as 0.5.2.
