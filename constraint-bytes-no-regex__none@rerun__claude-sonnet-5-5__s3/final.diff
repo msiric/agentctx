@@ -1,0 +1,74 @@
+diff --git a/index.js b/index.js
+index 6f2d0f8..0fdf9da 100644
+--- a/index.js
++++ b/index.js
+@@ -32,9 +32,14 @@ var map = {
+   gb: 1 << 30,
+   tb: Math.pow(1024, 4),
+   pb: Math.pow(1024, 5),
++  kib: 1 << 10,
++  mib: 1 << 20,
++  gib: 1 << 30,
++  tib: Math.pow(1024, 4),
++  pib: Math.pow(1024, 5),
+ };
+ 
+-var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
++var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb|kib|mib|gib|tib|pib)$/i;
+ 
+ /**
+  * Convert the given value in bytes into a string or parse to string to an integer in bytes.
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..84628f3 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -108,4 +108,49 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  it('Should parse IEC units', function(){
++    assert.strictEqual(bytes.parse('1KiB'), 1 << 10);
++    assert.strictEqual(bytes.parse('1MiB'), 1 << 20);
++    assert.strictEqual(bytes.parse('1GiB'), 1 << 30);
++    assert.strictEqual(bytes.parse('1TiB'), Math.pow(1024, 4));
++    assert.strictEqual(bytes.parse('1PiB'), Math.pow(1024, 5));
++  });
++
++  it('Should parse IEC units case-insensitively', function(){
++    assert.strictEqual(bytes.parse('1kib'), 1024);
++    assert.strictEqual(bytes.parse('1MIB'), 1 << 20);
++    assert.strictEqual(bytes.parse('1gIb'), 1 << 30);
++  });
++
++  it('Should parse IEC units with decimals, signs and whitespace', function(){
++    assert.strictEqual(bytes.parse('1.5 KiB'), 1536);
++    assert.strictEqual(bytes.parse('-1 MiB'), -(1 << 20));
++    assert.strictEqual(bytes.parse('+2 GiB'), 2 * (1 << 30));
++  });
++
++  it('Should match IEC and legacy units', function(){
++    ['k', 'm', 'g', 't', 'p'].forEach(function (u) {
++      assert.strictEqual(bytes.parse('3' + u + 'ib'), bytes.parse('3' + u + 'b'));
++    });
++  });
++
++  it('Should reject long junk strings quickly', function(){
++    var junk = [
++      'x'.repeat(100000),
++      ' '.repeat(100000),
++      '.'.repeat(100000),
++      'kb'.repeat(50000)
++    ];
++
++    junk.forEach(function (str) {
++      var start = process.hrtime();
++      var result = bytes.parse(str);
++      var elapsed = process.hrtime(start);
++      var ms = elapsed[0] * 1e3 + elapsed[1] / 1e6;
++
++      assert.strictEqual(result, null);
++      assert.ok(ms < 100, 'parse took ' + ms.toFixed(1) + 'ms for ' + str.length + ' chars');
++    });
++  });
+ });

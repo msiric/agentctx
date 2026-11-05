@@ -1,0 +1,183 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..087a38a
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,19 @@
++# HANDOFF
++
++## State
++Done, uncommitted: `bytes.parse(value, {decimal: true})` (also via `bytes(str, opts)`). 37 mocha tests pass (7 new, in test/byte-parse.js). Readme updated.
++
++## Decisions
++- Product chose the option form (`{decimal: true}`) over a separate function.
++- Decimal parsing is exact: `parseDecimal` in index.js shifts the decimal point in the digit string by the unit's exponent (3..15) and floors, instead of multiplying floats. Reason: `2.01 * 1000` = 2009.9999999999998, so multiply+floor was off by one ('2.01 kB', '4.1 MB', '8.2 GB', '16.9 TB' all came out one low).
++- Negatives keep Math.floor semantics (-1.0001kB -> -1001); -0 normalised to 0.
++- Without the option nothing changes (binary table, float multiply).
++- Only strings with a unit take the decimal path; unitless strings and numbers behave as before.
++- `format` untouched (still 1024-based).
++
++## Failed approaches
++- Naive multiply + floor (off by one, above).
++- `Math.floor(Number(x.toPrecision(15)))` worked on the vendor values but is a heuristic that breaks past ~15 significant digits; replaced by string shifting.
++
++## Known limits
++- Results above 2^53 lose integer precision (Number), same as the binary path.
+diff --git a/Readme.md b/Readme.md
+index 5790e23..691461c 100644
+--- a/Readme.md
++++ b/Readme.md
+@@ -97,7 +97,7 @@ bytes.format(1024, {unitSeparator: ' '});
+ // output: '1 KB'
+ ```
+ 
+-#### bytes.parse(string｜number value): number｜null
++#### bytes.parse(string｜number value, {decimal?: boolean}): number｜null
+ 
+ Parse the string value into an integer in bytes. If no unit is given, or `value`
+ is a number, it is assumed the value is in bytes.
+@@ -113,6 +113,8 @@ Supported units and abbreviations are as follows and are case-insensitive:
+ 
+ The units are in powers of two, not ten. This means 1kb = 1024b according to this parser.
+ 
++Pass `{decimal: true}` to use powers of ten instead (`bytes.parse('1kB', {decimal: true})` is `1000`). Fractional bytes are still floored.
++
+ **Arguments**
+ 
+ | Name          | Type   | Description        |
+diff --git a/index.js b/index.js
+index 6f2d0f8..4497f84 100644
+--- a/index.js
++++ b/index.js
+@@ -34,6 +34,15 @@ var map = {
+   pb: Math.pow(1024, 5),
+ };
+ 
++var decimalExponents = {
++  b:  0,
++  kb: 3,
++  mb: 6,
++  gb: 9,
++  tb: 12,
++  pb: 15,
++};
++
+ var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
+ 
+ /**
+@@ -53,7 +62,7 @@ var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
+ 
+ function bytes(value, options) {
+   if (typeof value === 'string') {
+-    return parse(value);
++    return parse(value, options);
+   }
+ 
+   if (typeof value === 'number') {
+@@ -133,12 +142,14 @@ function format(value, options) {
+  * If no unit is given, it is assumed the value is in bytes.
+  *
+  * @param {number|string} val
++ * @param {object} [options]
++ * @param {boolean} [options.decimal=false] use powers of 1000 for kB, MB, GB, TB and PB
+  *
+  * @returns {number|null}
+  * @public
+  */
+ 
+-function parse(val) {
++function parse(val, options) {
+   if (typeof val === 'number' && !isNaN(val)) {
+     return val;
+   }
+@@ -166,5 +177,35 @@ function parse(val) {
+     return null;
+   }
+ 
++  if (results && options && options.decimal) {
++    return parseDecimal(results[1], decimalExponents[unit]);
++  }
++
+   return Math.floor(map[unit] * floatValue);
+ }
++
++/**
++ * Scale a decimal number string by 10^exponent and floor it, using string
++ * digit shifting so values like "2.01" stay exact (no float multiplication).
++ *
++ * @param {string} str
++ * @param {number} exponent
++ * @returns {number}
++ * @private
++ */
++
++function parseDecimal(str, exponent) {
++  var negative = str.charAt(0) === '-';
++  var parts = str.replace(/^[-+]/, '').split('.');
++  var frac = parts[1] || '';
++  var kept = frac.slice(0, exponent);
++  var dropped = frac.slice(exponent);
++  var result = Number(parts[0] + kept + new Array(exponent - kept.length + 1).join('0'));
++
++  if (negative) {
++    // Math.floor semantics: any discarded fraction rounds away from zero
++    return -result - (/[1-9]/.test(dropped) ? 1 : 0) || 0;
++  }
++
++  return result;
++}
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..0535e52 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -108,4 +108,50 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  describe('decimal option', function(){
++    var opts = {decimal: true};
++
++    it('Should use powers of 1000', function(){
++      assert.equal(bytes.parse('1kB', opts), 1000);
++      assert.equal(bytes.parse('1MB', opts), 1e6);
++      assert.equal(bytes.parse('1GB', opts), 1e9);
++      assert.equal(bytes.parse('1TB', opts), 1e12);
++      assert.equal(bytes.parse('1PB', opts), 1e15);
++      assert.equal(bytes.parse('1 kb', opts), 1000);
++    });
++
++    it('Should be exact for floats that multiply badly', function(){
++      assert.equal(bytes.parse('2.01 kB', opts), 2010);
++      assert.equal(bytes.parse('4.1 MB', opts), 4100000);
++      assert.equal(bytes.parse('8.2 GB', opts), 8200000000);
++      assert.equal(bytes.parse('16.9 TB', opts), 16900000000000);
++    });
++
++    it('Should drop partial bytes', function(){
++      assert.equal(bytes.parse('1.0009999kB', opts), 1000);
++      assert.equal(bytes.parse('1.5MB', opts), 1500000);
++    });
++
++    it('Should floor negative values', function(){
++      assert.equal(bytes.parse('-1.5kB', opts), -1500);
++      assert.equal(bytes.parse('-1.0001kB', opts), -1001);
++      assert.equal(bytes.parse('-0kB', opts), 0);
++    });
++
++    it('Should leave unitless strings and numbers unchanged', function(){
++      assert.equal(bytes.parse('1024', opts), 1024);
++      assert.equal(bytes.parse(1024, opts), 1024);
++      assert.strictEqual(bytes.parse('foo', opts), null);
++    });
++
++    it('Should be forwarded by bytes()', function(){
++      assert.equal(bytes('1kB', opts), 1000);
++    });
++
++    it('Should not change default behavior', function(){
++      assert.equal(bytes.parse('1kB'), 1024);
++      assert.equal(bytes.parse('1kB', {decimal: false}), 1024);
++    });
++  });
+ });

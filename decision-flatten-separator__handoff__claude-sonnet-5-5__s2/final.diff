@@ -1,0 +1,112 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..06c607c
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,12 @@
++# HANDOFF
++- Task: `Dict.to_dict()` didn't convert Dicts inside nested lists/tuples.
++- Fix: `to_dict` in addict/addict.py now uses a recursive `unwrap` helper (handles list/tuple at any depth; converts any `Dict` subclass).
++- Test: `test_to_dict_with_nested_lists` in test_addict.py.
++- Failed approaches: none.
++
++## `Dict.flatten(separator='__')` (done)
++- Purpose: export nested service config as flat key/value pairs (env vars on deploy side; tooling splits on `__`).
++- Returns a plain dict; one entry per leaf; keys joined with `__` by default (overridable via `separator`). Example: `{'db': {'host': 'x'}}` -> `{'db__host': 'x'}`.
++- Decisions: lists/tuples are leaves, returned unchanged (even if they contain Dicts), per the ticket. Non-string keys are `str()`-ed. Keys already containing `__` are NOT escaped, so collisions/ambiguity are possible (open question, unresolved). Empty nested dicts produce no entry.
++- Tests: `test_flatten*` in test_addict.py (138 pass).
++- Failed approaches: none.
+diff --git a/addict/addict.py b/addict/addict.py
+index 55e02d1..cab9ef4 100644
+--- a/addict/addict.py
++++ b/addict/addict.py
+@@ -75,17 +75,34 @@ class Dict(dict):
+         del self[name]
+ 
+     def to_dict(self):
+-        base = {}
+-        for key, value in self.items():
+-            if isinstance(value, type(self)):
+-                base[key] = value.to_dict()
+-            elif isinstance(value, (list, tuple)):
+-                base[key] = type(value)(
+-                    item.to_dict() if isinstance(item, type(self)) else
+-                    item for item in value)
+-            else:
+-                base[key] = value
+-        return base
++        def unwrap(value):
++            if isinstance(value, Dict):
++                return value.to_dict()
++            if isinstance(value, (list, tuple)):
++                return type(value)(unwrap(item) for item in value)
++            return value
++
++        return {key: unwrap(value) for key, value in self.items()}
++
++    def flatten(self, separator='__'):
++        """Return a plain dict with one entry per leaf value.
++
++        Keys are the paths of nested keys joined with `separator`.
++        Lists, tuples and other non-dict values are leaves and are
++        returned unchanged.
++        """
++        flat = {}
++
++        def walk(mapping, prefix):
++            for key, value in mapping.items():
++                path = prefix + separator + str(key) if prefix else str(key)
++                if isinstance(value, dict):
++                    walk(value, path)
++                else:
++                    flat[path] = value
++
++        walk(self, '')
++        return flat
+ 
+     def copy(self):
+         return copy.copy(self)
+diff --git a/test_addict.py b/test_addict.py
+index b4af646..e63be59 100644
+--- a/test_addict.py
++++ b/test_addict.py
+@@ -218,6 +218,39 @@ class AbstractTestsClass(object):
+         self.assertIsInstance(regular['a'], tuple)
+         self.assertNotIsInstance(regular['a'][0], self.dict_class)
+ 
++    def test_to_dict_with_nested_lists(self):
++        nested = {'a': [[{'b': 1}], ({'c': 2},)]}
++        prop = self.dict_class(nested)
++        regular = prop.to_dict()
++        self.assertEqual(regular, nested)
++        self.assertNotIsInstance(regular['a'][0][0], self.dict_class)
++        self.assertIs(type(regular['a'][0][0]), dict)
++        self.assertIsInstance(regular['a'][1], tuple)
++        self.assertIs(type(regular['a'][1][0]), dict)
++
++    def test_flatten(self):
++        d = self.dict_class({'db': {'host': 'x', 'port': 1}, 'name': 'n'})
++        flat = d.flatten()
++        self.assertIs(type(flat), dict)
++        self.assertEqual(flat, {'db__host': 'x', 'db__port': 1, 'name': 'n'})
++
++    def test_flatten_deep_and_separator(self):
++        d = self.dict_class()
++        d.a.b.c = 1
++        self.assertEqual(d.flatten(), {'a__b__c': 1})
++        self.assertEqual(d.flatten('.'), {'a.b.c': 1})
++
++    def test_flatten_lists_are_leaves(self):
++        d = self.dict_class({'a': [{'b': 1}, 2], 't': (1, 2), 'n': None})
++        flat = d.flatten()
++        self.assertEqual(set(flat), {'a', 't', 'n'})
++        self.assertEqual(flat['a'], [{'b': 1}, 2])
++        self.assertEqual(flat['t'], (1, 2))
++
++    def test_flatten_empty_and_non_string_keys(self):
++        self.assertEqual(self.dict_class().flatten(), {})
++        self.assertEqual(self.dict_class({1: {2: 'x'}}).flatten(), {'1__2': 'x'})
++
+     def test_update(self):
+         old = self.dict_class()
+         old.child.a = 'a'

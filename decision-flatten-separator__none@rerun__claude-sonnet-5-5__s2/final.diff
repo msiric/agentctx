@@ -1,0 +1,105 @@
+diff --git a/addict/addict.py b/addict/addict.py
+index 55e02d1..af71057 100644
+--- a/addict/addict.py
++++ b/addict/addict.py
+@@ -75,17 +75,36 @@ class Dict(dict):
+         del self[name]
+ 
+     def to_dict(self):
+-        base = {}
+-        for key, value in self.items():
+-            if isinstance(value, type(self)):
+-                base[key] = value.to_dict()
+-            elif isinstance(value, (list, tuple)):
+-                base[key] = type(value)(
+-                    item.to_dict() if isinstance(item, type(self)) else
+-                    item for item in value)
+-            else:
+-                base[key] = value
+-        return base
++        def unwrap(value):
++            if isinstance(value, Dict):
++                return value.to_dict()
++            if isinstance(value, (list, tuple)):
++                return type(value)(unwrap(item) for item in value)
++            return value
++
++        return {key: unwrap(value) for key, value in self.items()}
++
++    def flatten(self, sep='.'):
++        """Return a plain dict with one entry per leaf value.
++
++        Keys are the paths of nested keys joined with `sep`. Only dicts are
++        descended into; lists and other values are leaves. An empty nested
++        dict is kept as a leaf so that its key is not lost.
++        """
++        flat = {}
++
++        def walk(node, prefix):
++            for key, value in node.items():
++                path = prefix + sep + str(key) if prefix is not None \
++                    else str(key)
++                if isinstance(value, dict) and value:
++                    walk(value, path)
++                else:
++                    flat[path] = value.to_dict() if isinstance(
++                        value, Dict) else value
++
++        walk(self, None)
++        return flat
+ 
+     def copy(self):
+         return copy.copy(self)
+diff --git a/test_addict.py b/test_addict.py
+index b4af646..b295761 100644
+--- a/test_addict.py
++++ b/test_addict.py
+@@ -218,6 +218,48 @@ class AbstractTestsClass(object):
+         self.assertIsInstance(regular['a'], tuple)
+         self.assertNotIsInstance(regular['a'][0], self.dict_class)
+ 
++    def test_to_dict_with_nested_sequences(self):
++        prop = self.dict_class(a=[[{'b': 1}]], c=({'d': [({'e': 2},)]},))
++        regular = prop.to_dict()
++        self.assertIsInstance(regular['a'][0][0], dict)
++        self.assertNotIsInstance(regular['a'][0][0], self.dict_class)
++        self.assertIsInstance(regular['c'], tuple)
++        inner = regular['c'][0]['d'][0][0]
++        self.assertNotIsInstance(inner, self.dict_class)
++        self.assertNotIsInstance(regular['c'][0], self.dict_class)
++        self.assertEqual(regular, {'a': [[{'b': 1}]],
++                                   'c': ({'d': [({'e': 2},)]},)})
++
++    def test_flatten(self):
++        d = self.dict_class()
++        d.a.b.c = 1
++        d.a.d = 2
++        d.e = 3
++        flat = d.flatten()
++        self.assertEqual(flat, {'a.b.c': 1, 'a.d': 2, 'e': 3})
++        self.assertIs(type(flat), dict)
++
++    def test_flatten_keeps_lists_as_leaves(self):
++        d = self.dict_class(a=[{'b': 1}, 2], c=(1, 2), n=None)
++        self.assertEqual(d.flatten(),
++                         {'a': [{'b': 1}, 2], 'c': (1, 2), 'n': None})
++
++    def test_flatten_separator_and_non_str_keys(self):
++        d = self.dict_class({'a': {1: {'b': 'x'}}})
++        self.assertEqual(d.flatten(), {'a.1.b': 'x'})
++        self.assertEqual(d.flatten(sep='/'), {'a/1/b': 'x'})
++
++    def test_flatten_empty(self):
++        self.assertEqual(self.dict_class().flatten(), {})
++        d = self.dict_class(a={}, b={'c': {}})
++        self.assertEqual(d.flatten(), {'a': {}, 'b.c': {}})
++        self.assertIs(type(d.flatten()['a']), dict)
++
++    def test_flatten_does_not_mutate(self):
++        d = self.dict_class(a={'b': 1})
++        d.flatten()
++        self.assertEqual(d.to_dict(), {'a': {'b': 1}})
++
+     def test_update(self):
+         old = self.dict_class()
+         old.child.a = 'a'

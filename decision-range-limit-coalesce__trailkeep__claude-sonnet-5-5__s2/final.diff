@@ -1,0 +1,145 @@
+diff --git a/HISTORY.md b/HISTORY.md
+index 70a973d..0b02c5b 100644
+--- a/HISTORY.md
++++ b/HISTORY.md
+@@ -1,3 +1,8 @@
++unreleased
++==========
++
++  * Add `limit` option to coalesce headers with too many ranges
++
+ 1.2.1 / 2019-05-10
+ ==================
+ 
+diff --git a/README.md b/README.md
+index 5103c4b..cfa4493 100644
+--- a/README.md
++++ b/README.md
+@@ -70,6 +70,21 @@ parseRange(100, 'bytes=50-55,0-10,5-10,56-60', { combine: true })
+ //    ]
+ ```
+ 
++##### limit
++
++The maximum number of ranges to return, defaults to unlimited. When the header
++contains more valid ranges than `limit` (counted after `combine`, if enabled),
++they are coalesced into a single range from the lowest start to the highest end,
++rather than being truncated or rejected. This lets a response be served (and
++cached) as a single range instead of multipart.
++
++<!-- eslint-disable no-undef -->
++
++```js
++parseRange(100, 'bytes=0-10,50-60,80-90', { limit: 2 })
++// => [{ start: 0, end: 90 }]
++```
++
+ ## License
+ 
+ [MIT](LICENSE)
+diff --git a/index.js b/index.js
+index ad2b6cc..d7e1d04 100644
+--- a/index.js
++++ b/index.js
+@@ -90,9 +90,15 @@ function rangeParser (size, str, options) {
+     return valid ? -1 : -2
+   }
+ 
+-  return options && options.combine
++  var result = options && options.combine
+     ? combineRanges(ranges)
+     : ranges
++
++  var limit = options && options.limit
++
++  return typeof limit === 'number' && limit >= 1 && result.length > limit
++    ? coalesceRanges(result)
++    : result
+ }
+ 
+ /**
+@@ -139,6 +145,28 @@ function combineRanges (ranges) {
+   return combined
+ }
+ 
++/**
++ * Collapse all ranges into one spanning the lowest start to the highest end.
++ * @private
++ */
++
++function coalesceRanges (ranges) {
++  var start = ranges[0].start
++  var end = ranges[0].end
++
++  for (var i = 1; i < ranges.length; i++) {
++    if (ranges[i].start < start) start = ranges[i].start
++    if (ranges[i].end > end) end = ranges[i].end
++  }
++
++  var coalesced = [{ start: start, end: end }]
++
++  // copy ranges type
++  coalesced.type = ranges.type
++
++  return coalesced
++}
++
+ /**
+  * Map function to add index value to ranges.
+  * @private
+diff --git a/test/range-parser.js b/test/range-parser.js
+index 5147754..8f40a24 100644
+--- a/test/range-parser.js
++++ b/test/range-parser.js
+@@ -222,6 +222,51 @@ describe('parseRange(len, str)', function () {
+     })
+   })
+ 
++  describe('when limit is set', function () {
++    it('should return ranges unchanged when within the limit', function () {
++      var range = parse(150, 'bytes=0-4,90-99', { limit: 2 })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 2)
++      deepEqual(range[0], { start: 0, end: 4 })
++      deepEqual(range[1], { start: 90, end: 99 })
++    })
++
++    it('should coalesce into one range when over the limit', function () {
++      var range = parse(150, 'bytes=90-99,0-4,50-60', { limit: 2 })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 0, end: 99 })
++    })
++
++    it('should count only valid ranges', function () {
++      var range = parse(150, 'bytes=0-4,abc,200-300,90-99', { limit: 2 })
++      assert.strictEqual(range.length, 2)
++    })
++
++    it('should count ranges after combining', function () {
++      var range = parse(150, 'bytes=0-4,5-9,90-99', { limit: 2, combine: true })
++      assert.strictEqual(range.length, 2)
++      deepEqual(range[0], { start: 0, end: 9 })
++      deepEqual(range[1], { start: 90, end: 99 })
++    })
++
++    it('should coalesce after combining when still over the limit', function () {
++      var range = parse(150, 'bytes=0-4,5-9,20-30,90-99', { limit: 2, combine: true })
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 0, end: 99 })
++    })
++
++    it('should be unlimited by default', function () {
++      var range = parse(150, 'bytes=0-1,3-4,6-7,9-10')
++      assert.strictEqual(range.length, 4)
++    })
++
++    it('should still return -1 and -2 for bad headers', function () {
++      assert.strictEqual(parse(150, 'bytes=200-300', { limit: 1 }), -1)
++      assert.strictEqual(parse(150, 'bytes=abc', { limit: 1 }), -2)
++    })
++  })
++
+   it('should ignore whitespace-only invalid ranges when valid present', function () {
+     var range = parse(1000, 'bytes= , 0-10')
+     assert.strictEqual(range.type, 'bytes')

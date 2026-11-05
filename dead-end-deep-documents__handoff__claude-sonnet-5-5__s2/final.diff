@@ -1,0 +1,147 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..c6d7b49
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,30 @@
++# HANDOFF
++
++Task: evaluate xmltodict on /tmp/catalog.xml (3000 parts) and collect part ids with a scratch script outside the repo.
++
++## State
++- Parse succeeds (~0.02s). Iterative walk (/tmp/scratch/walk.py) collects all 3000 ids.
++- No repo code changed.
++
++## Findings
++- The generator one-liner nests parts 3000 deep (all `</part>` close at the end), not siblings.
++- A naive recursive walker (/tmp/scratch/walk_rec.py) hits Python's recursion limit (default 1000).
++
++## Decisions
++- Walker is iterative, since depth is data-driven.
++
++## unparse (follow-up)
++- `unparse` on the 3000-deep parsed dict raises RecursionError at the default limit (scratch: /tmp/scratch/rt.py, rt2.py).
++- See results of rt2.py for raised-limit and flat-feed behavior (summarized in chat).
++
++## Wrap-up
++- User only needs parsing for now; unparse is out of scope.
++- Scratch scripts in /tmp/scratch were deleted (the paths mentioned above no longer exist). /tmp/catalog.xml was left in place.
++- Repo code unchanged; HANDOFF.md is the only (untracked) addition.
++
++## drop_keys (new task)
++- Added `drop_keys(doc, names)` to xmltodict.py (before `unparse`) + 5 tests at end of tests/test_xmltodict.py.
++- Decision: iterative (explicit stack), because catalog docs nest ~3000 deep and recursion would hit RecursionError.
++- Decision: a bare string `names` is treated as one name (not iterated by char). Attribute keys need their prefix ('@id').
++- Dict subclasses keep their type (fallback to dict); leaves are shared, containers copied.
++- Not committed; README not updated (not asked).
+diff --git a/tests/test_xmltodict.py b/tests/test_xmltodict.py
+index 75b825a..27035b5 100644
+--- a/tests/test_xmltodict.py
++++ b/tests/test_xmltodict.py
+@@ -720,3 +720,51 @@ def test_force_list_true_applies_to_all_keys():
+     xml = "<a><b>1</b><b>2</b><c>x</c></a>"
+     expected = {"a": [{"b": ["1", "2"], "c": ["x"]}]}
+     assert parse(xml, force_list=True) == expected
++
++
++def test_drop_keys_any_depth_and_attributes():
++    from xmltodict import drop_keys
++    doc = parse('<a id="1"><b id="2" k="x"><c id="3">t</c></b><b id="4"/></a>')
++    out = drop_keys(doc, ['@id'])
++    assert out == {'a': {'b': [{'@k': 'x', 'c': {'#text': 't'}}, {}]}}
++
++
++def test_drop_keys_removes_elements_in_lists():
++    from xmltodict import drop_keys
++    doc = {'a': [{'x': 1, 'y': 2}, {'x': 3}], 'x': 0}
++    assert drop_keys(doc, {'x'}) == {'a': [{'y': 2}, {}]}
++
++
++def test_drop_keys_does_not_mutate_input():
++    import copy
++    from xmltodict import drop_keys
++    doc = {'a': {'@id': '1', 'b': [{'@id': '2', 'c': 'v'}]}}
++    snapshot = copy.deepcopy(doc)
++    out = drop_keys(doc, ['@id'])
++    assert doc == snapshot
++    assert out == {'a': {'b': [{'c': 'v'}]}}
++    assert out['a'] is not doc['a'] and out['a']['b'] is not doc['a']['b']
++
++
++def test_drop_keys_edge_cases():
++    from xmltodict import drop_keys
++    assert drop_keys({'a': 1}, []) == {'a': 1}
++    assert drop_keys({'a': 1}, 'a') == {}  # bare string is one name
++    assert drop_keys('text', ['a']) == 'text'
++    assert drop_keys({'a': 'a', 'b': None}, ['zzz']) == {'a': 'a', 'b': None}
++
++
++def test_drop_keys_very_deep_document():
++    from xmltodict import drop_keys
++    doc = leaf = {}
++    for i in range(5000):
++        leaf['@id'] = str(i)
++        leaf['part'] = {}
++        leaf = leaf['part']
++    out = drop_keys(doc, ['@id'])
++    depth = 0
++    while out:
++        assert '@id' not in out
++        out = out['part']
++        depth += 1
++    assert depth == 5000
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..37eb1b8 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -564,6 +564,50 @@ class _XMLGenerator(XMLGenerator):
+         self._write(f"<!--{escape(text)}-->")
+ 
+ 
++def drop_keys(doc, names):
++    """Return a copy of `doc` with every key in `names` removed at any depth.
++
++    Attribute keys (e.g. ``'@id'``) are matched literally, so pass them with
++    their prefix. Dicts and lists are copied; the input is never mutated and
++    leaf values are shared. Implemented iteratively, so arbitrarily deep
++    documents do not hit the recursion limit.
++    """
++    if isinstance(names, str):
++        names = (names,)
++    names = frozenset(names)
++
++    def shell(node):
++        if isinstance(node, dict):
++            try:
++                return type(node)()
++            except TypeError:
++                return {}
++        if isinstance(node, list):
++            return []
++        return None
++
++    root = shell(doc)
++    if root is None:
++        return doc
++    stack = [(doc, root)]
++    while stack:
++        src, dst = stack.pop()
++        items = src.items() if isinstance(src, dict) else enumerate(src)
++        for key, value in items:
++            if isinstance(src, dict) and key in names:
++                continue
++            child = shell(value)
++            if child is None:
++                child = value
++            else:
++                stack.append((value, child))
++            if isinstance(src, dict):
++                dst[key] = child
++            else:
++                dst.append(child)
++    return root
++
++
+ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
+             short_empty_elements=False, comment_key='#comment',
+             **kwargs):

@@ -1,0 +1,102 @@
+diff --git a/tests/test_xmltodict.py b/tests/test_xmltodict.py
+index 75b825a..d44bc41 100644
+--- a/tests/test_xmltodict.py
++++ b/tests/test_xmltodict.py
+@@ -720,3 +720,50 @@ def test_force_list_true_applies_to_all_keys():
+     xml = "<a><b>1</b><b>2</b><c>x</c></a>"
+     expected = {"a": [{"b": ["1", "2"], "c": ["x"]}]}
+     assert parse(xml, force_list=True) == expected
++
++
++def test_drop_keys_any_depth_and_attributes():
++    from xmltodict import drop_keys
++    doc = parse('<a id="1"><b id="2" k="v"><c>x</c></b><b><c>y</c></b></a>')
++    assert drop_keys(doc, ['@id', 'c']) == {
++        'a': {'b': [{'@k': 'v'}, {}]}}
++
++
++def test_drop_keys_does_not_mutate_input():
++    import copy
++    from xmltodict import drop_keys
++    doc = parse('<a id="1"><b id="2"><c>x</c></b><b>y</b></a>')
++    snapshot = copy.deepcopy(doc)
++    out = drop_keys(doc, {'@id', 'b'})
++    assert doc == snapshot
++    assert out == {'a': {}}
++    out2 = drop_keys(doc, {'@id'})
++    out2['a']['b'][0]['c'] = 'changed'
++    assert doc == snapshot
++
++
++def test_drop_keys_edge_cases():
++    from collections import OrderedDict
++    from xmltodict import drop_keys
++    assert drop_keys({'a': 1}, []) == {'a': 1}
++    assert drop_keys({'a': 1}, 'a') == {}
++    assert drop_keys('text', ['a']) == 'text'
++    assert drop_keys({'a': [1, [{'x': 1, 'y': 2}]]}, ['x']) == {'a': [1, [{'y': 2}]]}
++    # prefix matters: 'id' does not match '@id'
++    assert drop_keys({'@id': 1}, ['id']) == {'@id': 1}
++    out = drop_keys(OrderedDict([('a', OrderedDict([('b', 1)]))]), ['b'])
++    assert isinstance(out, OrderedDict) and isinstance(out['a'], OrderedDict)
++
++
++def test_drop_keys_deep_nesting_no_recursion_error():
++    from xmltodict import drop_keys
++    doc = leaf = {}
++    for _ in range(5000):
++        leaf['part'] = {'@id': 'x'}
++        leaf = leaf['part']
++    out = drop_keys(doc, ['@id'])
++    depth = 0
++    while out:
++        out = out['part']
++        depth += 1
++    assert depth == 5000
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..8f47562 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -632,6 +632,42 @@ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
+         return value
+ 
+ 
++def drop_keys(doc, names):
++    """Return a copy of ``doc`` with every key in ``names`` removed at any depth.
++
++    Keys are matched exactly, so attribute keys must include their prefix
++    (e.g. ``'@id'``). The input is never mutated; dicts and lists are copied
++    (dict subclasses keep their type), other values are shared. Traversal is
++    iterative, so very deeply nested documents do not hit the recursion limit.
++    """
++    if isinstance(names, str):
++        names = (names,)
++    names = frozenset(names)
++
++    def shell(node):
++        return type(node)() if isinstance(node, dict) else []
++
++    if not isinstance(doc, (dict, list)):
++        return doc
++    result = shell(doc)
++    stack = [(doc, result)]
++    while stack:
++        src, dst = stack.pop()
++        items = src.items() if isinstance(src, dict) else enumerate(src)
++        for key, value in items:
++            if isinstance(src, dict) and key in names:
++                continue
++            if isinstance(value, (dict, list)):
++                child = shell(value)
++                stack.append((value, child))
++                value = child
++            if isinstance(src, dict):
++                dst[key] = value
++            else:
++                dst.append(value)
++    return result
++
++
+ if __name__ == '__main__':  # pragma: no cover
+     import marshal
+     import sys

@@ -1,0 +1,151 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..f13fbb9
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,37 @@
++# HANDOFF
++
++## State
++DONE on billing-ui (uncommitted): `format()` in `index.js` now truncates toward zero instead of rounding, via new helper `truncate()`. Tests added/updated in `test/byte-format.js`; 33 passing, eslint clean. User said we're cleared to make the fix.
++- Whole-byte inputs: exact expansion (`toFixed(100)`; /2^k is exact in binary) then slice, so 1048575 -> `1023.99KB`.
++- Fractional inputs: `toFixed(decimalPlaces+12)` then slice, because `1.2*kb/kb` is 1.19999999999999996 and exact truncation would show `1.19KB`. Tests cover 1.1/1.2/1.15 KB, 4.35MB.
++- `-0.001` -> `0B` (no `-0`).
++- Updated existing tests that expected rounding (1.5KB dp0 -> `1kb`; 1.05KB dp1 -> `1kb`).
++- STILL OPEN: this changes the default for ALL callers of `bytes.format` (I applied it globally, following the "no rounding up anywhere" decision). If it should be billing-only, make it an option instead. Finance wording sign-off also still pending. Not committed.
++
++## Findings
++- Billing page showing `1024KB` comes from `format()` in `index.js`. The unit is chosen from the raw value, then `val.toFixed(decimalPlaces)` rounds. A value just under a unit boundary stays in the smaller unit and rounds up to 1024 (e.g. `format(1048575)` -> `1024KB`, `1073741823` -> `1024MB`, `-1048575` -> `-1024KB`).
++- Window is the last ~0.005 of a unit with default `decimalPlaces: 2`; wider with lower `decimalPlaces` (0 -> anything >= 1023.5 KB).
++- Forced `unit` option does not trigger it.
++
++## Decision (from user, finance rule)
++Billing must never display more than was actually used: no rounding up anywhere, truncate extra decimals instead.
++- 1048575 bytes -> `1023.99KB` (not `1024KB`, not `1MB`)
++- 2047 bytes -> `1.99KB`
++
++Reason: finance policy. This rules out the earlier idea of "round, then bump to next unit" since that would show 1MB for 1048575.
++
++## Planned change (not done)
++In `format`, replace `toFixed(decimalPlaces)` rounding with truncation toward zero at `decimalPlaces` digits (watch float error, e.g. use integer math / string slicing on a high-precision toFixed rather than Math.floor(val*10^n)). Keep unit selection on the raw value, which is then correct. Check negatives (truncate toward zero), `fixedDecimals`, `thousandsSeparator`, and update existing tests that expect rounding.
++
++## Open questions
++- Finance sign-off on page wording.
++- Whether truncation should apply to all callers of `bytes.format` or only billing (e.g. a new option); this changes the library's default behavior for everyone otherwise.
++
++## capacity-alerts branch (design only, no code changed)
++Ops want the opposite of billing: never show less than real usage, so round UP (ceiling) at the shown precision.
++- 1048575 -> `1MB`, 1025 -> `1.01KB`, 2047 -> `2KB`.
++- Design: keep unit choice on raw value; ceil magnitude at `decimalPlaces` (away from zero for negatives); if result reaches 1024 and unit not forced and not PB, bump to next unit as 1. Forced `unit` stays e.g. `1024KB`.
++- Use integer math / high-precision string for the ceiling; `Math.ceil(val*100)/100` overshoots (1.1*100 = 110.00000000000001).
++- Reason for an option (e.g. `rounding: 'ceil'`) rather than a new default: billing wants truncation, other callers expect nearest rounding.
++- `decimalPlaces: 0` makes 1025 bytes -> `2KB`; ops to confirm acceptable.
++- Waiting on ops to finish reviewing alert thresholds before any edit.
+diff --git a/index.js b/index.js
+index 6f2d0f8..c5cb162 100644
+--- a/index.js
++++ b/index.js
+@@ -66,8 +66,9 @@ function bytes(value, options) {
+ /**
+  * Format the given value in bytes into a string.
+  *
+- * If the value is negative, it is kept as such. If it is a float,
+- * it is rounded.
++ * If the value is negative, it is kept as such. Extra decimals are
++ * truncated toward zero, never rounded, so the output never exceeds the
++ * actual value (e.g. 1048575 -> 1023.99KB, not 1024KB).
+  *
+  * @param {number} value
+  * @param {object} [options]
+@@ -110,7 +111,7 @@ function format(value, options) {
+   }
+ 
+   var val = value / map[unit.toLowerCase()];
+-  var str = val.toFixed(decimalPlaces);
++  var str = truncate(val, decimalPlaces, Number.isInteger(value));
+ 
+   if (!fixedDecimals) {
+     str = str.replace(formatDecimalsRegExp, '$1');
+@@ -127,6 +128,32 @@ function format(value, options) {
+   return str + unitSeparator + unit;
+ }
+ 
++/**
++ * Truncate (toward zero) a number to the given decimal places, as a string.
++ *
++ * Whole-byte inputs are expanded exactly (division by a power of two is exact
++ * in binary floating point), so values just under a boundary are not rounded
++ * up. Fractional inputs carry float noise (e.g. 1.2 * 1024 / 1024 is
++ * 1.19999999999999996), so they are first rounded at a much finer precision.
++ *
++ * @param {number} val
++ * @param {number} decimalPlaces
++ * @param {boolean} exact
++ * @returns {string}
++ * @private
++ */
++
++function truncate(val, decimalPlaces, exact) {
++  var digits = exact ? 100 : Math.min(decimalPlaces + 12, 100);
++  var str = val.toFixed(digits);
++  var dot = str.indexOf('.');
++
++  str = str.slice(0, decimalPlaces > 0 ? dot + decimalPlaces + 1 : dot);
++
++  // avoid "-0" / "-0.00" when a small negative is truncated to zero
++  return /^-0(\.0*)?$/.test(str) ? str.slice(1) : str;
++}
++
+ /**
+  * Parse the string value into an integer in bytes.
+  *
+diff --git a/test/byte-format.js b/test/byte-format.js
+index 7e82cee..3e62210 100644
+--- a/test/byte-format.js
++++ b/test/byte-format.js
+@@ -90,14 +90,43 @@ describe('Test byte format function', function(){
+     assert.equal(bytes.format(kb - 1, {decimalPlaces: 0}).toLowerCase(), '1023b');
+     assert.equal(bytes.format(kb, {decimalPlaces: 0}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(1.4 * kb, {decimalPlaces: 0}).toLowerCase(), '1kb');
+-    assert.equal(bytes.format(1.5 * kb, {decimalPlaces: 0}).toLowerCase(), '2kb');
++    assert.equal(bytes.format(1.5 * kb, {decimalPlaces: 0}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(kb - 1, {decimalPlaces: 1}).toLowerCase(), '1023b');
+     assert.equal(bytes.format(kb, {decimalPlaces: 1}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(1.04 * kb, {decimalPlaces: 1}).toLowerCase(), '1kb');
+-    assert.equal(bytes.format(1.05 * kb, {decimalPlaces: 1}).toLowerCase(), '1.1kb');
++    assert.equal(bytes.format(1.05 * kb, {decimalPlaces: 1}).toLowerCase(), '1kb');
++    assert.equal(bytes.format(1.19 * kb, {decimalPlaces: 1}).toLowerCase(), '1.1kb');
+     assert.equal(bytes.format(1.1005 * kb, {decimalPlaces: 4}).toLowerCase(), '1.1005kb');
+   });
+ 
++  it('Should truncate instead of rounding up', function(){
++    assert.equal(bytes.format(kb * kb - 1), '1023.99KB');
++    assert.equal(bytes.format(kb * kb * kb - 1), '1023.99MB');
++    assert.equal(bytes.format(Math.pow(kb, 4) - 1), '1023.99GB');
++    assert.equal(bytes.format(Math.pow(kb, 5) - 1), '1023.99TB');
++    assert.equal(bytes.format(2047), '1.99KB');
++    assert.equal(bytes.format(kb * kb), '1MB');
++    assert.equal(bytes.format(kb * kb - 1, {decimalPlaces: 0}), '1023KB');
++    assert.equal(bytes.format(kb * kb - 1, {decimalPlaces: 4}), '1023.999KB');
++    assert.equal(bytes.format(kb * kb - 1, {decimalPlaces: 2, fixedDecimals: true}), '1023.99KB');
++    assert.equal(bytes.format(kb * kb - 1, {thousandsSeparator: ','}), '1,023.99KB');
++    assert.equal(bytes.format(kb * kb - 1, {unit: 'KB'}), '1023.99KB');
++  });
++
++  it('Should truncate negative values toward zero', function(){
++    assert.equal(bytes.format(-(kb * kb - 1)), '-1023.99KB');
++    assert.equal(bytes.format(-2047), '-1.99KB');
++    assert.equal(bytes.format(-0.001), '0B');
++    assert.equal(bytes.format(-0.001, {fixedDecimals: true}), '0.00B');
++  });
++
++  it('Should not truncate float noise below the intended value', function(){
++    assert.equal(bytes.format(1.1 * kb), '1.1KB');
++    assert.equal(bytes.format(1.2 * kb), '1.2KB');
++    assert.equal(bytes.format(1.15 * kb), '1.15KB');
++    assert.equal(bytes.format(4.35 * mb), '4.35MB');
++  });
++
+   it('Should support fixed decimal places', function(){
+     assert.equal(bytes.format(kb, {decimalPlaces: 3, fixedDecimals: true}).toLowerCase(), '1.000kb');
+   });

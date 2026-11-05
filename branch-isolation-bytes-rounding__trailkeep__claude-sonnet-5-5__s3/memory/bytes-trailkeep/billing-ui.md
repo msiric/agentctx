@@ -1,0 +1,9 @@
+# billing-ui
+
+Branch: billing-ui · Repo: local__bytes-826140297 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: Billing display rule from finance: never show more than actually used, so bytes.format must truncate extra decimals, never round up (1048575 B -> 1023.99KB, not 1MB or 1024KB; 2047 B -> 1.99KB). Reason: support saw '1024KB' on billing page, caused by toFixed rounding up near unit boundaries (index.js format). Status: code NOT changed yet; waiting on finance to sign off the page wording.
+- 2026-11-05: format() now truncates via Math.trunc(val*10^dp)/10^dp instead of toFixed rounding; code changed, tests added/updated (old tests expecting round-half-up, e.g. 1.5KB dp0 -> 2KB, now expect truncation). Finance wording sign-off still pending on the page itself.
+

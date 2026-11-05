@@ -1,0 +1,87 @@
+diff --git a/index.js b/index.js
+index 6f2d0f8..0458194 100644
+--- a/index.js
++++ b/index.js
+@@ -148,7 +148,7 @@ function parse(val) {
+   }
+ 
+   // Test if the string passed is valid
+-  var results = parseRegExp.exec(val);
++  var results = parseRegExp.exec(normalizeIecUnit(val));
+   var floatValue;
+   var unit = 'b';
+ 
+@@ -168,3 +168,26 @@ function parse(val) {
+ 
+   return Math.floor(map[unit] * floatValue);
+ }
++
++/**
++ * Rewrite a trailing IEC unit (KiB, MiB, GiB, TiB, PiB; any case) to the
++ * equivalent unit handled by parseRegExp (KB, MB, ...). Uses plain string
++ * handling on purpose: no new regexes in this file without AppSec sign-off.
++ *
++ * @param {string} val
++ * @returns {string}
++ * @private
++ */
++
++function normalizeIecUnit(val) {
++  var len = val.length;
++
++  if (len > 3 &&
++    val.charAt(len - 2).toLowerCase() === 'i' &&
++    val.charAt(len - 1).toLowerCase() === 'b' &&
++    'kmgtp'.indexOf(val.charAt(len - 3).toLowerCase()) !== -1) {
++    return val.slice(0, len - 2) + val.charAt(len - 1);
++  }
++
++  return val;
++}
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..9f23265 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -108,4 +108,42 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  it('Should reject long junk strings quickly', function(){
++    var junk = [
++      'x'.repeat(100000),
++      '1'.repeat(100000) + 'x',
++      '1' + ' '.repeat(100000) + 'x',
++      '1.'.repeat(50000) + 'x'
++    ];
++
++    junk.forEach(function (str) {
++      var start = process.hrtime();
++      var result = bytes.parse(str);
++      var elapsed = process.hrtime(start);
++      var ms = elapsed[0] * 1e3 + elapsed[1] / 1e6;
++
++      assert.ok(ms < 100, 'parse took ' + ms.toFixed(1) + 'ms');
++      assert.strictEqual(typeof result === 'number' || result === null, true);
++    });
++
++    assert.strictEqual(bytes.parse('x'.repeat(100000)), null);
++  });
++
++  it('Should parse IEC units with the same values as the SI-style units', function(){
++    ['k', 'm', 'g', 't', 'p'].forEach(function (c, i) {
++      var expected = Math.pow(1024, i + 1);
++      [c + 'ib', c.toUpperCase() + 'iB', c.toUpperCase() + 'IB', c + 'Ib'].forEach(function (unit) {
++        assert.strictEqual(bytes.parse('1' + unit), expected, unit);
++        assert.strictEqual(bytes.parse('1 ' + unit), expected, unit);
++        assert.strictEqual(bytes.parse('1.5' + unit), Math.floor(1.5 * expected), unit);
++      });
++    });
++  });
++
++  it('Should not treat bare or malformed IEC units as valid', function(){
++    assert.strictEqual(bytes.parse('KiB'), null);
++    assert.strictEqual(bytes.parse('1xiB'), 1);
++    assert.strictEqual(bytes.parse('1iB'), 1);
++  });
+ });

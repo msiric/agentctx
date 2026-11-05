@@ -1,0 +1,70 @@
+diff --git a/index.js b/index.js
+index 6f2d0f8..09c94cb 100644
+--- a/index.js
++++ b/index.js
+@@ -147,6 +147,16 @@ function parse(val) {
+     return null;
+   }
+ 
++  // Normalize IEC units (KiB, MiB, ...) to their KB, MB, ... equivalents.
++  // Plain string handling on purpose: no new regexes without AppSec sign-off.
++  var len = val.length;
++  if (len >= 3 &&
++      val.charAt(len - 1).toLowerCase() === 'b' &&
++      val.charAt(len - 2).toLowerCase() === 'i' &&
++      'kmgtp'.indexOf(val.charAt(len - 3).toLowerCase()) !== -1) {
++    val = val.slice(0, len - 2) + val.charAt(len - 1);
++  }
++
+   // Test if the string passed is valid
+   var results = parseRegExp.exec(val);
+   var floatValue;
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..e7caf6c 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -108,4 +108,44 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  it('Should parse IEC units like their decimal-named counterparts', function(){
++    ['k', 'm', 'g', 't', 'p'].forEach(function (p, i) {
++      var expected = Math.pow(1024, i + 1);
++      assert.equal(bytes.parse('1' + p + 'ib'), expected);
++      assert.equal(bytes.parse('1' + p.toUpperCase() + 'iB'), expected);
++      assert.equal(bytes.parse('1' + p.toUpperCase() + 'IB'), expected);
++      assert.equal(bytes.parse('1 ' + p.toUpperCase() + 'iB'), expected);
++      assert.equal(bytes.parse('1.5' + p.toUpperCase() + 'iB'), Math.floor(1.5 * expected));
++      assert.equal(bytes.parse('-1' + p.toUpperCase() + 'iB'), -expected);
++      assert.equal(bytes.parse('1' + p + 'b'), expected);
++    });
++  });
++
++  it('Should reject invalid IEC-like units', function(){
++    assert.strictEqual(bytes.parse('KiB'), null);
++    // Unknown units fall back to parseInt, as for 'foo' suffixes today
++    assert.strictEqual(bytes.parse('1biB'), 1);
++    assert.strictEqual(bytes.parse('1EiB'), 1);
++    assert.strictEqual(bytes.parse('1 xKiB'), 1);
++  });
++
++  it('Should reject long junk strings quickly', function(){
++    var inputs = [
++      'x'.repeat(100000),
++      '1'.repeat(100000) + 'x',
++      '1.'.repeat(50000) + 'x',
++      '1' + ' '.repeat(100000) + 'x'
++    ];
++
++    inputs.forEach(function (input) {
++      var start = process.hrtime();
++      var result = bytes.parse(input);
++      var elapsed = process.hrtime(start);
++      var ms = elapsed[0] * 1e3 + elapsed[1] / 1e6;
++
++      assert.ok(result === null || typeof result === 'number');
++      assert.ok(ms < 100, 'parse took ' + ms.toFixed(1) + 'ms');
++    });
++  });
+ });

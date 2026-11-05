@@ -1,0 +1,84 @@
+diff --git a/Readme.md b/Readme.md
+index 5790e23..16d857f 100644
+--- a/Readme.md
++++ b/Readme.md
+@@ -110,6 +110,7 @@ Supported units and abbreviations are as follows and are case-insensitive:
+   * `gb` for gigabytes
+   * `tb` for terabytes
+   * `pb` for petabytes
++  * `kib`, `mib`, `gib`, `tib` and `pib` for kibibytes, mebibytes, gibibytes, tebibytes and pebibytes (same values as `kb`, `mb`, `gb`, `tb` and `pb`)
+ 
+ The units are in powers of two, not ten. This means 1kb = 1024b according to this parser.
+ 
+diff --git a/index.js b/index.js
+index 6f2d0f8..a259297 100644
+--- a/index.js
++++ b/index.js
+@@ -32,9 +32,14 @@ var map = {
+   gb: 1 << 30,
+   tb: Math.pow(1024, 4),
+   pb: Math.pow(1024, 5),
++  kib: 1 << 10,
++  mib: 1 << 20,
++  gib: 1 << 30,
++  tib: Math.pow(1024, 4),
++  pib: Math.pow(1024, 5),
+ };
+ 
+-var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
++var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kib|mib|gib|tib|pib|kb|mb|gb|tb|pb)$/i;
+ 
+ /**
+  * Convert the given value in bytes into a string or parse to string to an integer in bytes.
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..8abb25a 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -108,4 +108,47 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  it('Should reject a 100k-character junk string quickly', function(){
++    var inputs = [
++      'x'.repeat(1e5),
++      '1'.repeat(1e5) + 'x',
++      '1' + ' '.repeat(1e5) + 'x',
++      '1' + '.1'.repeat(5e4) + 'x'
++    ];
++
++    inputs.forEach(function (input) {
++      var start = process.hrtime();
++      bytes.parse(input);
++      var elapsed = process.hrtime(start);
++      var ms = elapsed[0] * 1e3 + elapsed[1] / 1e6;
++
++      assert.ok(ms < 100, 'parse took ' + ms.toFixed(1) + 'ms');
++    });
++
++    assert.strictEqual(bytes.parse('x'.repeat(1e5)), null);
++  });
++
++  it('Should parse IEC units (KiB, MiB, GiB, TiB, PiB)', function(){
++    ['Ki', 'Mi', 'Gi', 'Ti', 'Pi'].forEach(function (prefix, i) {
++      var factor = Math.pow(1024, i + 1);
++      var iec = prefix + 'B';
++      var si = prefix[0] + 'B';
++
++      [iec, iec.toLowerCase(), iec.toUpperCase(), prefix.toLowerCase() + 'B', prefix + 'b'].forEach(function (unit) {
++        assert.strictEqual(bytes.parse('1' + unit), factor);
++        assert.strictEqual(bytes.parse('1 ' + unit), factor);
++        assert.strictEqual(bytes.parse('0.5' + unit), 0.5 * factor);
++        assert.strictEqual(bytes.parse('1.5' + unit), 1.5 * factor);
++      });
++
++      assert.strictEqual(bytes.parse('1' + iec), bytes.parse('1' + si));
++    });
++  });
++
++  it('Should not parse invalid IEC-like units', function(){
++    assert.strictEqual(bytes.parse('1iB'), 1);
++    assert.strictEqual(bytes.parse('1KiBB'), 1);
++    assert.strictEqual(bytes.parse('KiB'), null);
++  });
+ });

@@ -1,0 +1,231 @@
+diff --git a/CHANGELOG.rst b/CHANGELOG.rst
+index e166f03..959ad11 100644
+--- a/CHANGELOG.rst
++++ b/CHANGELOG.rst
+@@ -1,3 +1,12 @@
++Unreleased
++==========
++
++- Rename the ``time`` parameter of ``TTLCache.expire()`` and
++  ``TLRUCache.expire()`` to ``now``, so it no longer shadows the
++  ``time`` module.  The ``time`` keyword argument is deprecated, but
++  still accepted for now (no runtime warning is emitted).
++
++
+ v7.2.8 (2026-10-31)
+ ===================
+ 
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..c016c45
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,18 @@
++# HANDOFF
++
++Task: add a setter for `TTLCache.ttl` (runtime retuning from config reloader).
++
++- Done: setter in `src/cachetools/__init__.py`, stub in `__init__.pyi`, test `test_ttl_setter` in `tests/test_ttl.py`.
++- Decision: setter only assigns `__ttl`; existing items keep their original expiry (as requested). No validation, matching the constructor.
++- Not done: docs/CHANGELOG not updated; TLRUCache has no ttl property.
++
++## Task 2: rename `expire(time)` -> `expire(now)` (TTLCache, TLRUCache, _TimedCache, stubs)
++- Signature is `expire(self, now=None, *, time=None)`; `time` is a keyword-only deprecated alias (`now` wins if both given). Positional callers unaffected.
++- Decision: no `warnings.warn` (standing rule below); deprecation noted in docstrings + CHANGELOG.rst only.
++- Pitfall: a blanket s/time/now/ also hit `__iter__`, where `time` is a local from `with self.timer as time`; reverted those.
++- Tests: `test_expire_time_keyword` in test_ttl.py/test_tlru.py (asserts no warning for `time=`).
++- Run tests with `PYTHONPATH=src`; site-packages has an installed cachetools that shadows the tree otherwise.
++- `-W error` via unittest has 4 pre-existing errors in test_cached.NoneWrapperTest (unrelated); pytest -W error fails on a pytest-asyncio config warning.
++
++## Standing rule for this fork
++The ingest service vendors this fork and runs its tests with `-W error`, so nothing we add may emit a warning at runtime (DeprecationWarning included). Deprecations are documented only in the docstring and CHANGELOG.rst; never via `warnings.warn`.
+diff --git a/src/cachetools/__init__.py b/src/cachetools/__init__.py
+index 4ff8b92..4f5575c 100644
+--- a/src/cachetools/__init__.py
++++ b/src/cachetools/__init__.py
+@@ -455,7 +455,7 @@ class _TimedCache(Cache):
+         # be O(1) regardless of cache contents.
+         Cache.clear(self)
+ 
+-    def expire(self, time=None):  # pragma: no cover
++    def expire(self, now=None, *, time=None):  # pragma: no cover
+         raise NotImplementedError
+ 
+ 
+@@ -554,22 +554,31 @@ class TTLCache(_TimedCache):
+         """The time-to-live value of the cache's items."""
+         return self.__ttl
+ 
+-    def expire(self, time=None):
++    @ttl.setter
++    def ttl(self, value):
++        # only affects items inserted after the change
++        self.__ttl = value
++
++    def expire(self, now=None, *, time=None):
+         """Remove expired items from the cache and return an iterable of the
+         expired `(key, value)` pairs.
+ 
++        The `time` keyword argument is a deprecated alias for `now`.
++
+         """
+-        if time is None:
+-            time = self.timer()
++        if now is None:
++            now = time
++        if now is None:
++            now = self.timer()
+         root = self.__root
+         curr = root.next
+-        if curr is root or time < curr.expires:
++        if curr is root or now < curr.expires:
+             return []  # fast path: nothing has expired
+         links = self.__links
+         expired = []
+         cache_delitem = Cache.__delitem__
+         cache_getitem = Cache.__getitem__
+-        while curr is not root and not (time < curr.expires):
++        while curr is not root and not (now < curr.expires):
+             expired.append((curr.key, cache_getitem(self, curr.key)))
+             cache_delitem(self, curr.key)
+             del links[curr.key]
+@@ -684,25 +693,29 @@ class TLRUCache(_TimedCache):
+         """The time-to-use function used by the cache."""
+         return self.__ttu
+ 
+-    def expire(self, time=None):
++    def expire(self, now=None, *, time=None):
+         """Remove expired items from the cache and return an iterable of the
+         expired `(key, value)` pairs.
+ 
++        The `time` keyword argument is a deprecated alias for `now`.
++
+         """
+-        if time is None:
+-            time = self.timer()
++        if now is None:
++            now = time
++        if now is None:
++            now = self.timer()
+         items = self.__items
+         order = self.__order
+         # clean up the heap if too many items are marked as removed
+         if len(order) > len(items) * self.__HEAP_CLEANUP_FACTOR:
+             self.__order = order = [item for item in order if not item.removed]
+             heapq.heapify(order)
+-        if not order or (not order[0].removed and time < order[0].expires):
++        if not order or (not order[0].removed and now < order[0].expires):
+             return []  # fast path: nothing has expired
+         expired = []
+         cache_delitem = Cache.__delitem__
+         cache_getitem = Cache.__getitem__
+-        while order and (order[0].removed or not (time < order[0].expires)):
++        while order and (order[0].removed or not (now < order[0].expires)):
+             item = heapq.heappop(order)
+             if not item.removed:
+                 expired.append((item.key, cache_getitem(self, item.key)))
+diff --git a/src/cachetools/__init__.pyi b/src/cachetools/__init__.pyi
+index 41c1c06..4dd8c5d 100644
+--- a/src/cachetools/__init__.pyi
++++ b/src/cachetools/__init__.pyi
+@@ -110,7 +110,9 @@ class TTLCache(_TimedCache[_KT, _VT, _TT]):
+     ) -> None: ...
+     @property
+     def ttl(self) -> Any: ...
+-    def expire(self, time: _TT | None = None) -> list[tuple[_KT, _VT]]: ...
++    @ttl.setter
++    def ttl(self, value: Any) -> None: ...
++    def expire(self, now: _TT | None = None, *, time: _TT | None = None) -> list[tuple[_KT, _VT]]: ...
+ 
+ class TLRUCache(_TimedCache[_KT, _VT, _TT]):
+     @overload  # without timer, _TT takes its default
+@@ -131,7 +133,7 @@ class TLRUCache(_TimedCache[_KT, _VT, _TT]):
+     ) -> None: ...
+     @property
+     def ttu(self) -> Callable[[_KT, _VT, _TT], _TT]: ...
+-    def expire(self, time: _TT | None = None) -> list[tuple[_KT, _VT]]: ...
++    def expire(self, now: _TT | None = None, *, time: _TT | None = None) -> list[tuple[_KT, _VT]]: ...
+ 
+ class _CacheInfo(NamedTuple):
+     hits: int
+diff --git a/tests/test_tlru.py b/tests/test_tlru.py
+index 4575a81..13bee8f 100644
+--- a/tests/test_tlru.py
++++ b/tests/test_tlru.py
+@@ -1,5 +1,6 @@
+ import math
+ import unittest
++import warnings
+ 
+ from cachetools import TLRUCache
+ 
+@@ -353,6 +354,19 @@ class TLRUCacheTest(unittest.TestCase, CacheTestMixin):
+         self.assertEqual(4, len(expired))
+         self.assertEqual(0, len(cache))
+ 
++    def test_expire_time_keyword(self):
++        cache = TLRUCache[int, int, int](
++            maxsize=2, ttu=lambda k, v, t: t + 2, timer=Timer()
++        )
++        cache[1] = 1
++        self.assertEqual([], cache.expire(now=1))
++        self.assertEqual([(1, 1)], cache.expire(now=2))
++        cache[2] = 2
++        # deprecated alias must keep working, silently
++        with warnings.catch_warnings():
++            warnings.simplefilter("error")
++            self.assertEqual([(2, 2)], cache.expire(time=2))
++
+     def test_tlru_datetime(self):
+         from datetime import datetime, timedelta
+ 
+diff --git a/tests/test_ttl.py b/tests/test_ttl.py
+index 2fceab1..d48c14f 100644
+--- a/tests/test_ttl.py
++++ b/tests/test_ttl.py
+@@ -1,5 +1,6 @@
+ import math
+ import unittest
++import warnings
+ 
+ from cachetools import TTLCache
+ 
+@@ -84,6 +85,38 @@ class TTLCacheTest(unittest.TestCase, CacheTestMixin):
+         self.assertEqual(0, len(cache))
+         self.assertEqual(set(), set(cache))
+ 
++    def test_ttl_setter(self):
++        timer = Timer()
++        cache = TTLCache[int, int, int](maxsize=3, ttl=2, timer=timer)
++        cache[1] = 1
++        cache.ttl = 5
++        self.assertEqual(5, cache.ttl)
++        cache[2] = 2
++
++        timer.time = 2  # item 1 expired under the old ttl
++        cache.expire()
++        self.assertNotIn(1, cache)
++        self.assertIn(2, cache)
++
++        timer.time = 4  # item 2 lives for the new ttl
++        cache.expire()
++        self.assertIn(2, cache)
++
++        timer.time = 5
++        cache.expire()
++        self.assertNotIn(2, cache)
++
++    def test_expire_time_keyword(self):
++        cache = TTLCache[int, int, int](maxsize=2, ttl=2, timer=Timer())
++        cache[1] = 1
++        self.assertEqual([], cache.expire(now=1))
++        self.assertEqual([(1, 1)], cache.expire(now=2))
++        cache[2] = 2
++        # deprecated alias must keep working, silently
++        with warnings.catch_warnings():
++            warnings.simplefilter("error")
++            self.assertEqual([(2, 2)], cache.expire(time=2))
++
+     def test_ttl_timer(self):
+         cache = TTLCache[int, int, int](maxsize=2, ttl=2, timer=Timer())
+         self.assertEqual(cache.timer.time, 0)

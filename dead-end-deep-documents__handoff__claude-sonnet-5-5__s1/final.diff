@@ -1,0 +1,158 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..196f8eb
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,27 @@
++# HANDOFF
++
++## Task
++Evaluate xmltodict on a catalog-shaped file (/tmp/catalog.xml, 3000 parts) and collect every part id with a scratch script (/tmp/scratch, outside repo). No repo code changed.
++
++## Findings
++- parse() of the 120 KB file: ~0.02s, no error.
++- The user's one-liner nests parts (all `<part>` opens precede all closes), so the result is 3000 levels deep, not 3000 siblings.
++- Iterative walk (/tmp/scratch/walk.py): all 3000 ids collected, correct.
++- Recursive walk (/tmp/scratch/rec.py): RecursionError after 997 ids (default limit 1000). The failure is in the walker, not xmltodict.
++
++## Open
++- Confirm whether the real feed has sibling parts (likely); if so the generator doesn't match it.
++
++## unparse check
++- Nested file (/tmp/catalog.xml): unparse raises RecursionError (3000 deep, default limit). 
++- Flat variant (/tmp/catalog_flat.xml, sibling parts): unparse OK, re-parse equals original dict.
++- Scripts: /tmp/scratch/unp.py, unp_flat.py
++
++## Cleanup
++- Removed /tmp/scratch and /tmp/catalog_flat.xml. /tmp/catalog.xml kept (regenerable with the one-liner). User only needs parsing for now.
++
++## drop_keys(doc, names) (added to xmltodict.py, tests in tests/test_drop_keys.py)
++- Returns a copy with all matching dict keys removed at any depth; exact match, so attributes need the prefix ('@id'). Never mutates input; dicts/lists copied, scalars shared.
++- Decision: iterative (explicit stack), not recursive, because the catalog test file parses 3000+ levels deep and a recursive version would hit RecursionError (same as the earlier recursive walker). Covered by a 5000-deep test.
++- Dict subclasses (e.g. OrderedDict) are preserved; non-container input is returned as-is.
++- Empty elements that only had dropped attrs become {} (not None) - intentional.
+diff --git a/tests/test_drop_keys.py b/tests/test_drop_keys.py
+new file mode 100644
+index 0000000..35556cd
+--- /dev/null
++++ b/tests/test_drop_keys.py
+@@ -0,0 +1,67 @@
++import copy
++
++from xmltodict import drop_keys, parse
++
++
++def test_removes_keys_and_attributes_at_any_depth():
++    doc = parse('<a id="1"><b id="2" k="v"><c>x</c></b><b id="3"/></a>')
++    assert drop_keys(doc, ['@id']) == {
++        'a': {'b': [{'@k': 'v', 'c': 'x'}, {}]}}
++
++
++def test_removes_element_keys_inside_lists():
++    doc = {'a': [{'x': 1, 'y': 2}, {'x': 3}]}
++    assert drop_keys(doc, {'x'}) == {'a': [{'y': 2}, {}]}
++
++
++def test_does_not_mutate_input():
++    doc = parse('<a id="1"><b id="2">t</b><b id="3">u</b></a>')
++    before = copy.deepcopy(doc)
++    result = drop_keys(doc, ['@id', 'b'])
++    assert doc == before
++    assert result == {'a': {}}
++    assert result['a'] is not doc['a']
++
++
++def test_copy_is_independent_of_input():
++    doc = {'a': {'b': [1, {'c': 2}]}}
++    result = drop_keys(doc, ['zzz'])
++    assert result == doc
++    result['a']['b'][1]['c'] = 99
++    assert doc['a']['b'][1]['c'] == 2
++
++
++def test_prefix_must_match_exactly():
++    doc = {'a': {'@id': '1', 'id': 'e'}}
++    assert drop_keys(doc, ['id']) == {'a': {'@id': '1'}}
++
++
++def test_empty_names_and_non_container_input():
++    doc = {'a': [1, 2]}
++    assert drop_keys(doc, []) == doc
++    assert drop_keys(doc, []) is not doc
++    assert drop_keys('text', ['a']) == 'text'
++    assert drop_keys(None, ['a']) is None
++
++
++def test_preserves_dict_subclass_and_key_order():
++    from collections import OrderedDict
++    doc = OrderedDict([('b', 1), ('a', 2), ('c', 3)])
++    result = drop_keys(doc, ['a'])
++    assert isinstance(result, OrderedDict)
++    assert list(result) == ['b', 'c']
++
++
++def test_very_deep_nesting_does_not_recurse():
++    doc = leaf = {}
++    for _ in range(5000):
++        leaf['@id'] = 'x'
++        leaf['part'] = {}
++        leaf = leaf['part']
++    result = drop_keys(doc, ['@id'])
++    depth = 0
++    while result:
++        assert '@id' not in result
++        result = result['part']
++        depth += 1
++    assert depth == 5000
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..976d04d 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -632,6 +632,47 @@ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
+         return value
+ 
+ 
++def drop_keys(doc, names):
++    """Return a copy of `doc` with every dict key in `names` removed at any depth.
++
++    Keys are matched exactly, so attribute keys need their prefix (e.g.
++    `'@id'`). Dicts and lists are copied; other values are shared. The input
++    is never mutated. Implemented iteratively so very deeply nested documents
++    do not hit the recursion limit.
++    """
++    names = frozenset(names)
++
++    def shell(value):
++        if isinstance(value, dict):
++            return type(value)() if type(value) is not dict else {}
++        if isinstance(value, list):
++            return []
++        return None
++
++    root = shell(doc)
++    if root is None:
++        return doc
++    stack = [(doc, root)]
++    while stack:
++        src, dst = stack.pop()
++        items = src.items() if isinstance(src, dict) else enumerate(src)
++        for key, value in items:
++            if isinstance(src, dict):
++                if key in names:
++                    continue
++            child = shell(value)
++            if child is None:
++                out = value
++            else:
++                out = child
++                stack.append((value, child))
++            if isinstance(src, dict):
++                dst[key] = out
++            else:
++                dst.append(out)
++    return root
++
++
+ if __name__ == '__main__':  # pragma: no cover
+     import marshal
+     import sys

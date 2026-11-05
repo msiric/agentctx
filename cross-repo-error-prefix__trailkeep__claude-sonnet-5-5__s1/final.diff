@@ -1,0 +1,149 @@
+diff --git a/index.d.ts b/index.d.ts
+index df9895c..62887eb 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -8,6 +8,21 @@ export type TimeComponents<T extends (number | bigint) = number> = {
+ 	nanoseconds: T;
+ };
+ 
++export type Options = {
++	/**
++	The largest unit to include in the result. Larger units are rolled into it and set to zero.
++
++	@default 'days'
++
++	@example
++	```
++	parseMilliseconds(93_600_000, {largestUnit: 'hours'});
++	// {days: 0, hours: 26, …}
++	```
++	*/
++	readonly largestUnit?: 'days' | 'hours' | 'minutes' | 'seconds';
++};
++
+ /**
+ Parse milliseconds into an object.
+ 
+@@ -27,4 +42,4 @@ parseMilliseconds(1337000001);
+ // }
+ ```
+ */
+-export default function parseMilliseconds<T extends number | bigint>(milliseconds: T): TimeComponents<T>;
++export default function parseMilliseconds<T extends number | bigint>(milliseconds: T, options?: Options): TimeComponents<T>;
+diff --git a/index.js b/index.js
+index 8ece65f..5bbbde7 100644
+--- a/index.js
++++ b/index.js
+@@ -39,18 +39,39 @@ function parseBigint(milliseconds) {
+ 	};
+ }
+ 
+-export default function parseMilliseconds(milliseconds) {
++const LARGEST_UNITS = ['days', 'hours', 'minutes', 'seconds'];
++
++// Roll every unit larger than `largestUnit` into it, leaving those larger units at zero.
++function rollUp(parts, largestUnit, zero, multiply, add) {
++	const result = {...parts};
++	const factors = {hours: 24, minutes: 60, seconds: 60};
++
++	for (let index = 0; index < LARGEST_UNITS.indexOf(largestUnit); index++) {
++		const larger = LARGEST_UNITS[index];
++		const smaller = LARGEST_UNITS[index + 1];
++		result[smaller] = add(multiply(result[larger], factors[smaller]), result[smaller]);
++		result[larger] = zero;
++	}
++
++	return result;
++}
++
++export default function parseMilliseconds(milliseconds, {largestUnit = 'days'} = {}) {
++	if (!LARGEST_UNITS.includes(largestUnit)) {
++		throw new TypeError(`parse-ms: Expected \`largestUnit\` to be one of ${LARGEST_UNITS.map(unit => `'${unit}'`).join(', ')}, got ${typeof largestUnit === 'string' ? `'${largestUnit}'` : String(largestUnit)}`);
++	}
++
+ 	switch (typeof milliseconds) {
+ 		case 'number': {
+ 			if (Number.isFinite(milliseconds)) {
+-				return parseNumber(milliseconds);
++				return rollUp(parseNumber(milliseconds), largestUnit, 0, (a, b) => a * b, (a, b) => a + b);
+ 			}
+ 
+ 			break;
+ 		}
+ 
+ 		case 'bigint': {
+-			return parseBigint(milliseconds);
++			return rollUp(parseBigint(milliseconds), largestUnit, 0n, (a, b) => a * BigInt(b), (a, b) => a + b);
+ 		}
+ 
+ 		// No default
+diff --git a/readme.md b/readme.md
+index 488cccd..9cbcbab 100644
+--- a/readme.md
++++ b/readme.md
+@@ -40,6 +40,24 @@ parseMilliseconds(1337000001n);
+ */
+ ```
+ 
++## API
++
++### parseMilliseconds(milliseconds, options?)
++
++#### options
++
++##### largestUnit
++
++Type: `'days' | 'hours' | 'minutes' | 'seconds'`\
++Default: `'days'`
++
++The largest unit to include. Larger units are rolled into it and set to zero. Any other value throws a `TypeError`.
++
++```js
++parseMilliseconds(93_600_000, {largestUnit: 'hours'});
++// {days: 0, hours: 26, minutes: 0, …}
++```
++
+ ## Related
+ 
+ - [to-milliseconds](https://github.com/sindresorhus/to-milliseconds) - The inverse of this module
+diff --git a/test.js b/test.js
+index 6314aab..f7d81a1 100644
+--- a/test.js
++++ b/test.js
+@@ -292,3 +292,36 @@ test('keep the sub-day parts exact at any magnitude', () => {
+ 		assert.strictEqual(parsed.hours, Number(bigint.hours), `${milliseconds}ms hours against the bigint path`);
+ 	}
+ });
++
++test('largestUnit rolls larger units into the chosen one', () => {
++	const milliseconds = 93_600_000 + 61_000 + 5; // 1d 2h 1m 1s 5ms
++
++	assert.deepStrictEqual(parseMilliseconds(milliseconds), parseMilliseconds(milliseconds, {largestUnit: 'days'}));
++	assert.deepStrictEqual(parseMilliseconds(milliseconds, {largestUnit: 'hours'}), {
++		days: 0, hours: 26, minutes: 1, seconds: 1, milliseconds: 5, microseconds: 0, nanoseconds: 0,
++	});
++	assert.deepStrictEqual(parseMilliseconds(milliseconds, {largestUnit: 'minutes'}), {
++		days: 0, hours: 0, minutes: 1561, seconds: 1, milliseconds: 5, microseconds: 0, nanoseconds: 0,
++	});
++	assert.deepStrictEqual(parseMilliseconds(milliseconds, {largestUnit: 'seconds'}), {
++		days: 0, hours: 0, minutes: 0, seconds: 93_661, milliseconds: 5, microseconds: 0, nanoseconds: 0,
++	});
++	assert.deepStrictEqual(parseMilliseconds(-milliseconds, {largestUnit: 'hours'}), {
++		days: 0, hours: -26, minutes: -1, seconds: -1, milliseconds: -5, microseconds: -0, nanoseconds: -0,
++	});
++});
++
++test('largestUnit works with bigint', () => {
++	assert.deepStrictEqual(parseMilliseconds(93_600_005n, {largestUnit: 'hours'}), {
++		days: 0n, hours: 26n, minutes: 0n, seconds: 0n, milliseconds: 5n, microseconds: 0n, nanoseconds: 0n,
++	});
++	assert.strictEqual(parseMilliseconds(93_600_000n, {largestUnit: 'seconds'}).seconds, 93_600n);
++	assert.strictEqual(parseMilliseconds(10n ** 30n, {largestUnit: 'seconds'}).seconds, 10n ** 27n);
++});
++
++test('largestUnit throws a TypeError for other values', () => {
++	for (const largestUnit of ['weeks', 'Days', 'milliseconds', '', 5, null, {}]) {
++		assert.throws(() => parseMilliseconds(1000, {largestUnit}), {name: 'TypeError', message: /^parse-ms: /v});
++		assert.throws(() => parseMilliseconds(1000n, {largestUnit}), TypeError);
++	}
++});

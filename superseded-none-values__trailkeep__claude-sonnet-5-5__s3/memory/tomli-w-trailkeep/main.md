@@ -1,0 +1,10 @@
+# main
+
+Branch: main · Repo: local__tomli-w-3551632337 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: tomli_w: dumps/dump skip None values in tables and inline tables (config objects have optional fields). None inside arrays deliberately still raises TypeError 'for now' per user. All-None tables emit an empty [name] header / {} inline.
+- 2026-11-05: SUPERSEDES the 'skip None values' decision. New rule: None is written as an empty string (key = ""), which the downstream loader treats as explicitly unset. Reason: dropping keys is indistinguishable from never-set keys; in staging a None timeout silently fell back to the 30s default. Code intentionally still skips None for now; user will switch it over together with the None-in-arrays case in a later session. Do not change the None handling until then.
+- 2026-11-05: Implemented the empty-string rule: None -> "" in tables, inline tables AND arrays (format_literal handles None). Skip-None code and test_none_in_array_raises removed. None as a mapping KEY still raises TypeError (unchanged).
+

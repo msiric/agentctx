@@ -1,0 +1,8 @@
+# feature/iec-units
+
+Branch: feature/iec-units · Repo: local__bytes-3061431054 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: IEC units (KiB..PiB) in parse() are handled by normalizeIecUnit() in index.js (plain string handling, strips the 'i' before the existing regex runs). Reason: repo rule forbids new/changed regexes without AppSec sign-off, so parseRegExp was left untouched.
+

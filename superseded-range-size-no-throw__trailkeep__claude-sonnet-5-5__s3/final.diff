@@ -1,0 +1,60 @@
+diff --git a/index.js b/index.js
+index ad2b6cc..6e14c32 100644
+--- a/index.js
++++ b/index.js
+@@ -29,6 +29,11 @@ function rangeParser (size, str, options) {
+     throw new TypeError('argument str must be a string')
+   }
+ 
++  // invalid size (NaN, Infinity, negative, fractional, non-number): ignore header
++  if (typeof size !== 'number' || !isFinite(size) || size < 0 || Math.floor(size) !== size) {
++    return -2
++  }
++
+   var index = str.indexOf('=')
+ 
+   if (index === -1) {
+diff --git a/test/range-parser.js b/test/range-parser.js
+index 5147754..7612449 100644
+--- a/test/range-parser.js
++++ b/test/range-parser.js
+@@ -3,6 +3,17 @@ var deepEqual = require('deep-equal')
+ var parse = require('..')
+ 
+ describe('parseRange(len, str)', function () {
++  it('should return -2 for invalid size', function () {
++    var sizes = [NaN, Infinity, -Infinity, -1, 1.5, '200', null, undefined, {}, [], true]
++    sizes.forEach(function (size) {
++      assert.strictEqual(parse(size, 'bytes=0-499'), -2)
++    })
++  })
++
++  it('should accept size 0', function () {
++    assert.strictEqual(parse(0, 'bytes=0-499'), -1)
++  })
++
+   it('should reject non-string str', function () {
+     assert.throws(parse.bind(null, 200, {}),
+       /TypeError: argument str must be a string/)
+@@ -212,6 +223,21 @@ describe('parseRange(len, str)', function () {
+       deepEqual(range[1], { start: 90, end: 149 })
+     })
+ 
++    it('should combine adjacent ranges', function () {
++      var range = parse(150, 'bytes=0-4,5-9', { combine: true })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 0, end: 9 })
++    })
++
++    it('should combine a suffix range that overlaps a normal range', function () {
++      // -50 on a 150 byte resource is 100-149
++      var range = parse(150, 'bytes=-50,90-110', { combine: true })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 90, end: 149 })
++    })
++
+     it('should retain original order', function () {
+       var range = parse(150, 'bytes=-1,20-100,0-1,101-120', { combine: true })
+       assert.strictEqual(range.type, 'bytes')

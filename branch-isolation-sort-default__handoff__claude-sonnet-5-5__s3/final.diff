@@ -1,0 +1,174 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..ab960f2
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,26 @@
++# HANDOFF
++
++## Task
++Acme reviewers diff every config file we ship from branch `acme` and see key order jump between drops. `sort_keys` (default False) is now implemented on `main` (committed as e508697): `Context`, `dump`, `dumps`, `iter_items` helper in `_writer.py`, tests in `tests/test_sort_keys.py`, README section. Step 2 done on `acme`: cherry-picked e508697 (c8a169b) plus a follow-up commit flipping `sort_keys` default to True in `dump`/`dumps` (`Context` default stays False). Existing order-dependent tests in test_style.py/test_types.py now pass `sort_keys=False`; `test_default_sorts_keys` and the README were updated. Full suite passes with `PYTHONPATH=src`. Still to do: warn Acme reviewers that the first sorted drop diffs heavily against the last unsorted one.
++
++## Findings (src/tomli_w/_writer.py)
++- `dumps` never sorts. Keys within a table, inline-table keys and AoT element order all follow insertion order.
++- Not purely insertion order: `gen_table_chunks` (L73-97) writes all scalar/array keys first, then sub-tables and arrays of tables. This is required by TOML and must stay.
++- An array of dicts is written inline if each element fits in 100 chars (`is_suitable_inline_table`), otherwise as `[[aot]]` blocks. Small data changes can flip a key between the scalar and table sections.
++- Root cause of the churn: our side builds dicts in varying order. The library output is deterministic for identical input.
++
++## Decision / plan (from user)
++1. User gets a `sort_keys` option added on `main` first (upstream), default False.
++2. Bring it to this branch with default **True**, because Acme's tooling calls plain `dumps()` and we can't change their call sites.
++
++## Implementation notes for when this starts
++- Add `sort_keys` to `Context`, `dump`, `dumps`.
++- Sort once per table in `gen_table_chunks` before the literals/tables split, and in `format_inline_table` (`obj.items()`).
++- Do NOT sort array elements, including AoT; only keys inside each element.
++- Non-str keys: keep the existing `format_key_part` TypeError message (sort with a key function or check types first).
++- Branch difference should be just `sort_keys: bool = True` in the two signatures.
++- Existing tests asserting insertion order should pass `sort_keys=False` explicitly.
++- Warn Acme reviewers that the first sorted drop will diff heavily against the last unsorted one.
++
++## Failed approaches
++None. Note: tests need `PYTHONPATH=src` since the package isn't installed here.
+diff --git a/README.md b/README.md
+index e1768aa..b07b899 100644
+--- a/README.md
++++ b/README.md
+@@ -133,9 +133,9 @@ assert tomli_w.dumps(doc, multiline_strings=True) == expected_toml
+ 
+ ### Can keys be written in sorted order?
+ 
+-Pass `sort_keys=True` to write keys in sorted order at every level, inline tables included.
++Keys are written in sorted order at every level, inline tables included, by default on this branch.
+ Array elements (including arrays of tables) keep their order.
+-It defaults to `False`, which preserves insertion order.
++Pass `sort_keys=False` to preserve insertion order instead.
+ 
+ ```python
+ import tomli_w
+@@ -148,7 +148,7 @@ b = 1
+ y = 2
+ z = 1
+ """
+-assert tomli_w.dumps(doc, sort_keys=True) == expected_toml
++assert tomli_w.dumps(doc) == expected_toml
+ ```
+ 
+ ### Is Tomli-W output guaranteed to be valid TOML?<a name="is-tomli-w-output-guaranteed-to-be-valid-toml"></a>
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index a8d7aa9..c54442b 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -48,7 +48,7 @@ def dump(
+     *,
+     multiline_strings: bool = False,
+     indent: int = 4,
+-    sort_keys: bool = False,
++    sort_keys: bool = True,
+ ) -> None:
+     ctx = Context(multiline_strings, indent, sort_keys)
+     for chunk in gen_table_chunks(obj, ctx, name=""):
+@@ -61,7 +61,7 @@ def dumps(
+     *,
+     multiline_strings: bool = False,
+     indent: int = 4,
+-    sort_keys: bool = False,
++    sort_keys: bool = True,
+ ) -> str:
+     ctx = Context(multiline_strings, indent, sort_keys)
+     return "".join(gen_table_chunks(obj, ctx, name=""))
+diff --git a/tests/test_sort_keys.py b/tests/test_sort_keys.py
+index be090c5..38a4359 100644
+--- a/tests/test_sort_keys.py
++++ b/tests/test_sort_keys.py
+@@ -5,8 +5,8 @@ import pytest
+ import tomli_w
+ 
+ 
+-def test_default_preserves_insertion_order():
+-    assert tomli_w.dumps({"b": 1, "a": 2}) == "b = 1\na = 2\n"
++def test_default_sorts_keys():
++    assert tomli_w.dumps({"b": 1, "a": 2}) == "a = 2\nb = 1\n"
+     assert tomli_w.dumps({"b": 1, "a": 2}, sort_keys=False) == "b = 1\na = 2\n"
+ 
+ 
+diff --git a/tests/test_style.py b/tests/test_style.py
+index ca10db3..d260748 100644
+--- a/tests/test_style.py
++++ b/tests/test_style.py
+@@ -13,7 +13,7 @@ def test_newline_before_table():
+     expected = "[table]\n"
+     assert actual == expected
+ 
+-    actual = tomli_w.dumps({"table": {"nested": {}, "val3": 3}, "val2": 2, "val1": 1})
++    actual = tomli_w.dumps({"table": {"nested": {}, "val3": 3}, "val2": 2, "val1": 1}, sort_keys=False)
+     expected = """\
+ val2 = 2
+ val1 = 1
+@@ -61,7 +61,7 @@ def test_only_tables():
+ 
+ 
+ def test_tricky_keys():
+-    actual = tomli_w.dumps({"f": 1, "tab1": {}, "": {"f": 2, "": {"": 1}}, "tab3": {}})
++    actual = tomli_w.dumps({"f": 1, "tab1": {}, "": {"f": 2, "": {"": 1}}, "tab3": {}}, sort_keys=False)
+     expected = """\
+ f = 1
+ 
+@@ -143,7 +143,7 @@ long-value = "Lorem ipsum sith"
+ another-long-value = "consectetur adipis"
+ simple-value = 3
+ """
+-    actual = tomli_w.dumps(example)
++    actual = tomli_w.dumps(example, sort_keys=False)
+     assert actual == expected
+     assert tomli.loads(actual) == example
+ 
+@@ -159,7 +159,7 @@ nested-array = [
+     {{ c = 2 }},
+ ]
+ """
+-    actual = tomli_w.dumps(example)
++    actual = tomli_w.dumps(example, sort_keys=False)
+     assert actual == expected
+ 
+ 
+@@ -190,7 +190,7 @@ another_array = [
+ [[table.nested_table]]
+ c = 3
+ """
+-    actual = tomli_w.dumps(example)
++    actual = tomli_w.dumps(example, sort_keys=False)
+     assert actual == expected
+     assert tomli.loads(actual) == example
+ 
+@@ -202,7 +202,7 @@ def test_table_with_empty_array():
+ [table]
+ array = []
+ """
+-    actual = tomli_w.dumps(example)
++    actual = tomli_w.dumps(example, sort_keys=False)
+     assert actual == expected
+     assert tomli.loads(actual) == example
+ 
+@@ -253,7 +253,7 @@ another-long-value = "consectetur adipiscing elit"
+ a-third-one = "sed do eiusmod tempor incididunt ut labore et dolore magna"
+ simple-value = 3
+ """
+-    actual = tomli_w.dumps(example)
++    actual = tomli_w.dumps(example, sort_keys=False)
+     assert actual == expected
+     assert tomli.loads(actual) == example
+ 
+diff --git a/tests/test_types.py b/tests/test_types.py
+index e4c9782..6ff986b 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -16,7 +16,7 @@ def test_decimal():
+         "float-2E16": float("2E16"),
+     }
+     assert (
+-        tomli_w.dumps(obj)
++        tomli_w.dumps(obj, sort_keys=False)
+         == """\
+ decimal-0 = 0.0
+ decimal-4 = 4.0

@@ -1,0 +1,3 @@
+2026-11-05: rangeParser throws TypeError for NaN size (send passes NaN when NFS stat fails). Check is broader than asked: any non-number size is rejected too. Changes uncommitted.
+2026-11-05: Plan change (2026-11-05): rangeParser must NOT throw on a bad size (NaN/non-number). Return -2 instead so caller ignores Range header, because it's moving to the edge worker next sprint where an exception kills the whole worker. Supersedes the earlier TypeError decision. Not implemented yet: user will change it together with the other size cases.
+2026-11-05: Size validation done: NaN/Infinity/negative/fractional/non-number size returns -2 (no throw), per the edge-worker decision; str non-string still throws TypeError. Tests updated.

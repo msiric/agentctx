@@ -1,0 +1,135 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..8e04c02
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,18 @@
++# Handoff
++
++## State
++Fixed `Dict.to_dict()` so Dicts nested at any depth inside lists/tuples are converted to plain dicts. Regression test `test_to_dict_with_nested_sequences` added in `test_addict.py`. All tests pass (130). Not committed.
++
++## Decisions
++- Replaced the one-level list/tuple handling with a recursive classmethod `_unwrap` in `addict/addict.py`. Reason: the old code only converted direct list items, so `[[{...}]]` was left as a Dict.
++- Kept `type(value)(...)` to preserve list/tuple type (existing behavior; unchanged).
++
++## Failed approaches
++None.
++
++## Done: `Dict.flatten(separator='__')`
++- Implemented in `addict/addict.py`; tests `test_flatten*` in `test_addict.py`. All tests pass (138). Not committed.
++- Default separator is `__` (not `.`): output feeds env-var deploy tooling that splits nested names on a double underscore. Example: `{'db': {'host': 'x'}}` -> `{'db__host': 'x'}`.
++- Lists/tuples are leaves, returned unchanged except Dicts inside are converted to plain dicts via `_unwrap`.
++- Empty nested dict is kept as a leaf (`{'e': {}}` -> `{'e': {}}`) so keys aren't silently dropped. Non-str keys are stringified.
++- Test pitfall: don't use `items` as an attribute name in tests (read-only dict method).
+diff --git a/addict/addict.py b/addict/addict.py
+index 55e02d1..1d54f95 100644
+--- a/addict/addict.py
++++ b/addict/addict.py
+@@ -77,16 +77,39 @@ class Dict(dict):
+     def to_dict(self):
+         base = {}
+         for key, value in self.items():
+-            if isinstance(value, type(self)):
+-                base[key] = value.to_dict()
+-            elif isinstance(value, (list, tuple)):
+-                base[key] = type(value)(
+-                    item.to_dict() if isinstance(item, type(self)) else
+-                    item for item in value)
+-            else:
+-                base[key] = value
++            base[key] = self._unwrap(value)
+         return base
+ 
++    @classmethod
++    def _unwrap(cls, value):
++        if isinstance(value, cls):
++            return value.to_dict()
++        if isinstance(value, (list, tuple)):
++            return type(value)(cls._unwrap(item) for item in value)
++        return value
++
++    def flatten(self, separator='__'):
++        """Return a plain dict with one entry per leaf value.
++
++        Keys are the paths of nested keys joined by `separator`. Lists and
++        other non-dict values are leaves and are returned unchanged. An empty
++        nested dict is kept as a leaf so no key is silently dropped.
++        """
++        flat = {}
++        for key, value in self.items():
++            key = str(key)
++            if isinstance(value, dict) and value:
++                for sub_key, sub_value in self._flatten_dict(
++                        value, separator).items():
++                    flat[key + separator + sub_key] = sub_value
++            else:
++                flat[key] = self._unwrap(value)
++        return flat
++
++    @classmethod
++    def _flatten_dict(cls, mapping, separator):
++        return cls(mapping).flatten(separator)
++
+     def copy(self):
+         return copy.copy(self)
+ 
+diff --git a/test_addict.py b/test_addict.py
+index b4af646..d7bdc69 100644
+--- a/test_addict.py
++++ b/test_addict.py
+@@ -218,6 +218,17 @@ class AbstractTestsClass(object):
+         self.assertIsInstance(regular['a'], tuple)
+         self.assertNotIsInstance(regular['a'][0], self.dict_class)
+ 
++    def test_to_dict_with_nested_sequences(self):
++        prop = self.dict_class(a=[[{'b': 1}]], c=({'d': [{'e': 2}]},))
++        regular = prop.to_dict()
++        self.assertIs(type(regular['a'][0][0]), dict)
++        self.assertIsInstance(regular['a'][0], list)
++        self.assertIs(type(regular['c'][0]), dict)
++        self.assertIs(type(regular['c'][0]['d'][0]), dict)
++        self.assertIsInstance(regular['c'], tuple)
++        self.assertEqual(regular, {'a': [[{'b': 1}]],
++                                   'c': ({'d': [{'e': 2}]},)})
++
+     def test_update(self):
+         old = self.dict_class()
+         old.child.a = 'a'
+@@ -572,6 +583,36 @@ class AbstractTestsClass(object):
+         d.newKey = TEST_VAL
+         self.assertEqual(d.newKey, TEST_VAL)
+ 
++    def test_flatten(self):
++        d = self.dict_class({'db': {'host': 'x', 'port': 1}, 'name': 'svc'})
++        flat = d.flatten()
++        self.assertEqual(flat, {'db__host': 'x', 'db__port': 1,
++                                'name': 'svc'})
++        self.assertIs(type(flat), dict)
++
++    def test_flatten_deep_and_lists(self):
++        d = self.dict_class()
++        d.a.b.c = 1
++        d.a.seq = [1, {'k': 2}]
++        d.a.pair = (self.dict_class({'z': 1}),)
++        flat = d.flatten()
++        self.assertEqual(flat['a__b__c'], 1)
++        self.assertEqual(flat['a__seq'], [1, {'k': 2}])
++        self.assertEqual(flat['a__pair'], ({'z': 1},))
++        self.assertIs(type(flat['a__pair'][0]), dict)
++        self.assertEqual(len(flat), 3)
++
++    def test_flatten_custom_separator_and_empty(self):
++        d = self.dict_class({'a': {'b': 1}, 'e': {}, 5: {'x': 2}})
++        self.assertEqual(d.flatten('.'), {'a.b': 1, 'e': {}, '5.x': 2})
++        self.assertEqual(self.dict_class().flatten(), {})
++
++    def test_flatten_does_not_mutate(self):
++        d = self.dict_class({'a': {'b': 1}})
++        d.flatten()
++        self.assertEqual(d, {'a': {'b': 1}})
++
++
+ class DictTests(unittest.TestCase, AbstractTestsClass):
+     dict_class = Dict
+ 

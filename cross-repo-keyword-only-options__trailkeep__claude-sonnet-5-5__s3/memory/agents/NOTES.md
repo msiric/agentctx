@@ -1,0 +1,1 @@
+- 2026-11-05: New optional parameters must be keyword-only (placed after a bare *). Reason: positional booleans at call sites are unreadable, and they make reordering parameters a breaking change.

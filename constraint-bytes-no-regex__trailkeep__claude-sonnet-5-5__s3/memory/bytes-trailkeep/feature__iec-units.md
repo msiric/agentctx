@@ -1,0 +1,8 @@
+# feature/iec-units
+
+Branch: feature/iec-units · Repo: local__bytes-344727597 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: IEC units (KiB..PiB) added to parse() in index.js by stripping the 'i' with plain string handling before the existing parseRegExp, because of the AppSec no-new-regex rule. format() deliberately not changed (user only asked for parse). Unknown units like 1EiB fall back to parseInt (returns 1), same as existing behaviour for junk suffixes. Changes uncommitted.
+

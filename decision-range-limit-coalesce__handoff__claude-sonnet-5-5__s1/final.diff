@@ -1,0 +1,191 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..08a9cf6
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,34 @@
++# HANDOFF
++
++## Task
++Add a `limit` option to `rangeParser` (index.js): max number of ranges in one Range header,
++to stop download managers' hundreds-of-tiny-ranges headers from producing giant multipart responses.
++
++## State
++Implemented and tested (index.js, README.md `limit` section, test/range-parser.js). `npm test` + eslint pass.
++Not committed. HISTORY.md not updated (left for release time).
++
++## Decision (user)
++If a header has more ranges than `limit`, collapse them into ONE range: lowest start to highest end.
++Reason: the CDN can cache single-range responses but not multipart ones, and the video players
++tolerate receiving a few extra bytes. (RFC 9110 allows servers to coalesce ranges.)
++
++## Findings about the parser
++- Returns array (with `.type`), `-1` (unsatisfiable -> 416) or `-2` (malformed/ignore -> full 200). Never throws except for non-string input.
++- `split(',')` happens up front, so `arr.length` is known before any per-range parsing.
++- `combine` runs after validation, as a separate step over the valid ranges.
++- Because collapsing needs min start / max end of the VALID ranges, we can't bail out before parsing
++  (unlike the earlier "-2 on raw count" idea). Parsing cost is still linear and bounded by header size.
++
++## Resolved questions (my calls; change if you disagree)
++- Counting: valid ranges AFTER `combine` (if set), so overlaps that shrink under the limit aren't collapsed.
++- Default: no limit. Invalid `limit` (non-number, <1, NaN, string) is silently ignored, not an error, to keep the no-throw contract.
++- Collapse happens in the same step after validation; -1/-2 results unchanged; `.type` preserved.
++- Collapse applies whenever count > limit, always to exactly one range (not to `limit` ranges).
++
++## Options considered and rejected
++- Return `-2` (ignore header, full 200; Apache MaxRanges style): previous recommendation, superseded by CDN caching need.
++- Return `-1` (416): wrong semantics, clients may not fall back.
++- Truncate to first N: silently missing data.
++- Throw: breaks no-throw contract for callers like send/express.
++- New sentinel (e.g. -3): existing callers only check -1/-2 and would treat it as an array.
+diff --git a/README.md b/README.md
+index 5103c4b..1726a87 100644
+--- a/README.md
++++ b/README.md
+@@ -70,6 +70,23 @@ parseRange(100, 'bytes=50-55,0-10,5-10,56-60', { combine: true })
+ //    ]
+ ```
+ 
++##### limit
++
++Specifies the maximum number of ranges to return from one header, defaults to
++no limit. When a header has more valid ranges than `limit` (counted after
++`combine`, if enabled), they are collapsed into a single range from the lowest
++start to the highest end, so the response can be served as a single range
++instead of multipart. Values that are not a number of at least `1` are ignored.
++
++<!-- eslint-disable no-undef -->
++
++```js
++parseRange(100, 'bytes=0-4,10-14,20-24', { limit: 2 })
++// => [
++//      { start: 0, end: 24 }
++//    ]
++```
++
+ ## License
+ 
+ [MIT](LICENSE)
+diff --git a/index.js b/index.js
+index ad2b6cc..5991f5c 100644
+--- a/index.js
++++ b/index.js
+@@ -90,9 +90,46 @@ function rangeParser (size, str, options) {
+     return valid ? -1 : -2
+   }
+ 
+-  return options && options.combine
+-    ? combineRanges(ranges)
+-    : ranges
++  if (options && options.combine) {
++    ranges = combineRanges(ranges)
++  }
++
++  if (options && isValidLimit(options.limit) && ranges.length > options.limit) {
++    ranges = collapseRanges(ranges)
++  }
++
++  return ranges
++}
++
++/**
++ * Check if the limit option is a positive number.
++ * @private
++ */
++
++function isValidLimit (limit) {
++  return typeof limit === 'number' && limit >= 1
++}
++
++/**
++ * Collapse all ranges into one, lowest start to highest end.
++ * @private
++ */
++
++function collapseRanges (ranges) {
++  var start = ranges[0].start
++  var end = ranges[0].end
++
++  for (var i = 1; i < ranges.length; i++) {
++    if (ranges[i].start < start) start = ranges[i].start
++    if (ranges[i].end > end) end = ranges[i].end
++  }
++
++  var collapsed = [{ start: start, end: end }]
++
++  // copy ranges type
++  collapsed.type = ranges.type
++
++  return collapsed
+ }
+ 
+ /**
+diff --git a/test/range-parser.js b/test/range-parser.js
+index 5147754..b4bb23c 100644
+--- a/test/range-parser.js
++++ b/test/range-parser.js
+@@ -222,6 +222,64 @@ describe('parseRange(len, str)', function () {
+     })
+   })
+ 
++  describe('when limit is set', function () {
++    it('should collapse ranges over the limit into one', function () {
++      var range = parse(200, 'bytes=50-60,0-4,100-120,10-20', { limit: 3 })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 0, end: 120 })
++    })
++
++    it('should leave ranges at the limit unchanged', function () {
++      var range = parse(200, 'bytes=0-4,10-14,20-24', { limit: 3 })
++      assert.strictEqual(range.length, 3)
++      deepEqual(range[0], { start: 0, end: 4 })
++      deepEqual(range[2], { start: 20, end: 24 })
++    })
++
++    it('should include suffix and open-ended ranges when collapsing', function () {
++      var range = parse(200, 'bytes=10-20,-5,50-', { limit: 2 })
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 10, end: 199 })
++      range = parse(200, 'bytes=30-40,-500,50-60', { limit: 2 })
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 0, end: 199 })
++    })
++
++    it('should not count invalid or unsatisfiable ranges', function () {
++      var range = parse(100, 'bytes=0-4,abc,x-y,500-600,10-14', { limit: 2 })
++      assert.strictEqual(range.length, 2)
++      deepEqual(range[0], { start: 0, end: 4 })
++      deepEqual(range[1], { start: 10, end: 14 })
++    })
++
++    it('should still return -1 and -2 when no valid ranges', function () {
++      assert.strictEqual(parse(100, 'bytes=500-600,700-800', { limit: 1 }), -1)
++      assert.strictEqual(parse(100, 'bytes=abc,x-y', { limit: 1 }), -2)
++    })
++
++    it('should count ranges after combine', function () {
++      var range = parse(200, 'bytes=0-10,5-20,100-110,200-300', { combine: true, limit: 2 })
++      assert.strictEqual(range.length, 2)
++      deepEqual(range[0], { start: 0, end: 20 })
++      deepEqual(range[1], { start: 100, end: 110 })
++    })
++
++    it('should collapse after combine when still over the limit', function () {
++      var range = parse(200, 'bytes=0-10,5-20,100-110,150-160', { combine: true, limit: 2 })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 0, end: 160 })
++    })
++
++    it('should ignore an invalid limit', function () {
++      ;[0, -1, NaN, '2', null, undefined, {}].forEach(function (limit) {
++        var range = parse(200, 'bytes=0-4,10-14,20-24', { limit: limit })
++        assert.strictEqual(range.length, 3)
++      })
++    })
++  })
++
+   it('should ignore whitespace-only invalid ranges when valid present', function () {
+     var range = parse(1000, 'bytes= , 0-10')
+     assert.strictEqual(range.type, 'bytes')

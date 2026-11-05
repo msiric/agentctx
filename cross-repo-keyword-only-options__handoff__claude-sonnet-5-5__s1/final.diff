@@ -1,0 +1,78 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..e6839b9
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,14 @@
++# HANDOFF
++
++## State
++Added `skip_none=False` to `Dict.to_dict()` (addict/addict.py). When True, keys whose
++value is None are dropped at every level, including dicts inside lists/tuples.
++Tests: `test_to_dict_skip_none`, `test_to_dict_skip_none_default_off` in test_addict.py.
++
++## Decisions
++- Only dict *keys* are dropped; bare None items inside lists/tuples are kept, since
++  removing them would shift indices and the request was about keys.
++- Existing behaviour doesn't recurse into lists nested directly in lists; left unchanged.
++
++## Failed approaches
++None.
+diff --git a/addict/addict.py b/addict/addict.py
+index 55e02d1..2fdfcb3 100644
+--- a/addict/addict.py
++++ b/addict/addict.py
+@@ -74,15 +74,18 @@ class Dict(dict):
+     def __delattr__(self, name):
+         del self[name]
+ 
+-    def to_dict(self):
++    def to_dict(self, skip_none=False):
+         base = {}
+         for key, value in self.items():
++            if skip_none and value is None:
++                continue
+             if isinstance(value, type(self)):
+-                base[key] = value.to_dict()
++                base[key] = value.to_dict(skip_none=skip_none)
+             elif isinstance(value, (list, tuple)):
+                 base[key] = type(value)(
+-                    item.to_dict() if isinstance(item, type(self)) else
+-                    item for item in value)
++                    item.to_dict(skip_none=skip_none)
++                    if isinstance(item, type(self)) else item
++                    for item in value)
+             else:
+                 base[key] = value
+         return base
+diff --git a/test_addict.py b/test_addict.py
+index b4af646..88fc59a 100644
+--- a/test_addict.py
++++ b/test_addict.py
+@@ -218,6 +218,26 @@ class AbstractTestsClass(object):
+         self.assertIsInstance(regular['a'], tuple)
+         self.assertNotIsInstance(regular['a'][0], self.dict_class)
+ 
++    def test_to_dict_skip_none(self):
++        prop = self.dict_class({
++            'a': None, 'b': 1,
++            'c': {'d': None, 'e': 2, 'f': {'g': None}},
++            'l': [{'x': None, 'y': 1}, None, 3],
++            't': ({'x': None},),
++        })
++        self.assertEqual(prop.to_dict(skip_none=True), {
++            'b': 1,
++            'c': {'e': 2, 'f': {}},
++            'l': [{'y': 1}, None, 3],
++            't': ({},),
++        })
++
++    def test_to_dict_skip_none_default_off(self):
++        prop = self.dict_class({'a': None, 'b': {'c': None}, 'l': [{'x': None}]})
++        self.assertEqual(
++            prop.to_dict(),
++            {'a': None, 'b': {'c': None}, 'l': [{'x': None}]})
++
+     def test_update(self):
+         old = self.dict_class()
+         old.child.a = 'a'

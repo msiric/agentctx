@@ -1,0 +1,86 @@
+diff --git a/tests/test_drop_keys.py b/tests/test_drop_keys.py
+new file mode 100644
+index 0000000..e85afc4
+--- /dev/null
++++ b/tests/test_drop_keys.py
+@@ -0,0 +1,51 @@
++import copy
++
++from xmltodict import drop_keys, parse
++
++
++def test_drops_top_level_and_nested_keys():
++    doc = {'a': {'b': '1', 'c': {'b': '2', 'd': '3'}}, 'b': '4'}
++    assert drop_keys(doc, ['b']) == {'a': {'c': {'d': '3'}}}
++
++
++def test_drops_attribute_keys():
++    doc = parse('<r id="1"><i id="2" n="x">t</i><i id="3"/></r>')
++    assert drop_keys(doc, ['@id']) == {
++        'r': {'i': [{'@n': 'x', '#text': 't'}, {}]}}
++
++
++def test_descends_into_lists():
++    doc = {'r': {'i': [{'x': 1, 'y': 2}, {'x': 3}, 'text']}}
++    assert drop_keys(doc, {'x'}) == {'r': {'i': [{'y': 2}, {}, 'text']}}
++
++
++def test_does_not_mutate_input():
++    doc = {'r': {'@id': '1', 'i': [{'@id': '2', 'v': 'a'}]}}
++    snapshot = copy.deepcopy(doc)
++    result = drop_keys(doc, ['@id'])
++    assert doc == snapshot
++    assert result is not doc
++    assert result['r'] is not doc['r']
++    assert result['r']['i'] is not doc['r']['i']
++    result['r']['i'][0]['v'] = 'changed'
++    assert doc == snapshot
++
++
++def test_empty_names_returns_equal_copy():
++    doc = {'a': [{'b': '1'}]}
++    result = drop_keys(doc, [])
++    assert result == doc and result is not doc
++
++
++def test_string_names_is_single_key():
++    assert drop_keys({'id': 1, 'i': 2, 'd': 3}, 'id') == {'i': 2, 'd': 3}
++
++
++def test_scalar_and_none_values():
++    assert drop_keys(None, ['a']) is None
++    assert drop_keys('x', ['a']) == 'x'
++    assert drop_keys({'a': None, 'b': None}, ['a']) == {'b': None}
++
++
++def test_dropping_everything():
++    assert drop_keys({'a': {'b': 1}}, ['a']) == {}
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..ecd0e68 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -655,3 +655,24 @@ if __name__ == '__main__':  # pragma: no cover
+             handle_item([], root)
+     except KeyboardInterrupt:
+         pass
++
++
++def drop_keys(doc, names):
++    """Return a copy of a parsed document with every key in `names` removed
++    at any depth (attribute keys such as '@id' included).
++
++    The input is not mutated. Dicts and lists are rebuilt; other values are
++    shared. A bare string for `names` is treated as a single key.
++    """
++    if isinstance(names, (str, bytes)):
++        names = (names,)
++    names = frozenset(names)
++
++    def _drop(value):
++        if isinstance(value, dict):
++            return {k: _drop(v) for k, v in value.items() if k not in names}
++        if isinstance(value, list):
++            return [_drop(v) for v in value]
++        return value
++
++    return _drop(doc)

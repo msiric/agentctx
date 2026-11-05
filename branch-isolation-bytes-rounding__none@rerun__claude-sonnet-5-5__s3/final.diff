@@ -1,0 +1,72 @@
+diff --git a/index.js b/index.js
+index 6f2d0f8..bcec542 100644
+--- a/index.js
++++ b/index.js
+@@ -34,6 +34,14 @@ var map = {
+   pb: Math.pow(1024, 5),
+ };
+ 
++var nextUnit = {
++  B: 'KB',
++  KB: 'MB',
++  MB: 'GB',
++  GB: 'TB',
++  TB: 'PB'
++};
++
+ var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
+ 
+ /**
+@@ -93,7 +101,9 @@ function format(value, options) {
+   var fixedDecimals = Boolean(options && options.fixedDecimals);
+   var unit = (options && options.unit) || '';
+ 
+-  if (!unit || !map[unit.toLowerCase()]) {
++  var autoUnit = !unit || !map[unit.toLowerCase()];
++
++  if (autoUnit) {
+     if (mag >= map.pb) {
+       unit = 'PB';
+     } else if (mag >= map.tb) {
+@@ -112,6 +122,13 @@ function format(value, options) {
+   var val = value / map[unit.toLowerCase()];
+   var str = val.toFixed(decimalPlaces);
+ 
++  // Rounding may produce 1024 (e.g. "1024KB"); promote to the next unit
++  if (autoUnit && unit !== 'PB' && Math.abs(Number(str)) >= 1024) {
++    unit = nextUnit[unit];
++    val = value / map[unit.toLowerCase()];
++    str = val.toFixed(decimalPlaces);
++  }
++
+   if (!fixedDecimals) {
+     str = str.replace(formatDecimalsRegExp, '$1');
+   }
+diff --git a/test/byte-format.js b/test/byte-format.js
+index 7e82cee..2b439fb 100644
+--- a/test/byte-format.js
++++ b/test/byte-format.js
+@@ -98,6 +98,23 @@ describe('Test byte format function', function(){
+     assert.equal(bytes.format(1.1005 * kb, {decimalPlaces: 4}).toLowerCase(), '1.1005kb');
+   });
+ 
++  it('Should promote to the next unit when rounding reaches 1024', function(){
++    assert.equal(bytes.format(mb - 1), '1MB');
++    assert.equal(bytes.format(-(mb - 1)), '-1MB');
++    assert.equal(bytes.format(gb - 1), '1GB');
++    assert.equal(bytes.format(tb - 1), '1TB');
++    assert.equal(bytes.format(pb - 1), '1PB');
++    assert.equal(bytes.format(kb - 0.5, {decimalPlaces: 0}), '1KB');
++    assert.equal(bytes.format(mb - 1, {decimalPlaces: 2, fixedDecimals: true}), '1.00MB');
++    assert.equal(bytes.format(mb - 1, {decimalPlaces: 3}), '1023.999KB');
++    assert.equal(bytes.format(mb - 1, {thousandsSeparator: ','}), '1MB');
++    assert.equal(bytes.format(mb - 1024), '1023KB');
++  });
++
++  it('Should not promote when an explicit unit is given', function(){
++    assert.equal(bytes.format(mb - 1, {unit: 'KB'}), '1024KB');
++  });
++
+   it('Should support fixed decimal places', function(){
+     assert.equal(bytes.format(kb, {decimalPlaces: 3, fixedDecimals: true}).toLowerCase(), '1.000kb');
+   });

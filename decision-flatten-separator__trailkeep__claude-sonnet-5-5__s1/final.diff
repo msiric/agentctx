@@ -1,0 +1,77 @@
+diff --git a/addict/addict.py b/addict/addict.py
+index 55e02d1..ff6d1b0 100644
+--- a/addict/addict.py
++++ b/addict/addict.py
+@@ -75,17 +75,30 @@ class Dict(dict):
+         del self[name]
+ 
+     def to_dict(self):
+-        base = {}
+-        for key, value in self.items():
++        def convert(value):
+             if isinstance(value, type(self)):
+-                base[key] = value.to_dict()
+-            elif isinstance(value, (list, tuple)):
+-                base[key] = type(value)(
+-                    item.to_dict() if isinstance(item, type(self)) else
+-                    item for item in value)
+-            else:
+-                base[key] = value
+-        return base
++                return value.to_dict()
++            if isinstance(value, (list, tuple)):
++                return type(value)(convert(item) for item in value)
++            return value
++
++        return {key: convert(value) for key, value in self.items()}
++
++    def flatten(self, sep='__'):
++        """Return a plain dict with one entry per leaf value, keyed by the
++        nested keys joined with `sep` (double underscore by default)."""
++        flat = {}
++
++        def walk(node, prefix):
++            for key, value in node.items():
++                path = prefix + sep + str(key) if prefix else str(key)
++                if isinstance(value, dict):
++                    walk(value, path)
++                else:
++                    flat[path] = value
++
++        walk(self, '')
++        return flat
+ 
+     def copy(self):
+         return copy.copy(self)
+diff --git a/test_addict.py b/test_addict.py
+index b4af646..4d52f5e 100644
+--- a/test_addict.py
++++ b/test_addict.py
+@@ -218,6 +218,27 @@ class AbstractTestsClass(object):
+         self.assertIsInstance(regular['a'], tuple)
+         self.assertNotIsInstance(regular['a'][0], self.dict_class)
+ 
++    def test_to_dict_with_nested_lists(self):
++        prop = self.dict_class(a=[[{'b': 1}], ({'c': 2},)])
++        regular = prop.to_dict()
++        self.assertEqual(regular, {'a': [[{'b': 1}], ({'c': 2},)]})
++        self.assertIsInstance(regular['a'][0], list)
++        self.assertIsInstance(regular['a'][1], tuple)
++        self.assertNotIsInstance(regular['a'][0][0], self.dict_class)
++        self.assertNotIsInstance(regular['a'][1][0], self.dict_class)
++
++    def test_flatten(self):
++        prop = self.dict_class(a=1, b={'c': 2, 'd': {'e': [{'f': 3}], 'g': (1, 2)}})
++        flat = prop.flatten()
++        self.assertEqual(flat, {'a': 1, 'b__c': 2, 'b__d__e': [{'f': 3}],
++                                'b__d__g': (1, 2)})
++        self.assertIs(type(flat), dict)
++
++    def test_flatten_custom_sep_and_empty(self):
++        self.assertEqual(self.dict_class().flatten(), {})
++        prop = self.dict_class(a={'b': 1})
++        self.assertEqual(prop.flatten(sep='.'), {'a.b': 1})
++
+     def test_update(self):
+         old = self.dict_class()
+         old.child.a = 'a'

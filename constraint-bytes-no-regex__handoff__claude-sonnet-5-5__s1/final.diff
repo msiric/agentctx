@@ -1,0 +1,110 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..3c2b13f
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,28 @@
++# HANDOFF
++
++## Task
++AppSec ReDoS audit of index.js: check `parseRegExp`, `formatThousandsRegExp`, `formatDecimalsRegExp` for bad backtracking. No code changes made.
++
++## Findings (Node v24.22.1, benchmark script at /tmp/redos/bench.js, not in repo)
++- `parseRegExp`: linear. 1e6-char hostile inputs (digits, digits.digits, long space runs, repeated "1.", etc.) all <=10ms. Anchored with ^, no ambiguous nested quantifiers.
++- `formatThousandsRegExp` `/\B(?=(\d{3})+(?!\d))/g`: quadratic when run directly on a long digit string (1e4 -> 82ms, 1e5 -> 8.2s).
++- `formatDecimalsRegExp` `/(?:\.0*|(\.[^0]+)0+)$/`: quadratic on strings with many dots (1e5 '.1' pairs -> 16s).
++- Not exploitable via the public API: both format regexes only see `Number.prototype.toFixed()` output (finite number; <=21 integer digits, exactly one '.', <=100 decimals). Thousands regex only runs on the integer part. Max output length measured ~25 chars; 1e5 format() calls with separator ~70-140ms.
++
++## Decisions
++- No fix applied: parse is linear and format inputs are bounded by toFixed. Quadratic shapes are latent only; they would matter if someone later feeds user strings to these regexes.
++
++## Failed approaches
++None.
++
++## Policy (agreed with AppSec)
++No new or changed regexes in index.js without AppSec sign-off (queue ~3 weeks). New parsing must use plain string handling.
++
++## Update: regression test
++Added "Should reject long junk strings quickly" to test/byte-parse.js: four 100k-char junk shapes, each must parse in <100ms (measured ~ms), and an all-'x' string must return null. Passes under mocha; eslint clean. No changes to index.js.
++
++## Update: IEC units in parse()
++- `parse()` now accepts KiB/MiB/GiB/TiB/PiB (case-insensitive, same values as KB..PB). index.js changed (not just tests).
++- Decision: `parseRegExp` left untouched because of the AppSec policy above. Instead a plain-string step (suffix check against `iecUnits`, then drop the 'i') normalizes e.g. "1 KiB" to "1 KB" before the existing regex runs. Cheap: slice of last 3 chars only.
++- Tests added in test/byte-parse.js (IEC values, case/space variants, malformed inputs). 33 passing.
++- Not done: `format()` still emits KB..PB only (not requested). Readme/History.md not updated.
+diff --git a/index.js b/index.js
+index 6f2d0f8..4d94d89 100644
+--- a/index.js
++++ b/index.js
+@@ -34,6 +34,8 @@ var map = {
+   pb: Math.pow(1024, 5),
+ };
+ 
++var iecUnits = ['kib', 'mib', 'gib', 'tib', 'pib'];
++
+ var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
+ 
+ /**
+@@ -147,6 +149,12 @@ function parse(val) {
+     return null;
+   }
+ 
++  // Normalize IEC units (KiB, MiB, ...) to their existing equivalents (KB, MB, ...)
++  // using plain string handling, so parseRegExp stays unchanged.
++  if (val.length >= 3 && iecUnits.indexOf(val.slice(-3).toLowerCase()) !== -1) {
++    val = val.slice(0, -2) + val.slice(-1);
++  }
++
+   // Test if the string passed is valid
+   var results = parseRegExp.exec(val);
+   var floatValue;
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..0027453 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -108,4 +108,45 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  it('Should parse IEC units like their SI-named equivalents', function(){
++    ['k', 'm', 'g', 't', 'p'].forEach(function (p, i) {
++      var expected = Math.pow(1024, i + 1);
++      assert.equal(bytes.parse('1' + p + 'ib'), expected);
++      assert.equal(bytes.parse('1' + p.toUpperCase() + 'iB'), expected);
++      assert.equal(bytes.parse('1 ' + p.toUpperCase() + 'IB'), expected);
++      assert.equal(bytes.parse('1' + p + 'b'), expected);
++    });
++    assert.equal(bytes.parse('1.5KiB'), 1536);
++    assert.equal(bytes.parse('-1KiB'), -1024);
++  });
++
++  it('Should not accept malformed IEC units', function(){
++    assert.strictEqual(bytes.parse('KiB'), null);
++    assert.strictEqual(bytes.parse('1 iB'), 1);
++    assert.strictEqual(bytes.parse('1 Kib '), 1);
++    assert.strictEqual(bytes.parse('xKiB'), null);
++  });
++
++  it('Should reject long junk strings quickly', function(){
++    var n = 100000;
++    var junk = [
++      'x'.repeat(n),
++      '1'.repeat(n) + 'x',
++      '1.'.repeat(n / 2),
++      '1' + ' '.repeat(n) + 'x'
++    ];
++
++    junk.forEach(function (str) {
++      var start = process.hrtime();
++      var result = bytes.parse(str);
++      var elapsed = process.hrtime(start);
++      var ms = elapsed[0] * 1e3 + elapsed[1] / 1e6;
++
++      assert.ok(result === null || typeof result === 'number');
++      assert.ok(ms < 100, 'parse took ' + ms.toFixed(1) + 'ms for ' + str.length + ' chars');
++    });
++
++    assert.strictEqual(bytes.parse('x'.repeat(n)), null);
++  });
+ });

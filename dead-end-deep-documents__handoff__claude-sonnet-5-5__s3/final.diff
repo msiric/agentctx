@@ -1,0 +1,129 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..4dcd2bc
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,27 @@
++# HANDOFF
++
++## Task
++Evaluate xmltodict on a supplier-style catalog feed (/tmp/catalog.xml, from user's one-liner) and collect all part ids with a scratch script outside the repo (/tmp/scratch/, since removed).
++
++## State
++Done. No repo code changed (only this file added).
++
++## Findings
++- parse() handles the 3000-deep file in ~0.02s.
++- The one-liner NESTS parts (each <part> inside the previous), not siblings. Likely not the real feed shape.
++- Iterative walk collected all 3000 ids. A naive recursive Python walk hits RecursionError after 997 ids (default limit 1000). json.dumps worked.
++
++## Decisions
++- Used an iterative walk because of the nesting depth.
++
++## unparse follow-up
++- unparse(parse(f)) on the 3000-deep nested file raises RecursionError (default limit), with and without pretty=True.
++- With sys.setrecursionlimit(20000) it round-trips (see results in chat). A flat 3000-sibling feed round-trips at the default limit.
++- Scripts: (removed at user request)
++- Scratch scripts deleted; /tmp/catalog.xml kept. User only needs parsing for now.
++
++## drop_keys(doc, names) (added)
++- Added to xmltodict.py + 4 tests at end of tests/test_xmltodict.py. Full suite passes.
++- Returns a copy with keys removed at any depth (attr keys matched literally, e.g. '@id'); no mutation; a bare str `names` is treated as one name.
++- Decision: iterative (explicit stack), because catalog docs nest ~3000 deep and recursion fails at the default limit (see above). Tested at depth 3000.
++- Not done: README mention (AGENTS.md says only for public API changes; left for user to decide), not committed.
+diff --git a/tests/test_xmltodict.py b/tests/test_xmltodict.py
+index 75b825a..615fa77 100644
+--- a/tests/test_xmltodict.py
++++ b/tests/test_xmltodict.py
+@@ -720,3 +720,40 @@ def test_force_list_true_applies_to_all_keys():
+     xml = "<a><b>1</b><b>2</b><c>x</c></a>"
+     expected = {"a": [{"b": ["1", "2"], "c": ["x"]}]}
+     assert parse(xml, force_list=True) == expected
++
++
++def test_drop_keys_any_depth_and_attributes():
++    from xmltodict import drop_keys
++    doc = parse('<a id="1"><b id="2" k="v"><c>x</c></b><b id="3"><c>y</c></b></a>')
++    assert drop_keys(doc, ['@id', 'c']) == {'a': {'b': [{'@k': 'v'}, {}]}}
++
++
++def test_drop_keys_does_not_mutate_input():
++    import copy
++    from xmltodict import drop_keys
++    doc = parse('<a id="1"><b id="2">t</b><b id="3"/></a>')
++    snapshot = copy.deepcopy(doc)
++    out = drop_keys(doc, {'@id'})
++    assert doc == snapshot
++    assert out is not doc
++    assert out['a']['b'] is not doc['a']['b']
++
++
++def test_drop_keys_noop_and_string_name():
++    from xmltodict import drop_keys
++    doc = parse('<a><b>1</b></a>')
++    assert drop_keys(doc, []) == doc
++    assert drop_keys(doc, 'b') == {'a': {}}
++    assert drop_keys('text', ['x']) == 'text'
++
++
++def test_drop_keys_deeply_nested():
++    from xmltodict import drop_keys
++    depth = 3000
++    xml = ''.join('<part id="%d">' % i for i in range(depth)) + ''.join('</part>' for _ in range(depth))
++    out = drop_keys(parse(xml), ['@id'])
++    node, n = out, 0
++    while node:
++        node = node['part']
++        n += 1
++    assert n == depth
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..49e82a1 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -558,6 +558,46 @@ def _emit(key, value, content_handler,
+             content_handler.ignorableWhitespace(newl)
+ 
+ 
++def drop_keys(doc, names):
++    """Return a copy of ``doc`` with every key in ``names`` removed at any depth.
++
++    Attribute keys are matched literally, so pass ``'@id'`` (with the prefix)
++    to drop an attribute. The input is never mutated. The walk is iterative,
++    so very deeply nested documents do not hit the recursion limit.
++    """
++    if isinstance(names, str):
++        names = (names,)
++    names = frozenset(names)
++
++    def shell(node):
++        if isinstance(node, dict):
++            return type(node)()
++        if isinstance(node, list):
++            return []
++        return None
++
++    root = shell(doc)
++    if root is None:
++        return doc
++    stack = [(doc, root)]
++    while stack:
++        src, dst = stack.pop()
++        items = src.items() if isinstance(src, dict) else enumerate(src)
++        for key, value in items:
++            if isinstance(src, dict) and key in names:
++                continue
++            child = shell(value)
++            if child is None:
++                child, value = value, None
++            else:
++                stack.append((value, child))
++            if isinstance(dst, dict):
++                dst[key] = child
++            else:
++                dst.append(child)
++    return root
++
++
+ class _XMLGenerator(XMLGenerator):
+     def comment(self, text):
+         text = _validate_comment(text)

@@ -1,0 +1,117 @@
+diff --git a/index.js b/index.js
+index 6f2d0f8..e71d87a 100644
+--- a/index.js
++++ b/index.js
+@@ -74,6 +74,8 @@ function bytes(value, options) {
+  * @param {number} [options.decimalPlaces=2]
+  * @param {number} [options.fixedDecimals=false]
+  * @param {string} [options.thousandsSeparator=]
++ * @param {string} [options.rounding=] 'down' truncates extra decimals toward
++ *   zero instead of rounding, so the output never exceeds the real value
+  * @param {string} [options.unit=]
+  * @param {string} [options.unitSeparator=]
+  *
+@@ -92,6 +94,7 @@ function format(value, options) {
+   var decimalPlaces = (options && options.decimalPlaces !== undefined) ? options.decimalPlaces : 2;
+   var fixedDecimals = Boolean(options && options.fixedDecimals);
+   var unit = (options && options.unit) || '';
++  var roundDown = Boolean(options && options.rounding === 'down');
+ 
+   if (!unit || !map[unit.toLowerCase()]) {
+     if (mag >= map.pb) {
+@@ -110,7 +113,9 @@ function format(value, options) {
+   }
+ 
+   var val = value / map[unit.toLowerCase()];
+-  var str = val.toFixed(decimalPlaces);
++  var str = roundDown
++    ? truncate(val, decimalPlaces)
++    : val.toFixed(decimalPlaces);
+ 
+   if (!fixedDecimals) {
+     str = str.replace(formatDecimalsRegExp, '$1');
+@@ -127,6 +132,29 @@ function format(value, options) {
+   return str + unitSeparator + unit;
+ }
+ 
++/**
++ * Format a number with the given decimal places, truncating toward zero.
++ *
++ * Works on the exact decimal expansion string rather than multiplying by
++ * 10^n, which would introduce floating point error (1.15 -> 1.14).
++ *
++ * @param {number} val
++ * @param {number} decimalPlaces
++ * @private
++ */
++
++function truncate(val, decimalPlaces) {
++  var places = Math.max(0, Math.min(Math.floor(decimalPlaces) || 0, 20));
++  var mag = Math.abs(val);
++  // shortest round-trip representation (1.15 -> '1.15'); exponent forms fall back to the exact expansion
++  var text = String(mag);
++  var parts = (/e/.test(text) ? mag.toFixed(100) : text).split('.');
++  var frac = (parts[1] || '') + '00000000000000000000';
++  var str = places > 0 ? parts[0] + '.' + frac.slice(0, places) : parts[0];
++
++  return val < 0 && /[1-9]/.test(str) ? '-' + str : str;
++}
++
+ /**
+  * Parse the string value into an integer in bytes.
+  *
+diff --git a/test/byte-format.js b/test/byte-format.js
+index 7e82cee..e68b3a7 100644
+--- a/test/byte-format.js
++++ b/test/byte-format.js
+@@ -116,4 +116,50 @@ describe('Test byte format function', function(){
+     assert.equal(bytes.format(12 * mb, {unit: ''}).toLowerCase(), '12mb');
+     assert.equal(bytes.format(12 * mb, {unit: 'bb'}).toLowerCase(), '12mb');
+   })
++
++  describe('with rounding: "down"', function(){
++    var down = {rounding: 'down'};
++
++    it('Should never round up at unit boundaries', function(){
++      assert.equal(bytes.format(kb - 1, down), '1023B');
++      assert.equal(bytes.format(mb - 1, down), '1023.99KB');
++      assert.equal(bytes.format(gb - 1, down), '1023.99MB');
++      assert.equal(bytes.format(tb - 1, down), '1023.99GB');
++      assert.equal(bytes.format(pb - 1, down), '1023.99TB');
++      assert.equal(bytes.format(2047, down), '1.99KB');
++    });
++
++    it('Should keep exact values', function(){
++      assert.equal(bytes.format(kb, down), '1KB');
++      assert.equal(bytes.format(mb, down), '1MB');
++      assert.equal(bytes.format(1.5 * kb, down), '1.5KB');
++      assert.equal(bytes.format(0, down), '0B');
++    });
++
++    it('Should truncate with custom decimal places', function(){
++      assert.equal(bytes.format(1.5 * kb, {rounding: 'down', decimalPlaces: 0}), '1KB');
++      assert.equal(bytes.format(mb - 1, {rounding: 'down', decimalPlaces: 0}), '1023KB');
++      assert.equal(bytes.format(mb - 1, {rounding: 'down', decimalPlaces: 3}), '1023.999KB');
++      assert.equal(bytes.format(mb - 1, {rounding: 'down', decimalPlaces: 3, fixedDecimals: true}), '1023.999KB');
++      assert.equal(bytes.format(kb, {rounding: 'down', decimalPlaces: 3, fixedDecimals: true}), '1.000KB');
++    });
++
++    it('Should avoid floating point error', function(){
++      assert.equal(bytes.format(1.15, {rounding: 'down', unit: 'B', decimalPlaces: 2}), '1.15B');
++    });
++
++    it('Should truncate magnitude of negatives toward zero', function(){
++      assert.equal(bytes.format(-(mb - 1), down), '-1023.99KB');
++      assert.equal(bytes.format(-2047, down), '-1.99KB');
++      assert.equal(bytes.format(-0.001, {rounding: 'down', unit: 'B'}), '0B');
++    });
++
++    it('Should work with separators', function(){
++      assert.equal(bytes.format(mb * 2000 - 1, {rounding: 'down', unit: 'KB', thousandsSeparator: ','}), '2,047,999.99KB');
++    });
++  });
++
++  it('Should keep rounding by default', function(){
++    assert.equal(bytes.format(mb - 1), '1024KB');
++  });
+ });

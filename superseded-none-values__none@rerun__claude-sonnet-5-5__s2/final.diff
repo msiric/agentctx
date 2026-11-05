@@ -1,0 +1,170 @@
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index 0f318fc..102b626 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -71,6 +71,10 @@ def gen_table_chunks(
+     literals = []
+     tables: list[tuple[str, Any, bool]] = []  # => [(key, value, inside_aot)]
+     for k, v in table.items():
++        if v is None:
++            continue
++        if isinstance(v, ARRAY_TYPES):
++            v = [item for item in v if item is not None]
+         if isinstance(v, Mapping):
+             tables.append((k, v, False))
+         elif is_aot(v) and not all(is_suitable_inline_table(t, ctx) for t in v):
+@@ -115,9 +119,12 @@ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
+ 
+     # Lazy import to improve module import time
+     from decimal import Decimal
++    from pathlib import PurePath
+ 
+     if isinstance(obj, Decimal):
+         return format_decimal(obj)
++    if isinstance(obj, PurePath):
++        return format_string(str(obj), allow_multiline=False)
+     raise TypeError(
+         f"Object of type '{type(obj).__qualname__}' is not TOML serializable"
+     )
+@@ -138,14 +145,14 @@ def format_inline_table(obj: Mapping, ctx: Context) -> str:
+     if obj_id in ctx.inline_table_cache:
+         return ctx.inline_table_cache[obj_id]
+ 
+-    if not obj:
++    items = [(k, v) for k, v in obj.items() if v is not None]
++    if not items:
+         rendered = "{}"
+     else:
+         rendered = (
+             "{ "
+             + ", ".join(
+-                f"{format_key_part(k)} = {format_literal(v, ctx)}"
+-                for k, v in obj.items()
++                f"{format_key_part(k)} = {format_literal(v, ctx)}" for k, v in items
+             )
+             + " }"
+         )
+@@ -154,6 +161,7 @@ def format_inline_table(obj: Mapping, ctx: Context) -> str:
+ 
+ 
+ def format_inline_array(obj: tuple | list, ctx: Context, nest_level: int) -> str:
++    obj = [item for item in obj if item is not None]
+     if not obj:
+         return "[]"
+     item_indent = ctx.indent_str * (1 + nest_level)
+diff --git a/tests/test_types.py b/tests/test_types.py
+index e4c9782..b45e668 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -46,3 +46,111 @@ non-empty-tuple = [
+ ]
+ """
+     )
++
++
++def test_none_values_skipped():
++    obj = {
++        "a": None,
++        "b": 1,
++        "table": {"x": None, "y": "z"},
++        "only_none": {"x": None},
++        "inline_aot": [{"p": None, "q": 1}, {"p": None}],
++        "nested": {"sub": {"k": None, "v": 2}},
++    }
++    assert (
++        tomli_w.dumps(obj)
++        == """\
++b = 1
++inline_aot = [
++    { q = 1 },
++    {},
++]
++
++[table]
++y = "z"
++
++[only_none]
++
++[nested.sub]
++v = 2
++"""
++    )
++
++
++def test_none_values_skipped_dump():
++    import io
++
++    f = io.BytesIO()
++    tomli_w.dump({"a": None, "b": 1}, f)
++    assert f.getvalue() == b"b = 1\n"
++
++
++def test_none_skipped_in_inline_table():
++    obj = {"arr": [[{"a": None, "b": 1}]], "t": {"i": [{"a": None, "b": 1}]}}
++    assert "None" not in tomli_w.dumps(obj)
++    assert "{ b = 1 }" in tomli_w.dumps(obj)
++
++
++def test_pathlib_paths():
++    import pathlib
++
++    obj = {
++        "pure": pathlib.PurePosixPath("/usr/local/bin"),
++        "path": pathlib.Path("relative/dir"),
++        "win": pathlib.PureWindowsPath("C:/Users/me"),
++        "list": [pathlib.PurePosixPath("a/b")],
++        "table": {"p": pathlib.PurePosixPath("x")},
++    }
++    assert (
++        tomli_w.dumps(obj)
++        == """\
++pure = "/usr/local/bin"
++path = "relative/dir"
++win = "C:\\\\Users\\\\me"
++list = [
++    "a/b",
++]
++
++[table]
++p = "x"
++"""
++    )
++
++
++def test_none_skipped_in_arrays():
++    obj = {
++        "arr": [1, None, 2],
++        "nested": [[None, 1], [None]],
++        "only_none": [None],
++        "tup": (None, "a"),
++        "aot": [{"a": 1}, None, {"a": 2}],
++        "inline": {"arr": [None, 3]},
++    }
++    assert (
++        tomli_w.dumps(obj)
++        == """\
++arr = [
++    1,
++    2,
++]
++nested = [
++    [
++        1,
++    ],
++    [],
++]
++only_none = []
++tup = [
++    "a",
++]
++aot = [
++    { a = 1 },
++    { a = 2 },
++]
++
++[inline]
++arr = [
++    3,
++]
++"""
++    )

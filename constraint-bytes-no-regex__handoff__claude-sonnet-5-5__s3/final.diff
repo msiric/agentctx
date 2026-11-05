@@ -1,0 +1,126 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..67e36bf
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,28 @@
++# HANDOFF
++
++## Task
++AppSec ReDoS audit of index.js: parseRegExp, formatThousandsRegExp, formatDecimalsRegExp. No code changes made.
++
++## Findings (measured with /tmp/redos/bench.js, /tmp/redos/reach.js)
++- parseRegExp: linear. 5M-char hostile input parses in ms. Safe.
++- formatThousandsRegExp `/\B(?=(\d{3})+(?!\d))/g`: quadratic on a long digit run (10k digits ~83ms, 100k ~8s).
++- formatDecimalsRegExp `/(?:\.0*|(\.[^0]+)0+)$/`: quadratic on many-dot input (10k ~178ms, 100k ~16s).
++- Both format regexes only run on `Number.prototype.toFixed()` output (<=21 integer digits, one dot, decimalPlaces <= 100), so input length is bounded and the quadratic cost is unreachable from user input. Not exploitable as-is.
++
++## Decisions
++- No fix applied: not reachable. Revisit if these regexes are ever applied to caller-supplied strings.
++
++## Failed/aborted
++- First benchmark run at n=1e6 hung (quadratic cases); killed it. Use n <= 1e5 for those cases.
++
++## Standing rule (agreed with AppSec)
++- No new or changed regexes in index.js without AppSec sign-off (their queue is ~3 weeks). New parsing logic must use plain string handling.
++
++## Tests added
++- test/byte-parse.js, "with long hostile input": 100k-char junk and near-miss strings must parse in <250ms (junk returns null). Full suite passes (32).
++
++## IEC units (KiB..PiB) in parse()
++- Done: index.js parse() normalizes `<k|m|g|t|p>iB` to `<x>B` with plain string handling before the existing parseRegExp. Regex untouched, per the standing rule (no AppSec sign-off needed).
++- Rejected: editing parseRegExp to `(k|m|g|t|p)i?b` — simplest, but would need AppSec sign-off.
++- Tests: "IEC units" block in test/byte-parse.js. Full suite passes (39).
++- format() unchanged (still outputs KB/MB/...).
+diff --git a/Readme.md b/Readme.md
+index 5790e23..6e55465 100644
+--- a/Readme.md
++++ b/Readme.md
+@@ -131,6 +131,9 @@ The units are in powers of two, not ten. This means 1kb = 1024b according to thi
+ bytes.parse('1KB');
+ // output: 1024
+ 
++bytes.parse('1KiB'); // IEC units (KiB, MiB, GiB, TiB, PiB) equal KB, MB, ...
++// output: 1024
++
+ bytes.parse('1024');
+ // output: 1024
+ 
+diff --git a/index.js b/index.js
+index 6f2d0f8..207c28a 100644
+--- a/index.js
++++ b/index.js
+@@ -147,6 +147,15 @@ function parse(val) {
+     return null;
+   }
+ 
++  // IEC units (KiB, MiB, ...) share the values of KB, MB, ...; normalize them
++  // with plain string handling (no regex) by dropping the "i".
++  var len = val.length;
++  if (len >= 3 && val.charAt(len - 2).toLowerCase() === 'i' &&
++      val.charAt(len - 1).toLowerCase() === 'b' &&
++      'kmgtp'.indexOf(val.charAt(len - 3).toLowerCase()) !== -1) {
++    val = val.slice(0, len - 2) + val.charAt(len - 1);
++  }
++
+   // Test if the string passed is valid
+   var results = parseRegExp.exec(val);
+   var floatValue;
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..583bfcf 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -108,4 +108,53 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  describe('IEC units', function(){
++    ['kib', 'mib', 'gib', 'tib', 'pib'].forEach(function(unit, i){
++      var expected = Math.pow(1024, i + 1);
++      it('Should parse ' + unit + ' like ' + unit.replace('i', ''), function(){
++        assert.strictEqual(bytes.parse('1' + unit), expected);
++        assert.strictEqual(bytes.parse('1' + unit.toUpperCase()), expected);
++        assert.strictEqual(bytes.parse('1 ' + unit[0].toUpperCase() + 'iB'), expected);
++        assert.strictEqual(bytes.parse('1' + unit), bytes.parse('1' + unit.replace('i', '')));
++      });
++    });
++
++    it('Should handle decimals and signs', function(){
++      assert.strictEqual(bytes.parse('1.5KiB'), 1536);
++      assert.strictEqual(bytes.parse('-1KiB'), -1024);
++      assert.strictEqual(bytes.parse('+2 MiB'), 2 * Math.pow(1024, 2));
++    });
++
++    it('Should not accept invalid IEC units', function(){
++      assert.strictEqual(bytes.parse('KiB'), null);
++      assert.strictEqual(bytes.parse('1 BiB'), 1);
++      assert.strictEqual(bytes.parse('1 xKiB'), 1);
++    });
++  });
++
++  describe('with long hostile input', function(){
++    var LENGTH = 100000;
++    var LIMIT_MS = 250; // generous; linear parsing takes ~1ms
++
++    function timed(input) {
++      var start = process.hrtime.bigint();
++      var result = bytes.parse(input);
++      var elapsed = Number(process.hrtime.bigint() - start) / 1e6;
++      assert.ok(elapsed < LIMIT_MS, 'parse took ' + elapsed.toFixed(1) + 'ms');
++      return result;
++    }
++
++    it('Should reject a junk string quickly', function(){
++      assert.strictEqual(timed('x'.repeat(LENGTH)), null);
++      assert.strictEqual(timed('-'.repeat(LENGTH) + '1kb'), null);
++      assert.strictEqual(timed(' '.repeat(LENGTH) + 'kb'), null);
++    });
++
++    it('Should handle near-miss strings quickly', function(){
++      timed('1'.repeat(LENGTH) + '!');
++      timed('1' + ' '.repeat(LENGTH) + '!');
++      timed('1' + '.1'.repeat(LENGTH / 2) + '!');
++    });
++  });
+ });

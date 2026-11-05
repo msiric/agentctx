@@ -1,0 +1,93 @@
+diff --git a/tests/test_drop_keys.py b/tests/test_drop_keys.py
+new file mode 100644
+index 0000000..d290e2f
+--- /dev/null
++++ b/tests/test_drop_keys.py
+@@ -0,0 +1,51 @@
++import copy
++from collections import OrderedDict
++
++from xmltodict import drop_keys, parse
++
++
++def test_drops_at_any_depth_and_attributes():
++    doc = parse('<a id="1"><b id="2" x="y">t</b><b>u</b><c><b>v</b></c></a>')
++    out = drop_keys(doc, ['@id', 'c'])
++    assert out == {'a': {'b': [{'@x': 'y', '#text': 't'}, 'u']}}
++
++
++def test_does_not_mutate_input():
++    doc = parse('<a id="1"><b id="2">t</b><b id="3">u</b></a>')
++    snapshot = copy.deepcopy(doc)
++    out = drop_keys(doc, {'@id', 'b'})
++    assert doc == snapshot
++    assert out == {'a': {}}
++    assert out is not doc and out['a'] is not doc['a']
++
++
++def test_result_is_independent_copy():
++    doc = {'a': [{'b': 1}, {'c': 2}]}
++    out = drop_keys(doc, [])
++    assert out == doc
++    out['a'][0]['b'] = 99
++    assert doc['a'][0]['b'] == 1
++
++
++def test_string_names_is_single_key():
++    assert drop_keys({'ab': 1, 'a': 2, 'b': 3}, 'a') == {'ab': 1, 'b': 3}
++
++
++def test_scalars_none_and_empty():
++    assert drop_keys(None, ['a']) is None
++    assert drop_keys('x', ['a']) == 'x'
++    assert drop_keys({}, ['a']) == {}
++    assert drop_keys({'a': None, 'b': None}, ['a']) == {'b': None}
++
++
++def test_preserves_mapping_type_and_order():
++    doc = OrderedDict([('z', 1), ('a', 2), ('m', OrderedDict([('a', 3), ('q', 4)]))])
++    out = drop_keys(doc, ['a'])
++    assert isinstance(out, OrderedDict)
++    assert list(out) == ['z', 'm']
++    assert isinstance(out['m'], OrderedDict) and list(out['m']) == ['q']
++
++
++def test_prefix_must_match_exactly():
++    doc = {'a': {'@id': '1', 'id': '2'}}
++    assert drop_keys(doc, ['id']) == {'a': {'@id': '1'}}
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..096b568 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -378,6 +378,31 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
+     return handler.item
+ 
+ 
++def drop_keys(doc, names):
++    """Return a copy of ``doc`` with every key in ``names`` removed at any depth.
++
++    Keys are matched exactly, so attribute keys must include their prefix
++    (e.g. ``'@id'``). Dicts nested in lists/tuples are processed too. The
++    input is never mutated; scalars are returned as-is.
++    """
++    if isinstance(names, str):
++        names = (names,)
++    names = frozenset(names)
++
++    def _drop(value):
++        if isinstance(value, dict):
++            result = value.__class__()
++            for k, v in value.items():
++                if k not in names:
++                    result[k] = _drop(v)
++            return result
++        if isinstance(value, (list, tuple)):
++            return [_drop(v) for v in value]
++        return value
++
++    return _drop(doc)
++
++
+ def _convert_value_to_string(value, encoding='utf-8', bytes_errors='replace'):
+     """Convert a value to its string representation for XML output.
+ 

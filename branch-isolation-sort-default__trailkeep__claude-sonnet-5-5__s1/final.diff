@@ -1,0 +1,106 @@
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index 79da116..2ed6bc0 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -31,7 +31,7 @@ COMPACT_ESCAPES = MappingProxyType(
+ 
+ 
+ class Context:
+-    def __init__(self, allow_multiline: bool, indent: int, sort_keys: bool = False):
++    def __init__(self, allow_multiline: bool, indent: int, sort_keys: bool = True):
+         if indent < 0:
+             raise ValueError("Indent width must be non-negative")
+         self.allow_multiline: Final = allow_multiline
+@@ -48,7 +48,7 @@ def dump(
+     *,
+     multiline_strings: bool = False,
+     indent: int = 4,
+-    sort_keys: bool = False,
++    sort_keys: bool = True,
+ ) -> None:
+     ctx = Context(multiline_strings, indent, sort_keys)
+     for chunk in gen_table_chunks(obj, ctx, name=""):
+@@ -61,7 +61,7 @@ def dumps(
+     *,
+     multiline_strings: bool = False,
+     indent: int = 4,
+-    sort_keys: bool = False,
++    sort_keys: bool = True,
+ ) -> str:
+     ctx = Context(multiline_strings, indent, sort_keys)
+     return "".join(gen_table_chunks(obj, ctx, name=""))
+diff --git a/tests/test_sort_keys.py b/tests/test_sort_keys.py
+index 8973702..c451664 100644
+--- a/tests/test_sort_keys.py
++++ b/tests/test_sort_keys.py
+@@ -11,10 +11,14 @@ DATA = {
+ }
+ 
+ 
+-def test_default_unsorted():
++def test_default_sorted():
+     out = tomli_w.dumps({"b": 1, "a": 2})
+-    assert out == "b = 1\na = 2\n"
+-    assert tomli_w.dumps(DATA) == tomli_w.dumps(DATA, sort_keys=False)
++    assert out == "a = 2\nb = 1\n"
++    assert tomli_w.dumps(DATA) == tomli_w.dumps(DATA, sort_keys=True)
++
++
++def test_unsorted_opt_out():
++    assert tomli_w.dumps({"b": 1, "a": 2}, sort_keys=False) == "b = 1\na = 2\n"
+ 
+ 
+ def test_sorted_flat():
+diff --git a/tests/test_style.py b/tests/test_style.py
+index ca10db3..af61571 100644
+--- a/tests/test_style.py
++++ b/tests/test_style.py
+@@ -13,7 +13,7 @@ def test_newline_before_table():
+     expected = "[table]\n"
+     assert actual == expected
+ 
+-    actual = tomli_w.dumps({"table": {"nested": {}, "val3": 3}, "val2": 2, "val1": 1})
++    actual = tomli_w.dumps({"table": {"nested": {}, "val3": 3}, "val2": 2, "val1": 1}, sort_keys=False)
+     expected = """\
+ val2 = 2
+ val1 = 1
+@@ -61,7 +61,7 @@ def test_only_tables():
+ 
+ 
+ def test_tricky_keys():
+-    actual = tomli_w.dumps({"f": 1, "tab1": {}, "": {"f": 2, "": {"": 1}}, "tab3": {}})
++    actual = tomli_w.dumps({"f": 1, "tab1": {}, "": {"f": 2, "": {"": 1}}, "tab3": {}}, sort_keys=False)
+     expected = """\
+ f = 1
+ 
+@@ -143,7 +143,7 @@ long-value = "Lorem ipsum sith"
+ another-long-value = "consectetur adipis"
+ simple-value = 3
+ """
+-    actual = tomli_w.dumps(example)
++    actual = tomli_w.dumps(example, sort_keys=False)
+     assert actual == expected
+     assert tomli.loads(actual) == example
+ 
+@@ -253,7 +253,7 @@ another-long-value = "consectetur adipiscing elit"
+ a-third-one = "sed do eiusmod tempor incididunt ut labore et dolore magna"
+ simple-value = 3
+ """
+-    actual = tomli_w.dumps(example)
++    actual = tomli_w.dumps(example, sort_keys=False)
+     assert actual == expected
+     assert tomli.loads(actual) == example
+ 
+diff --git a/tests/test_types.py b/tests/test_types.py
+index e4c9782..6ff986b 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -16,7 +16,7 @@ def test_decimal():
+         "float-2E16": float("2E16"),
+     }
+     assert (
+-        tomli_w.dumps(obj)
++        tomli_w.dumps(obj, sort_keys=False)
+         == """\
+ decimal-0 = 0.0
+ decimal-4 = 4.0

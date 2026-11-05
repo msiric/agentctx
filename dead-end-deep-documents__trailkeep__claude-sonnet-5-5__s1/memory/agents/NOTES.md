@@ -1,0 +1,1 @@
+- 2026-11-05: xmltodict eval for supplier catalog feed: parse is enough for now (user decision). parse handled 3000-deep nesting; unparse raises RecursionError at that depth (recurses per level), so don't rely on unparse for deeply nested docs. User's test one-liner builds nested parts, not flat siblings; real feeds likely flat. Scratch files removed; /tmp/catalog.xml kept.

@@ -1,0 +1,101 @@
+diff --git a/index.js b/index.js
+index 6f2d0f8..e648e31 100644
+--- a/index.js
++++ b/index.js
+@@ -127,6 +127,29 @@ function format(value, options) {
+   return str + unitSeparator + unit;
+ }
+ 
++/**
++ * Rewrite a trailing IEC unit (KiB, MiB, GiB, TiB, PiB; any case) to the
++ * equivalent KB, MB, GB, TB, PB unit. Uses plain string handling on purpose.
++ *
++ * @param {string} val
++ * @returns {string}
++ * @private
++ */
++
++function normalizeIecUnit(val) {
++  var len = val.length;
++
++  if (len < 3 || val.charAt(len - 2).toLowerCase() !== 'i' || val.charAt(len - 1).toLowerCase() !== 'b') {
++    return val;
++  }
++
++  if ('kmgtp'.indexOf(val.charAt(len - 3).toLowerCase()) === -1) {
++    return val;
++  }
++
++  return val.slice(0, len - 2) + val.charAt(len - 1);
++}
++
+ /**
+  * Parse the string value into an integer in bytes.
+  *
+@@ -147,6 +170,9 @@ function parse(val) {
+     return null;
+   }
+ 
++  // Map IEC units (KiB, MiB, ...) onto the equivalent existing units
++  val = normalizeIecUnit(val);
++
+   // Test if the string passed is valid
+   var results = parseRegExp.exec(val);
+   var floatValue;
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..e85771a 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -108,4 +108,52 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  it('Should parse IEC units case-insensitively', function(){
++    ['k', 'm', 'g', 't', 'p'].forEach(function (prefix, i) {
++      var factor = Math.pow(1024, i + 1);
++      var variants = [prefix + 'ib', prefix + 'iB', prefix + 'Ib', prefix + 'IB',
++        prefix.toUpperCase() + 'ib', prefix.toUpperCase() + 'iB',
++        prefix.toUpperCase() + 'Ib', prefix.toUpperCase() + 'IB'];
++
++      variants.forEach(function (unit) {
++        assert.strictEqual(bytes.parse('1' + unit), factor, '1' + unit);
++        assert.strictEqual(bytes.parse('1 ' + unit), factor, '1 ' + unit);
++        assert.strictEqual(bytes.parse('1.5' + unit), Math.floor(1.5 * factor), '1.5' + unit);
++        assert.strictEqual(bytes.parse('0.5' + unit), Math.floor(0.5 * factor), '0.5' + unit);
++      });
++    });
++  });
++
++  it('Should match SI-named units for IEC units', function(){
++    assert.strictEqual(bytes.parse('1KiB'), bytes.parse('1KB'));
++    assert.strictEqual(bytes.parse('1MiB'), bytes.parse('1MB'));
++    assert.strictEqual(bytes.parse('1GiB'), bytes.parse('1GB'));
++    assert.strictEqual(bytes.parse('1TiB'), bytes.parse('1TB'));
++    assert.strictEqual(bytes.parse('1PiB'), bytes.parse('1PB'));
++  });
++
++  it('Should not treat invalid IEC-like strings as units', function(){
++    assert.strictEqual(bytes.parse('iB'), null);
++    assert.strictEqual(bytes.parse('KiB'), null);
++    assert.strictEqual(bytes.parse('1EiB'), 1);
++    assert.strictEqual(bytes.parse('1iB'), 1);
++    assert.strictEqual(bytes.parse('1KiiB'), 1);
++  });
++
++  it('Should reject long junk strings quickly', function(){
++    var n = 100000;
++    var start = Date.now();
++
++    assert.strictEqual(bytes.parse('x'.repeat(n)), null);
++    assert.strictEqual(bytes.parse('.'.repeat(n)), null);
++    assert.strictEqual(bytes.parse(' '.repeat(n) + 'x'), null);
++
++    // near-matches that would expose backtracking in the unit regexp
++    bytes.parse('1'.repeat(n) + 'x');
++    bytes.parse('1' + ' '.repeat(n) + 'x');
++    bytes.parse('1.'.repeat(n / 2) + 'x');
++
++    assert.ok(Date.now() - start < 250, 'parse took too long on hostile input');
++  });
+ });

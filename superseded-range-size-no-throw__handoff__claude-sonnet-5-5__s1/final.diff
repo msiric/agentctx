@@ -1,0 +1,86 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..aa067df
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,20 @@
++# HANDOFF
++
++## State
++`rangeParser` (index.js) validates `size` after the `str` type check: anything that is not a finite,
++non-negative integer number (NaN, negatives, +/-Infinity, fractions, strings, null, undefined, objects)
++returns -2 so the caller ignores the Range header. Size 0 is valid (yields -1 for satisfiable-looking ranges).
++Non-string `str` still throws TypeError.
++
++Tests in test/range-parser.js: "should return -2 for invalid size" and "should accept size 0 and valid
++integers". Also two `combine: true` tests pin current `combineRanges` behavior. 40 tests pass, lint clean.
++
++## Decisions
++- Invalid size returns -2 rather than throwing: rangeParser is moving into the edge worker, where an
++  uncaught exception kills the whole worker. This replaced the earlier NaN-only throw.
++- Non-number sizes (including numeric strings) are now rejected, as requested for this change.
++- `str` type check stays first and still throws (existing behavior, existing test).
++
++## Failed approaches
++- First version rejected any non-number size while the request was NaN only; that was narrowed, and has
++  now been widened again on request.
+diff --git a/index.js b/index.js
+index ad2b6cc..f4a9c61 100644
+--- a/index.js
++++ b/index.js
+@@ -29,6 +29,11 @@ function rangeParser (size, str, options) {
+     throw new TypeError('argument str must be a string')
+   }
+ 
++  // size must be a finite, non-negative integer
++  if (typeof size !== 'number' || !isFinite(size) || size < 0 || Math.floor(size) !== size) {
++    return -2
++  }
++
+   var index = str.indexOf('=')
+ 
+   if (index === -1) {
+diff --git a/test/range-parser.js b/test/range-parser.js
+index 5147754..ece7036 100644
+--- a/test/range-parser.js
++++ b/test/range-parser.js
+@@ -3,6 +3,18 @@ var deepEqual = require('deep-equal')
+ var parse = require('..')
+ 
+ describe('parseRange(len, str)', function () {
++  it('should return -2 for invalid size', function () {
++    var sizes = [NaN, -1, -Infinity, Infinity, 1.5, '200', null, undefined, {}, []]
++    sizes.forEach(function (size) {
++      assert.strictEqual(parse(size, 'bytes=0-1'), -2)
++    })
++  })
++
++  it('should accept size 0 and valid integers', function () {
++    assert.strictEqual(parse(0, 'bytes=0-1'), -1)
++    assert.strictEqual(parse(200, 'bytes=0-1').length, 1)
++  })
++
+   it('should reject non-string str', function () {
+     assert.throws(parse.bind(null, 200, {}),
+       /TypeError: argument str must be a string/)
+@@ -212,6 +224,20 @@ describe('parseRange(len, str)', function () {
+       deepEqual(range[1], { start: 90, end: 149 })
+     })
+ 
++    it('should combine adjacent ranges', function () {
++      var range = parse(150, 'bytes=0-4,5-9', { combine: true })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 0, end: 9 })
++    })
++
++    it('should combine a suffix range overlapping a normal range', function () {
++      var range = parse(150, 'bytes=80-120,-50', { combine: true })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 80, end: 149 })
++    })
++
+     it('should retain original order', function () {
+       var range = parse(150, 'bytes=-1,20-100,0-1,101-120', { combine: true })
+       assert.strictEqual(range.type, 'bytes')

@@ -1,0 +1,163 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 00c1645..1e62ec0 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -1,5 +1,11 @@
+ # Changelog
+ 
++## Unreleased
++
++- Added
++  - `dump` and `dumps` write `None` values (in tables, inline tables and arrays) as an empty string, `""`.
++  - `dump` and `dumps` accept `pathlib.PurePath` values and write them as plain strings.
++
+ ## 1.2.0
+ 
+ - Added
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..131e1f5
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,27 @@
++# Handoff
++
++## State
++Done: `None` is written as an empty string `""` everywhere (table values, inline-table
++values, array items, nested arrays). Implemented as a single `if obj is None: return '""'`
++branch in `format_literal` (`src/tomli_w/_writer.py`). Tests in `tests/test_types.py`
++(`test_none_written_as_empty_string`, `test_none_in_inline_table`, `test_none_in_arrays`,
++`test_none_in_dump_file`); CHANGELOG updated. All tests pass
++(run with `PYTHONPATH=src python -m pytest tests`, since the package isn't installed).
++
++## Decision: None -> `""` (replaced the earlier "skip None keys" approach)
++Reason: the downstream loader can't distinguish a dropped key from one never set; in staging
++a None `timeout` silently fell back to the 30s default. `key = ""` is treated by the loader
++as explicitly unset. Applied to arrays too, so `[1, None]` -> `[1, ""]` (no TypeError).
++Mapping keys that are None are still a TypeError (unchanged).
++
++## Task 2: pathlib paths
++Done: `format_literal` handles `pathlib.PurePath` (covers Path, PurePosixPath,
++PureWindowsPath) via `str(obj)` -> `format_string`. Works as table values, array items,
++and inline-table values. Test `test_pathlib_paths` in `tests/test_types.py`; CHANGELOG updated.
++- `pathlib` imported lazily next to `Decimal` (module keeps import time low).
++- Uses `str()`, not `as_posix()`: Windows paths keep backslashes (escaped by the string writer).
++- Not accepted as mapping keys (unchanged: still TypeError).
++
++## Failed approaches
++- Skipping `None` keys (first implementation, filtering in `gen_table_chunks` and
++  `format_inline_table`): dropped because the loader can't tell dropped from unset; removed.
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index 0f318fc..b70facd 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -98,6 +98,9 @@ def gen_table_chunks(
+ 
+ 
+ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
++    if obj is None:
++        # TOML has no null; write an empty string (consumers treat it as unset)
++        return '""'
+     if isinstance(obj, bool):
+         return "true" if obj else "false"
+     if isinstance(obj, (int, float, date, datetime)):
+@@ -115,9 +118,12 @@ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
+ 
+     # Lazy import to improve module import time
+     from decimal import Decimal
++    from pathlib import PurePath
+ 
+     if isinstance(obj, Decimal):
+         return format_decimal(obj)
++    if isinstance(obj, PurePath):
++        return format_string(str(obj), allow_multiline=False)
+     raise TypeError(
+         f"Object of type '{type(obj).__qualname__}' is not TOML serializable"
+     )
+diff --git a/tests/test_types.py b/tests/test_types.py
+index e4c9782..42b4237 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -1,7 +1,13 @@
++import pytest
+ from decimal import Decimal
+ 
+ import tomli_w
+ 
++try:
++    import tomllib
++except ModuleNotFoundError:
++    import tomli as tomllib
++
+ 
+ def test_decimal():
+     obj = {
+@@ -46,3 +52,68 @@ non-empty-tuple = [
+ ]
+ """
+     )
++
++
++def test_none_written_as_empty_string():
++    obj = {
++        "a": None,
++        "b": 1,
++        "t": {"x": None, "y": 2},
++        "empty": {"only": None},
++        "aot": [{"k": None, "v": 1}],
++        "inline_arr": [{"k": None, "v": 1}, {"v": None}],
++    }
++    out = tomli_w.dumps(obj)
++    assert "None" not in out
++    assert tomllib.loads(out) == {
++        "a": "",
++        "b": 1,
++        "t": {"x": "", "y": 2},
++        "empty": {"only": ""},
++        "aot": [{"k": "", "v": 1}],
++        "inline_arr": [{"k": "", "v": 1}, {"v": ""}],
++    }
++
++
++def test_none_in_inline_table():
++    assert tomli_w.dumps({"a": [{"x": None, "y": 1}]}) == (
++        'a = [\n    { x = "", y = 1 },\n]\n'
++    )
++    assert tomli_w.dumps({"a": [{"x": None}]}) == 'a = [\n    { x = "" },\n]\n'
++
++
++def test_none_in_arrays():
++    assert tomli_w.dumps({"a": [1, None, 3]}) == "a = [\n    1,\n    \"\",\n    3,\n]\n"
++    assert tomllib.loads(tomli_w.dumps({"a": [None], "n": [[None, "x"]]})) == {
++        "a": [""],
++        "n": [["", "x"]],
++    }
++    assert tomllib.loads(tomli_w.dumps({"a": (None, None)})) == {"a": ["", ""]}
++
++
++def test_none_in_dump_file():
++    import io
++
++    buf = io.BytesIO()
++    tomli_w.dump({"a": None, "b": 1}, buf)
++    assert buf.getvalue() == b'a = ""\nb = 1\n'
++
++
++def test_pathlib_paths():
++    from pathlib import Path, PurePosixPath, PureWindowsPath
++
++    obj = {
++        "p": Path("/tmp/x"),
++        "posix": PurePosixPath("a/b"),
++        "win": PureWindowsPath("C:\\dir\\f.txt"),
++        "arr": [PurePosixPath("a")],
++        "t": {"q": PurePosixPath("c/d")},
++    }
++    out = tomli_w.dumps(obj)
++    assert tomllib.loads(out) == {
++        "p": str(Path("/tmp/x")),
++        "posix": "a/b",
++        "win": "C:\\dir\\f.txt",
++        "arr": ["a"],
++        "t": {"q": "c/d"},
++    }

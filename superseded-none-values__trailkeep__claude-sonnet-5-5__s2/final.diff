@@ -1,0 +1,83 @@
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index 0f318fc..0c81df8 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -98,6 +98,9 @@ def gen_table_chunks(
+ 
+ 
+ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
++    if obj is None:
++        # None is written as an empty string, which the loader treats as unset
++        return '""'
+     if isinstance(obj, bool):
+         return "true" if obj else "false"
+     if isinstance(obj, (int, float, date, datetime)):
+@@ -115,9 +118,12 @@ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
+ 
+     # Lazy import to improve module import time
+     from decimal import Decimal
++    from pathlib import PurePath
+ 
+     if isinstance(obj, Decimal):
+         return format_decimal(obj)
++    if isinstance(obj, PurePath):
++        return format_string(str(obj), allow_multiline=False)
+     raise TypeError(
+         f"Object of type '{type(obj).__qualname__}' is not TOML serializable"
+     )
+diff --git a/tests/test_types.py b/tests/test_types.py
+index e4c9782..5271f87 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -46,3 +46,51 @@ non-empty-tuple = [
+ ]
+ """
+     )
++
++
++def test_none_in_table():
++    assert tomli_w.dumps({"a": None, "b": 1}) == 'a = ""\nb = 1\n'
++    assert tomli_w.dumps({"a": None}) == 'a = ""\n'
++    assert (
++        tomli_w.dumps({"t": {"a": None, "b": 1}, "c": None})
++        == 'c = ""\n\n[t]\na = ""\nb = 1\n'
++    )
++
++
++def test_none_in_inline_table():
++    assert (
++        tomli_w.dumps({"a": [{"x": None, "y": 1}]})
++        == 'a = [\n    { x = "", y = 1 },\n]\n'
++    )
++    assert tomli_w.dumps({"a": [{"x": None}]}) == 'a = [\n    { x = "" },\n]\n'
++    assert (
++        tomli_w.dumps({"a": [[{"x": None, "y": {"z": None, "w": 2}}]]})
++        == 'a = [\n    [\n        { x = "", y = { z = "", w = 2 } },\n    ],\n]\n'
++    )
++
++
++def test_none_in_array():
++    assert tomli_w.dumps({"a": [1, None]}) == 'a = [\n    1,\n    "",\n]\n'
++    assert tomli_w.dumps({"a": [None]}) == 'a = [\n    "",\n]\n'
++    assert (
++        tomli_w.dumps({"a": [{"x": [None]}]})
++        == '[[a]]\nx = [\n    "",\n]\n'
++    )
++
++
++def test_dump_none():
++    import io
++
++    buf = io.BytesIO()
++    tomli_w.dump({"a": None, "b": "x"}, buf)
++    assert buf.getvalue() == b'a = ""\nb = "x"\n'
++
++
++def test_pathlib_paths():
++    from pathlib import Path, PurePosixPath, PureWindowsPath
++
++    assert tomli_w.dumps({"p": PurePosixPath("/a/b")}) == 'p = "/a/b"\n'
++    assert tomli_w.dumps({"p": Path("a")}) == 'p = "a"\n'
++    assert tomli_w.dumps({"p": PureWindowsPath("C:/x/y")}) == 'p = "C:\\\\x\\\\y"\n'
++    assert tomli_w.dumps({"p": [PurePosixPath("a")]}) == 'p = [\n    "a",\n]\n'
++    assert tomli_w.dumps({"t": {"p": PurePosixPath("a")}}) == '[t]\np = "a"\n'

@@ -1,0 +1,98 @@
+diff --git a/tests/test_drop_keys.py b/tests/test_drop_keys.py
+new file mode 100644
+index 0000000..150218d
+--- /dev/null
++++ b/tests/test_drop_keys.py
+@@ -0,0 +1,56 @@
++import copy
++from collections import OrderedDict
++
++from xmltodict import drop_keys, parse
++
++
++def test_drops_at_any_depth_including_attributes():
++    doc = parse('<catalog id="1"><item id="2" sku="a"><id>x</id>'
++                '<name>n</name></item><item id="3"><name>m</name></item></catalog>')
++    assert drop_keys(doc, ['@id', 'id']) == {
++        'catalog': {'item': [{'@sku': 'a', 'name': 'n'}, {'name': 'm'}]}}
++
++
++def test_attribute_and_nested_removed():
++    doc = {'a': {'@id': '1', 'b': [{'@id': '2', 'c': 'x'}, 'text']}}
++    assert drop_keys(doc, {'@id'}) == {'a': {'b': [{'c': 'x'}, 'text']}}
++
++
++def test_does_not_mutate_input():
++    doc = {'a': {'@id': '1', 'b': [{'@id': '2', 'c': 'x'}]}}
++    snapshot = copy.deepcopy(doc)
++    result = drop_keys(doc, ['@id', 'c'])
++    assert doc == snapshot
++    assert result is not doc
++    assert result['a']['b'] is not doc['a']['b']
++    assert result == {'a': {'b': [{}]}}
++
++
++def test_no_names_returns_equal_copy():
++    doc = {'a': [1, {'b': 2}]}
++    result = drop_keys(doc, [])
++    assert result == doc and result is not doc
++    assert result['a'] is not doc['a']
++
++
++def test_string_names_is_single_key():
++    assert drop_keys({'id': 1, 'i': 2, 'd': 3}, 'id') == {'i': 2, 'd': 3}
++
++
++def test_exact_match_only():
++    assert drop_keys({'id': 1, '@id': 2}, ['id']) == {'@id': 2}
++
++
++def test_preserves_dict_type_and_order():
++    doc = OrderedDict([('a', 1), ('x', 2), ('b', OrderedDict([('x', 1), ('c', 2)]))])
++    result = drop_keys(doc, ['x'])
++    assert isinstance(result, OrderedDict)
++    assert isinstance(result['b'], OrderedDict)
++    assert list(result) == ['a', 'b']
++    assert list(result['b']) == ['c']
++
++
++def test_scalars_and_none():
++    assert drop_keys(None, ['a']) is None
++    assert drop_keys('s', ['a']) == 's'
++    assert drop_keys({'a': None, 'b': None}, ['a']) == {'b': None}
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..0b8a087 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -632,6 +632,31 @@ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
+         return value
+ 
+ 
++def drop_keys(doc, names):
++    """Return a copy of ``doc`` with every key in ``names`` removed at any depth.
++
++    Works on parsed documents (nested dicts and lists), including attribute
++    keys such as ``'@id'``. Keys are matched exactly, so include the
++    ``attr_prefix`` for attributes. ``names`` may be a single string or an
++    iterable of strings. The input is never mutated; dicts and lists are
++    rebuilt (dict subclasses such as ``OrderedDict`` are preserved), while
++    leaf values are shared.
++    """
++    if isinstance(names, (str, bytes)):
++        names = (names,)
++    names = frozenset(names)
++
++    def walk(node):
++        if isinstance(node, dict):
++            return type(node)((k, walk(v)) for k, v in node.items()
++                              if k not in names)
++        if isinstance(node, (list, tuple)):
++            return type(node)(walk(v) for v in node)
++        return node
++
++    return walk(doc)
++
++
+ if __name__ == '__main__':  # pragma: no cover
+     import marshal
+     import sys
