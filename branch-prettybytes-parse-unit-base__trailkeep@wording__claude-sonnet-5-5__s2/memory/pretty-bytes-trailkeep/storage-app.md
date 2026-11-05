@@ -1,0 +1,10 @@
+# storage-app
+
+Branch: storage-app · Repo: local__pretty-bytes-874486487 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: parseBytes (storage-app branch) deliberately rejects decimal units (kB/MB/GB…) with SyntaxError 'Unsupported unit'; user must check with the storage team how they should be read before adding them. Units are case-sensitive. Choices of mine: no sign/exponent support, no rounding, optional space, SyntaxError for bad input/TypeError for non-strings.
+- 2026-11-05: Storage team answer for parseBytes (storage-app branch): units without the 'i' are powers of 1024 (Windows Explorer style): '1 KB' and '1 kB' are 1024, '1 MB' is 1048576, etc. To be added next session; still not implemented, so decimal units currently throw SyntaxError. Case-sensitivity of K/k beyond KB/kB is unspecified.
+- 2026-11-05: parseBytes now accepts kB, KB, MB…YB as powers of 1024 (storage team answer), documented in readme and index.d.ts. Choice of mine: all other spellings stay rejected with SyntaxError 'Unsupported unit' ('1 K', '1 k', '1 kb', '1 mb'), since the team didn't specify them; ask them before loosening.
+

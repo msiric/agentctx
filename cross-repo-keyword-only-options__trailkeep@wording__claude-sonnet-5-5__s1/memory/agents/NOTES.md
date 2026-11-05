@@ -1,0 +1,1 @@
+- 2026-11-05: Rule (user-stated, applies to every repo): any new optional parameter goes after a bare '*' so it is keyword-only. Reason: positional booleans at call sites are unreadable, and keyword-only makes reordering parameters non-breaking.

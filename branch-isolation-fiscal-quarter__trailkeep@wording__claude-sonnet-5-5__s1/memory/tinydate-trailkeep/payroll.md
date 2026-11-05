@@ -1,0 +1,10 @@
+# payroll
+
+Branch: payroll · Repo: local__tinydate-2422463273 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: When adding the quarter token to this payroll build, use Australian financial-year quarters: year starts 1 July, so Jul-Sep is Q1, Oct-Dec Q2, Jan-Mar Q3, Apr-Jun Q4. Reason: payroll needs it. The user will implement the quarter token themselves as a separate change, so don't add it unprompted.
+- 2026-11-05: My choice (not the user's): {MMM} uses a hardcoded English MONTHS array rather than toLocaleString, so output doesn't depend on runtime locale. {MMM} change (src, tests, readme) is done and tests pass but is uncommitted.
+- 2026-11-05: Quarter token {Q} is implemented (src/index.js, tests, readme) using Australian FY quarters (Jul-Sep=Q1). User asked for it explicitly on 2026-11-05, superseding the earlier 'user will do it themselves' note. Uncommitted, tests pass (39).
+

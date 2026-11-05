@@ -1,0 +1,9 @@
+# feature/decimal-units
+
+Branch: feature/decimal-units · Repo: local__bytes-77647216 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: Decimal-units spike (bytes.parse(str,{decimal:true}), kB=1000) was reverted; product hasn't decided between extending parse() or a separate function. If redone: naive Math.floor(1000*2.01) gives 2009 (float noise); spike fixed it with Number(x.toPrecision(15)) before floor, but exact integer math on the decimal string is more robust (>15 sig digits / near 2^53). Also bytes(str, options) must forward options to parse if parse takes them.
+- 2026-11-05: Product decided (2026-11-05): decimal units via bytes.parse(value,{decimal:true}) (extend parse, not a separate function). Implemented with exact string-based scaling (scaleDecimal) instead of toPrecision; bytes(str, options) forwards options to parse. Tests in test/byte-parse.js. Readme/History not yet updated.
+

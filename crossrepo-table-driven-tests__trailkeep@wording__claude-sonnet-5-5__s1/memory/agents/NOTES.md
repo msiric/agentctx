@@ -1,0 +1,1 @@
+- 2026-11-05: Tests: write one test.each table of cases per function (not many separate it/test blocks), in every project. Reason (user's): tables are easier to scan and to add cases to.

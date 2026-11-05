@@ -1,0 +1,1 @@
+- 2026-11-05: User publishes npm packages straight from main after merge, so every change must bump the version in package.json itself: patch for fixes, minor for new features. Do this in every repo without being asked.

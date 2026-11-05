@@ -1,0 +1,2 @@
+- 2026-11-05: User's rule: start every error message with the package name, e.g. 'pretty-ms: Expected ...', in ALL their packages (their log collector drops stack traces, so they can't tell which dependency threw). Apply to new and existing error messages.
+- 2026-11-05: Error messages in every package start with the package name (e.g. 'parse-ms: Expected ...'); applied in parse-ms to new and existing errors.

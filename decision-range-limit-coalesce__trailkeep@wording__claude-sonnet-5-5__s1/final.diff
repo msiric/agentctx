@@ -1,0 +1,126 @@
+diff --git a/README.md b/README.md
+index 5103c4b..220e314 100644
+--- a/README.md
++++ b/README.md
+@@ -54,6 +54,21 @@ if (subranges.type === 'bytes') {
+ 
+ These properties are accepted in the options object.
+ 
++##### limit
++
++The maximum number of ranges to take from one header, unset (no limit) by
++default. When the header has more valid ranges than `limit`, they are collapsed
++into a single range from the lowest start to the highest end, so that the
++response can be a single range rather than multipart. Ranges are counted after
++`combine` is applied.
++
++<!-- eslint-disable no-undef -->
++
++```js
++parseRange(1000, 'bytes=500-600,0-10,20-30', { limit: 2 })
++// => [{ start: 0, end: 600 }]
++```
++
+ ##### combine
+ 
+ Specifies if overlapping & adjacent subranges should be combined, defaults to
+diff --git a/index.js b/index.js
+index ad2b6cc..646918a 100644
+--- a/index.js
++++ b/index.js
+@@ -90,9 +90,35 @@ function rangeParser (size, str, options) {
+     return valid ? -1 : -2
+   }
+ 
+-  return options && options.combine
+-    ? combineRanges(ranges)
+-    : ranges
++  if (options && options.combine) {
++    ranges = combineRanges(ranges)
++  }
++
++  if (options && options.limit !== undefined && ranges.length > options.limit) {
++    return collapseRanges(ranges)
++  }
++
++  return ranges
++}
++
++/**
++ * Collapse ranges into a single range from the lowest start to the highest end.
++ * @private
++ */
++
++function collapseRanges (ranges) {
++  var start = ranges[0].start
++  var end = ranges[0].end
++
++  for (var i = 1; i < ranges.length; i++) {
++    if (ranges[i].start < start) start = ranges[i].start
++    if (ranges[i].end > end) end = ranges[i].end
++  }
++
++  var collapsed = [{ start: start, end: end }]
++  collapsed.type = ranges.type
++
++  return collapsed
+ }
+ 
+ /**
+diff --git a/test/range-parser.js b/test/range-parser.js
+index 5147754..285dfed 100644
+--- a/test/range-parser.js
++++ b/test/range-parser.js
+@@ -222,6 +222,52 @@ describe('parseRange(len, str)', function () {
+     })
+   })
+ 
++  describe('when limit is set', function () {
++    it('should return ranges unchanged when at or under the limit', function () {
++      var range = parse(1000, 'bytes=0-1,10-11', { limit: 2 })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 2)
++      deepEqual(range[0], { start: 0, end: 1 })
++      deepEqual(range[1], { start: 10, end: 11 })
++    })
++
++    it('should collapse to one range when over the limit', function () {
++      var range = parse(1000, 'bytes=500-600,0-10,20-30', { limit: 2 })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 0, end: 600 })
++    })
++
++    it('should keep the range type when collapsing', function () {
++      var range = parse(1000, 'items=5-6,0-1', { limit: 1 })
++      assert.strictEqual(range.type, 'items')
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 0, end: 6 })
++    })
++
++    it('should count only valid ranges', function () {
++      var range = parse(1000, 'bytes=0-1,abc,5-2,10-11', { limit: 2 })
++      assert.strictEqual(range.length, 2)
++    })
++
++    it('should not limit when unset', function () {
++      var range = parse(1000, 'bytes=0-1,10-11,20-21,30-31')
++      assert.strictEqual(range.length, 4)
++    })
++
++    it('should apply limit after combine', function () {
++      var range = parse(1000, 'bytes=0-1,2-3,4-5,100-101', { limit: 2, combine: true })
++      assert.strictEqual(range.length, 2)
++      deepEqual(range[0], { start: 0, end: 5 })
++      deepEqual(range[1], { start: 100, end: 101 })
++    })
++
++    it('should still return -2 and -1 for invalid headers', function () {
++      assert.strictEqual(parse(100, 'bytes=abc', { limit: 1 }), -2)
++      assert.strictEqual(parse(100, 'bytes=200-300', { limit: 1 }), -1)
++    })
++  })
++
+   it('should ignore whitespace-only invalid ranges when valid present', function () {
+     var range = parse(1000, 'bytes= , 0-10')
+     assert.strictEqual(range.type, 'bytes')

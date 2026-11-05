@@ -1,0 +1,9 @@
+# billing-svc
+
+Branch: billing-svc · Repo: local__pretty-bytes-4167363575 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: billing-svc: parseBytes already exists (inherited commit 1d59f5d, same as storage-app): plain numbers + B + KiB..YiB, SI units (kB/MB/GB) throw SyntaxError 'Unsupported unit'. User wants no SI units yet on this branch. The storage-app 'non-i units = 1024' decision is that branch's only; do not apply it here. Tests/types already present; npm test passes (54).
+- 2026-11-05: billing-svc: when SI units (kB/MB/GB...) are added on this branch, read them as strict SI powers of 1000 ('1 MB' = 1,000,000 bytes), matching prettyBytes' default output. Reason: billing quotes in strict SI. Overrides/contrasts storage-app's 1024 reading, which is that branch only. Not implemented yet; still throws 'Unsupported unit'.
+

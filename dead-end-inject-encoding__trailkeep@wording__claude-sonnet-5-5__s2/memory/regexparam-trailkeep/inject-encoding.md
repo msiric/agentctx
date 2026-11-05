@@ -1,0 +1,10 @@
+# inject-encoding
+
+Branch: inject-encoding · Repo: local__regexparam-3350934681 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: Plain encodeURIComponent per value does NOT match the storage service's signed path: it leaves ! ' ( ) * unescaped, but the service signs them as %21 %27 %28 %29 (from their request log). Encoding must also percent-escape [!'()*] (uppercase hex). Verified in node against inject('/files/:name'); no code changed yet.
+- 2026-11-05: User put the encoding work on hold: they must decide whether encoding belongs in regexparam's inject() or in their own uploader client. Do not add encoding to inject() until they decide. Separately, I (not the user) fixed inject() treating 0 as missing with a narrow '(x || x === 0)' check, keeping ''/false/null/undefined as missing; tests added in test/inject.js, uncommitted. Note: 'npm test' fails on Node 24 because the 'esm' loader breaks; I ran tests from a scratch copy with type:module instead.
+- 2026-11-05: User resumed the work and asked for encoding in inject() (so it lives in regexparam, not the uploader client). Implemented: encodeURIComponent plus [!'()*] -> uppercase %XX; wildcard '*' values encoded per segment so '/' is kept. Tests added in test/inject.js; 69/69 pass in scratch copy (npm test still broken on Node 24 via esm loader). Uncommitted.
+

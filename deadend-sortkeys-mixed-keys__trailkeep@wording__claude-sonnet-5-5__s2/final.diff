@@ -1,0 +1,96 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..1918ae1 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,32 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++def test_json_sorts_keys_by_default(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file))
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    assert db_file.read() == '{"_default": {"1": {"a": 2, "b": 1}}}'
++
++
++def test_json_sort_keys_disabled(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file), sort_keys=False)
++    db.insert({'b': 1, 'a': 2})
++    db.close()
++
++    assert db_file.read() == '{"_default": {"1": {"b": 1, "a": 2}}}'
++
++
++def test_json_sort_keys_mixed_key_types(tmpdir):
++    db_file = tmpdir.join('test.db')
++    db = TinyDB(str(db_file))
++    db.insert({'hits': {200: 5, 'other': 1, 404: 2}})
++    db.close()
++
++    assert db_file.read() == (
++        '{"_default": {"1": {"hits": {"200": 5, "404": 2, "other": 1}}}}'
++    )
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..6f55b5e 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -76,6 +76,28 @@ class Storage(ABC):
+         pass
+ 
+ 
++def _stringify_keys(obj: Any) -> Any:
++    """
++    Recursively convert dict keys the way :mod:`json` does (``1`` -> ``'1'``,
++    ``True`` -> ``'true'``, ``None`` -> ``'null'``), so that dicts with mixed
++    key types can be sorted without raising a ``TypeError``.
++    """
++    if isinstance(obj, dict):
++        result = {}
++        for key, value in obj.items():
++            if isinstance(key, bool):
++                key = 'true' if key else 'false'
++            elif key is None:
++                key = 'null'
++            elif isinstance(key, (int, float)):
++                key = json.dumps(key)
++            result[key] = _stringify_keys(value)
++        return result
++    if isinstance(obj, (list, tuple)):
++        return [_stringify_keys(item) for item in obj]
++    return obj
++
++
+ class JSONStorage(Storage):
+     """
+     Store the data in a JSON file.
+@@ -98,11 +120,16 @@ class JSONStorage(Storage):
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
++
++        Keys are written sorted by default; pass ``sort_keys=False`` to
++        disable this.
+         """
+ 
+         super().__init__()
+ 
+         self._mode = access_mode
++        # Sort keys by default for stable, diff-friendly output
++        kwargs.setdefault('sort_keys', True)
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+@@ -144,6 +171,8 @@ class JSONStorage(Storage):
+         self._handle.seek(0)
+ 
+         # Serialize the database state using the user-provided arguments
++        if self.kwargs.get('sort_keys'):
++            data = _stringify_keys(data)
+         serialized = json.dumps(data, **self.kwargs)
+ 
+         # Write the serialized data to the file

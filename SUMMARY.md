@@ -28,6 +28,8 @@
 | trailkeep@finish (control) | claude-sonnet-5-5 | 1 | 3 | 100% (100%-100%) | 122838 | 16472 | - |
 | trailkeep@scope | claude-sonnet-5-5 | 11 | 33 | 94% (85%-100%) | 127794 | 16667 | 2 |
 | trailkeep@scope (control) | claude-sonnet-5-5 | 1 | 3 | 100% (100%-100%) | 106535 | 16448 | - |
+| trailkeep@wording | claude-sonnet-5-5 | 34 | 68 | 99% (96%-100%) | 140182 | 16876 | 2 |
+| trailkeep@wording (control) | claude-sonnet-5-5 | 1 | 2 | 100% (100%-100%) | 149530 | 16516 | - |
 
 Paired difference in pass rate vs `none` (same trap and seed, non-control traps):
 
@@ -36,7 +38,7 @@ Paired difference in pass rate vs `none` (same trap and seed, non-control traps)
 | basic-memory | claude-sonnet-5-5 | 51 | -2% (-6% to +0%) |
 | claude-mem | claude-sonnet-5-5 | 51 | +29% (+8% to +53%) |
 | filler | claude-sonnet-5-5 | 18 | -6% (-17% to +0%) |
-| handoff | claude-sonnet-5-5 | 126 | +63% (+51% to +76%) |
+| handoff | claude-sonnet-5-5 | 126 | +63% (+50% to +76%) |
 | hindsight | claude-sonnet-5-5 | 51 | -4% (-12% to +0%) |
 | hindsight@modelfix | claude-sonnet-5-5 | 1 | +100% (+100% to +100%) |
 | native | claude-sonnet-5-5 | 51 | +27% (+8% to +49%) |
@@ -47,3 +49,4 @@ Paired difference in pass rate vs `none` (same trap and seed, non-control traps)
 | trailkeep@capture | claude-sonnet-5-5 | 33 | +88% (+70% to +100%) |
 | trailkeep@finish | claude-sonnet-5-5 | 66 | +88% (+79% to +95%) |
 | trailkeep@scope | claude-sonnet-5-5 | 33 | +91% (+82% to +100%) |
+| trailkeep@wording | claude-sonnet-5-5 | 68 | +94% (+88% to +99%) |

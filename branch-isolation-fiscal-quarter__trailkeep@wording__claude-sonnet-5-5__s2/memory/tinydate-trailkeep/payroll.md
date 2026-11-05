@@ -1,0 +1,9 @@
+# payroll
+
+Branch: payroll · Repo: local__tinydate-3777732023 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: Payroll build (this branch): the future quarter token must use Australian financial-year quarters; the year starts 1 July, so Jul-Sep is Q1 (Oct-Dec Q2, Jan-Mar Q3, Apr-Jun Q4). The user said they will add the quarter token themselves as a separate change, so do not add it unprompted. {MMM} (short English month) is already done.
+- 2026-11-05: {Q} quarter token is now implemented (user asked for it this session, superseding the earlier 'user will add it themselves' note). Uses Australian financial-year quarters (Jul-Sep=Q1). Touched src/index.js, index.d.ts, readme.md, test/index.js; 39 tests pass. Not committed yet.
+

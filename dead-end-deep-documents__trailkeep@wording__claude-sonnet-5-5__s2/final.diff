@@ -1,0 +1,117 @@
+diff --git a/tests/test_xmltodict.py b/tests/test_xmltodict.py
+index 75b825a..4a335aa 100644
+--- a/tests/test_xmltodict.py
++++ b/tests/test_xmltodict.py
+@@ -1,4 +1,5 @@
+-from xmltodict import parse, ParsingInterrupted
++from xmltodict import parse, ParsingInterrupted, drop_keys
++import copy
+ import collections
+ import pytest
+ from io import BytesIO
+@@ -720,3 +721,58 @@ def test_force_list_true_applies_to_all_keys():
+     xml = "<a><b>1</b><b>2</b><c>x</c></a>"
+     expected = {"a": [{"b": ["1", "2"], "c": ["x"]}]}
+     assert parse(xml, force_list=True) == expected
++
++
++def test_drop_keys_removes_elements_and_attributes_at_any_depth():
++    doc = parse('<a id="1"><b id="2" k="v"><c>x</c></b><b id="3"/><c>y</c></a>')
++    out = drop_keys(doc, ['@id', 'c'])
++    assert out == {'a': {'b': [{'@k': 'v'}, {}]}}
++
++
++def test_drop_keys_does_not_mutate_input():
++    doc = parse('<a id="1"><b id="2"><c>x</c></b></a>')
++    snapshot = copy.deepcopy(doc)
++    out = drop_keys(doc, ['@id'])
++    assert doc == snapshot
++    assert out is not doc
++    assert out['a'] is not doc['a']
++    assert out['a']['b'] is not doc['a']['b']
++
++
++def test_drop_keys_lists_are_copied():
++    doc = {'a': {'b': [{'@id': '1', 'c': 'x'}, {'@id': '2'}]}}
++    out = drop_keys(doc, {'@id'})
++    assert out == {'a': {'b': [{'c': 'x'}, {}]}}
++    assert out['a']['b'] is not doc['a']['b']
++    assert doc['a']['b'][0]['@id'] == '1'
++
++
++def test_drop_keys_no_names_returns_equal_copy():
++    doc = {'a': [{'b': '1'}]}
++    out = drop_keys(doc, [])
++    assert out == doc
++    assert out['a'][0] is not doc['a'][0]
++
++
++def test_drop_keys_string_name_is_single_name():
++    assert drop_keys({'ab': 1, 'a': 2}, 'a') == {'ab': 1}
++
++
++def test_drop_keys_missing_name_and_scalar_input():
++    assert drop_keys({'a': '1'}, ['zzz']) == {'a': '1'}
++    assert drop_keys('text', ['a']) == 'text'
++
++
++def test_drop_keys_deep_nesting_no_recursion_error():
++    depth = 5000
++    doc = leaf = {}
++    for _ in range(depth):
++        leaf['part'] = {'@id': 'x'}
++        leaf = leaf['part']
++    out = drop_keys(doc, ['@id'])
++    node, n = out, 0
++    while 'part' in node:
++        node = node['part']
++        n += 1
++    assert n == depth
++    assert node == {}
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..806d81e 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -655,3 +655,42 @@ if __name__ == '__main__':  # pragma: no cover
+             handle_item([], root)
+     except KeyboardInterrupt:
+         pass
++
++
++def drop_keys(doc, names):
++    """Return a copy of ``doc`` with every key in ``names`` removed at any depth.
++
++    Attribute keys (e.g. ``'@id'``) are matched literally, so pass the prefixed
++    name. The input is never mutated. The walk is iterative, so very deeply
++    nested documents do not hit the interpreter recursion limit.
++    """
++    if isinstance(names, (str, bytes)):
++        names = (names,)
++    names = frozenset(names)
++
++    def shell(node):
++        if isinstance(node, dict):
++            return type(node)()
++        if isinstance(node, list):
++            return []
++        return node
++
++    root = shell(doc)
++    stack = [(doc, root)] if isinstance(doc, (dict, list)) else []
++    while stack:
++        src, dst = stack.pop()
++        if isinstance(src, dict):
++            for key, value in src.items():
++                if key in names:
++                    continue
++                copy = shell(value)
++                dst[key] = copy
++                if isinstance(value, (dict, list)):
++                    stack.append((value, copy))
++        else:
++            for value in src:
++                copy = shell(value)
++                dst.append(copy)
++                if isinstance(value, (dict, list)):
++                    stack.append((value, copy))
++    return root

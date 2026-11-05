@@ -1,0 +1,9 @@
+# main
+
+Branch: main · Repo: local__pretty-bytes-547205309 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: unit option (d84e5a8): user required unit to belong to the bits/binary-selected system, else TypeError. My choice (not asked): a forced unit skips the auto boundary corrections, so 999_999 B with unit 'kB' prints '1000 kB' rather than rolling over.
+- 2026-11-05: significantDigits (my choice): valid = integer 1..100 (toPrecision's range); anything else silently falls back to 3 per the repo rule that new options never throw. It only feeds the toPrecision step, so it is ignored when fraction-digit options are set.
+

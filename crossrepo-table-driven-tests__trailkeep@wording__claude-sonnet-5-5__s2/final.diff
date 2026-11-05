@@ -1,0 +1,131 @@
+diff --git a/README.md b/README.md
+index d752132..bbbfa9f 100644
+--- a/README.md
++++ b/README.md
+@@ -18,6 +18,7 @@ ms('2.5 hrs') // 9000000
+ ms('2h')      // 7200000
+ ms('1m')      // 60000
+ ms('5s')      // 5000
++ms('500us')   // 0.5
+ ms('1y')      // 31557600000
+ ms('100')     // 100
+ ms('-3 days') // -259200000
+@@ -54,7 +55,8 @@ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h'
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm'
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's'
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms'
+-type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'us'
++type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds | Microseconds
+ ```
+ 
+ These formats can be lowercase (`minutes`), uppercase (`MINUTES`), or capitalized (`Minutes`). There can be a space (`2 minutes`) or not (`2minutes`).
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..8d5490a 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -14,6 +14,7 @@ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h';
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm';
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's';
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms';
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'us';
+ type Unit =
+   | Years
+   | Months
+@@ -22,7 +23,8 @@ type Unit =
+   | Hours
+   | Minutes
+   | Seconds
+-  | Milliseconds;
++  | Milliseconds
++  | Microseconds;
+ 
+ type UnitAnyCase = Capitalize<Unit> | Uppercase<Unit> | Unit;
+ 
+@@ -75,7 +77,7 @@ export function parse(str: string): number {
+     );
+   }
+   const match =
+-    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
++    /^(?<value>-?\d*\.?\d+) *(?<unit>microseconds?|µs|us|milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
+       str,
+     );
+ 
+@@ -92,7 +94,11 @@ export function parse(str: string): number {
+ 
+   const n = parseFloat(value);
+ 
+-  const matchUnit = unit.toLowerCase() as Lowercase<Unit>;
++  // The /i flag also matches Greek mu (U+03BC) and capital mu (U+039C) for µ
++  // (U+00B5), so normalize to the micro sign.
++  const matchUnit = unit
++    .toLowerCase()
++    .replace('\u03bc', '\u00b5') as Lowercase<Unit>;
+ 
+   /* istanbul ignore next - istanbul doesn't understand, but thankfully the TypeScript the exhaustiveness check in the default case keeps us type safe here */
+   switch (matchUnit) {
+@@ -138,6 +144,11 @@ export function parse(str: string): number {
+     case 'msec':
+     case 'ms':
+       return n;
++    case 'microseconds':
++    case 'microsecond':
++    case 'µs':
++    case 'us':
++      return n / 1000;
+     default:
+       matchUnit satisfies never;
+       throw new Error(
+diff --git a/src/parse-strict.test.ts b/src/parse-strict.test.ts
+index 9c30a5e..4219bea 100644
+--- a/src/parse-strict.test.ts
++++ b/src/parse-strict.test.ts
+@@ -93,6 +93,17 @@ describe('parseStrict(string)', () => {
+ 
+ // long strings
+ 
++describe('parseStrict(microseconds)', () => {
++  it.each([
++    ['500us', 0.5],
++    ['500 µs', 0.5],
++    ['1 microsecond', 0.001],
++    ['1000 Microseconds', 1],
++  ] as const)('parseStrict(%j) should be %d', (input, expected) => {
++    expect(parseStrict(input)).toBe(expected);
++  });
++});
++
+ describe('parseStrict(long string)', () => {
+   it('should not throw an error', () => {
+     expect(() => {
+diff --git a/src/parse.test.ts b/src/parse.test.ts
+index 9182411..dbd909f 100644
+--- a/src/parse.test.ts
++++ b/src/parse.test.ts
+@@ -82,6 +82,26 @@ describe('parse(string)', () => {
+ 
+ // long strings
+ 
++describe('parse(microseconds)', () => {
++  it.each([
++    ['500us', 0.5],
++    ['500 us', 0.5],
++    ['1500µs', 1.5],
++    ['2 µs', 0.002],
++    ['1000 microseconds', 1],
++    ['1 microsecond', 0.001],
++    ['500US', 0.5],
++    ['500µS', 0.5],
++    ['1 Microsecond', 0.001],
++    ['1 MICROSECONDS', 0.001],
++    ['-500us', -0.5],
++    ['.5us', 0.0005],
++    ['500\u03bcs', 0.5],
++  ])('parse(%j) should be %d', (input, expected) => {
++    expect(parse(input)).toBe(expected);
++  });
++});
++
+ describe('parse(long string)', () => {
+   it('should not throw an error', () => {
+     expect(() => {

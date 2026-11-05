@@ -1,0 +1,94 @@
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index 0f318fc..8df0700 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -98,6 +98,9 @@ def gen_table_chunks(
+ 
+ 
+ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
++    if obj is None:
++        # None is written as an empty string, which readers treat as "unset"
++        return '""'
+     if isinstance(obj, bool):
+         return "true" if obj else "false"
+     if isinstance(obj, (int, float, date, datetime)):
+@@ -115,9 +118,12 @@ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
+ 
+     # Lazy import to improve module import time
+     from decimal import Decimal
++    from pathlib import PurePath
+ 
+     if isinstance(obj, Decimal):
+         return format_decimal(obj)
++    if isinstance(obj, PurePath):
++        return format_string(str(obj), allow_multiline=ctx.allow_multiline)
+     raise TypeError(
+         f"Object of type '{type(obj).__qualname__}' is not TOML serializable"
+     )
+diff --git a/tests/test_types.py b/tests/test_types.py
+index e4c9782..b4a2166 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -46,3 +46,62 @@ non-empty-tuple = [
+ ]
+ """
+     )
++
++
++def test_none_written_as_empty_string():
++    obj = {"a": 1, "b": None, "t": {"x": None, "y": 2}, "e": {"z": None}}
++    assert tomli_w.dumps(obj) == (
++        'a = 1\nb = ""\n\n[t]\nx = ""\ny = 2\n\n[e]\nz = ""\n'
++    )
++
++
++def test_none_in_inline_table():
++    obj = {"arr": [{"a": None, "b": 1}, {"a": None}]}
++    assert tomli_w.dumps(obj) == """\
++arr = [
++    { a = "", b = 1 },
++    { a = "" },
++]
++"""
++
++
++def test_none_in_array():
++    assert tomli_w.dumps({"a": [1, None, 2]}) == """\
++a = [
++    1,
++    "",
++    2,
++]
++"""
++
++
++def test_none_in_nested_array():
++    assert tomli_w.dumps({"a": [[None], [None, "x"]]}) == """\
++a = [
++    [
++        "",
++    ],
++    [
++        "",
++        "x",
++    ],
++]
++"""
++
++
++def test_pathlib_paths():
++    import pathlib
++
++    obj = {
++        "p": pathlib.PurePosixPath("/usr/local/bin"),
++        "w": pathlib.PureWindowsPath("C:\\Users\\me"),
++        "arr": [pathlib.PurePosixPath("a/b")],
++        "t": {"q": pathlib.Path("rel/file.txt")},
++    }
++    assert tomli_w.dumps(obj) == (
++        'p = "/usr/local/bin"\n'
++        'w = "C:\\\\Users\\\\me"\n'
++        'arr = [\n    "a/b",\n]\n'
++        "\n[t]\n"
++        'q = "rel/file.txt"\n'
++    )

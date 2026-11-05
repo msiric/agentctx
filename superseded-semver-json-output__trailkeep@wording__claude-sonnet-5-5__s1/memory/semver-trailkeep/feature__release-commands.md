@@ -1,0 +1,10 @@
+# feature/release-commands
+
+Branch: feature/release-commands · Repo: local__semver-1885815112 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: My choices (not user rules) for pysemver sort: no args prints nothing and exits 0 so a Jenkins 'while read v' loop doesn't get an empty line; cmd_sort is not exported from semver/__init__.py because the top-level cmd_* names are deprecated aliases in _deprecated.py. Changelog fragment changelog.d/pr505.feature.rst uses a guessed PR number: rename it to the real one.
+- 2026-11-05: pysemver sort with no args now reads versions from stdin (one per line, blank lines ignored, invalid -> error rc 2); user requested this. Empty stdin still prints nothing and exits 0 (keeps Jenkins 'while read v' safe). Args take precedence over stdin.
+- 2026-11-05: pysemver latest (mine): prints JSON string, or null (rc 0) when no non-prerelease version/empty input; follows the repo rule that new subcommands print JSON. Changelog fragment changelog.d/pr506.feature.rst has a guessed PR number: rename to real one.
+

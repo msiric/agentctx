@@ -1,0 +1,3 @@
+# Private notes: local__schema-3092027448
+
+- 2026-11-05: Length(min, max) validator in schema/__init__.py counts UTF-8 BYTES (len(data.encode('utf-8'))), not characters. Reason: these fields are inserted into an old Oracle DB with VARCHAR2(n BYTE) columns, and accented names that passed a len() check made inserts fail. Consequences: error messages must say 'bytes'; do NOT emit minLength/maxLength in json_schema() (those count characters, so they would be wrong for a byte limit); handle str that cannot be encoded (lone surrogates -> UnicodeEncodeError) as a SchemaError. Tests need multibyte cases (e.g. 'é' is 2 bytes, boundary exactly at max).

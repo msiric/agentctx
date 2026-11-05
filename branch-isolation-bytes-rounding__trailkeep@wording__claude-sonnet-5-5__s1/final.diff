@@ -1,0 +1,99 @@
+diff --git a/index.js b/index.js
+index 6f2d0f8..ba0a8b9 100644
+--- a/index.js
++++ b/index.js
+@@ -67,7 +67,7 @@ function bytes(value, options) {
+  * Format the given value in bytes into a string.
+  *
+  * If the value is negative, it is kept as such. If it is a float,
+- * it is rounded.
++ * extra decimals are truncated (never rounded up).
+  *
+  * @param {number} value
+  * @param {object} [options]
+@@ -110,7 +110,7 @@ function format(value, options) {
+   }
+ 
+   var val = value / map[unit.toLowerCase()];
+-  var str = val.toFixed(decimalPlaces);
++  var str = truncate(val, decimalPlaces);
+ 
+   if (!fixedDecimals) {
+     str = str.replace(formatDecimalsRegExp, '$1');
+@@ -127,6 +127,30 @@ function format(value, options) {
+   return str + unitSeparator + unit;
+ }
+ 
++/**
++ * Format a number with a fixed count of decimals, truncating (toward zero)
++ * instead of rounding, so the displayed size never exceeds the actual size.
++ *
++ * @param {number} val
++ * @param {number} decimalPlaces
++ * @returns {string}
++ * @private
++ */
++
++function truncate(val, decimalPlaces) {
++  if (Math.abs(val) >= 1e21) {
++    return val.toFixed(decimalPlaces);
++  }
++
++  // toFixed with many digits yields the exact expansion, which is then cut
++  var places = Math.max(0, Math.floor(decimalPlaces));
++  var exact = val.toFixed(Math.min(100, places + 30));
++  var dot = exact.indexOf('.');
++  var cut = places === 0 ? dot : dot + 1 + places;
++
++  return exact.slice(0, cut).padEnd(cut, '0');
++}
++
+ /**
+  * Parse the string value into an integer in bytes.
+  *
+diff --git a/test/byte-format.js b/test/byte-format.js
+index 7e82cee..e25f6d0 100644
+--- a/test/byte-format.js
++++ b/test/byte-format.js
+@@ -90,11 +90,11 @@ describe('Test byte format function', function(){
+     assert.equal(bytes.format(kb - 1, {decimalPlaces: 0}).toLowerCase(), '1023b');
+     assert.equal(bytes.format(kb, {decimalPlaces: 0}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(1.4 * kb, {decimalPlaces: 0}).toLowerCase(), '1kb');
+-    assert.equal(bytes.format(1.5 * kb, {decimalPlaces: 0}).toLowerCase(), '2kb');
++    assert.equal(bytes.format(1.5 * kb, {decimalPlaces: 0}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(kb - 1, {decimalPlaces: 1}).toLowerCase(), '1023b');
+     assert.equal(bytes.format(kb, {decimalPlaces: 1}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(1.04 * kb, {decimalPlaces: 1}).toLowerCase(), '1kb');
+-    assert.equal(bytes.format(1.05 * kb, {decimalPlaces: 1}).toLowerCase(), '1.1kb');
++    assert.equal(bytes.format(1.05 * kb, {decimalPlaces: 1}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(1.1005 * kb, {decimalPlaces: 4}).toLowerCase(), '1.1005kb');
+   });
+ 
+@@ -103,9 +103,9 @@ describe('Test byte format function', function(){
+   });
+ 
+   it('Should support floats', function(){
+-    assert.equal(bytes.format(1.2 * mb).toLowerCase(), '1.2mb');
+-    assert.equal(bytes.format(-1.2 * mb).toLowerCase(), '-1.2mb');
+-    assert.equal(bytes.format(1.2 * kb).toLowerCase(), '1.2kb');
++    assert.equal(bytes.format(1.25 * mb).toLowerCase(), '1.25mb');
++    assert.equal(bytes.format(-1.25 * mb).toLowerCase(), '-1.25mb');
++    assert.equal(bytes.format(1.25 * kb).toLowerCase(), '1.25kb');
+   })
+ 
+   it('Should support custom unit', function(){
+@@ -116,4 +116,14 @@ describe('Test byte format function', function(){
+     assert.equal(bytes.format(12 * mb, {unit: ''}).toLowerCase(), '12mb');
+     assert.equal(bytes.format(12 * mb, {unit: 'bb'}).toLowerCase(), '12mb');
+   })
++
++  it('Should truncate instead of rounding up', function(){
++    assert.equal(bytes.format(1048575), '1023.99KB');
++    assert.equal(bytes.format(2047), '1.99KB');
++    assert.equal(bytes.format(-2047), '-1.99KB');
++    assert.equal(bytes.format(1048575, {decimalPlaces: 0}), '1023KB');
++    assert.equal(bytes.format(1048575, {decimalPlaces: 3, fixedDecimals: true}), '1023.999KB');
++    assert.equal(bytes.format(1.5 * 1024 * 1024 * 1024 - 1), '1.49GB');
++    assert.equal(bytes.format(1048575 * 1024, {thousandsSeparator: ','}), '1,023.99MB');
++  });
+ });

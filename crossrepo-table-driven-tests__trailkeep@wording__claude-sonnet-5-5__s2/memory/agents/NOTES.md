@@ -1,0 +1,1 @@
+- 2026-11-05: Tests: write one test.each table of cases per function (matching the existing style in the file), not a pile of separate it/test blocks. User stated this applies to every project, because tables are easier to scan and to add cases to.

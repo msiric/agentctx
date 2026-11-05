@@ -1,0 +1,283 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..26b5c8c 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -285,3 +285,149 @@ def test_json_invalid_mode_warning(tmpdir):
+     path = str(tmpdir.join('test.db'))
+     with pytest.warns(UserWarning, match='Using an `access_mode` other than'):
+         JSONStorage(path, access_mode='w')
++
++
++# --- Crash safety -----------------------------------------------------------
++
++OLD = {'_default': {'1': {'v': 'old' * 1000}}}
++NEW = {'_default': {'1': {'v': 'new'}}}
++
++
++def _journal_bytes(data):
++    import hashlib
++    payload = json.dumps(data).encode()
++    return hashlib.sha256(payload).hexdigest().encode() + b'\n' + payload
++
++
++@pytest.fixture
++def dbpath(tmp_path):
++    path = str(tmp_path / 'db.json')
++    storage = JSONStorage(path)
++    storage.write(OLD)
++    storage.close()
++    return path
++
++
++def _reopen(path):
++    storage = JSONStorage(path)
++    try:
++        return storage.read()
++    finally:
++        storage.close()
++
++
++def test_write_leaves_no_journal(dbpath):
++    storage = JSONStorage(dbpath)
++    storage.write(NEW)
++    storage.close()
++    assert not os.path.exists(dbpath + '.journal')
++    assert _reopen(dbpath) == NEW
++
++
++def test_write_modifies_file_in_place(dbpath, monkeypatch):
++    # db.json may be a bind mount, so it must never be renamed/replaced
++    def forbidden(*a, **k):
++        raise AssertionError('file must not be replaced')
++    monkeypatch.setattr(os, 'replace', forbidden)
++    monkeypatch.setattr(os, 'rename', forbidden)
++
++    inode = os.stat(dbpath).st_ino
++    storage = JSONStorage(dbpath)
++    storage.write(NEW)
++    storage.close()
++    assert os.stat(dbpath).st_ino == inode
++
++
++def test_crash_while_writing_journal_keeps_old_state(dbpath):
++    # Torn journal, database file untouched
++    with open(dbpath + '.journal', 'wb') as f:
++        f.write(_journal_bytes(NEW)[:-5])
++    assert _reopen(dbpath) == OLD
++    assert not os.path.exists(dbpath + '.journal')
++
++
++def test_crash_with_empty_journal_keeps_old_state(dbpath):
++    open(dbpath + '.journal', 'wb').close()
++    assert _reopen(dbpath) == OLD
++
++
++def test_crash_during_in_place_write_rolls_forward(dbpath):
++    # Complete journal, database file truncated mid-write
++    with open(dbpath + '.journal', 'wb') as f:
++        f.write(_journal_bytes(NEW))
++    with open(dbpath, 'r+') as f:
++        f.truncate(10)
++    assert _reopen(dbpath) == NEW
++    assert not os.path.exists(dbpath + '.journal')
++
++
++def test_crash_before_truncate_rolls_forward(dbpath):
++    # New data written over the start of the (longer) old data
++    with open(dbpath + '.journal', 'wb') as f:
++        f.write(_journal_bytes(NEW))
++    with open(dbpath, 'r+') as f:
++        f.write(json.dumps(NEW))
++    assert _reopen(dbpath) == NEW
++
++
++def test_crash_after_write_before_journal_removal(dbpath):
++    with open(dbpath + '.journal', 'wb') as f:
++        f.write(_journal_bytes(OLD))
++    assert _reopen(dbpath) == OLD
++    assert not os.path.exists(dbpath + '.journal')
++
++
++def test_corrupt_journal_is_ignored(dbpath):
++    data = bytearray(_journal_bytes(NEW))
++    data[-3] ^= 0xFF
++    with open(dbpath + '.journal', 'wb') as f:
++        f.write(bytes(data))
++    assert _reopen(dbpath) == OLD
++
++
++@pytest.mark.parametrize('failing', ['write', 'truncate'])
++def test_simulated_crash_in_write(dbpath, monkeypatch, failing):
++    storage = JSONStorage(dbpath)
++    handle = storage._handle
++
++    class Crash(Exception):
++        pass
++
++    class Proxy:
++        def __getattr__(self, name):
++            return getattr(handle, name)
++
++        def write(self, s):
++            if failing == 'write':
++                handle.write(s[:len(s) // 2])
++                handle.flush()
++                raise Crash
++            return handle.write(s)
++
++        def truncate(self, *a):
++            raise Crash
++
++    storage._handle = Proxy()
++    with pytest.raises(Crash):
++        storage.write(NEW)
++    handle.close()
++
++    assert _reopen(dbpath) == NEW
++
++
++def test_tinydb_survives_interrupted_write(dbpath):
++    with open(dbpath + '.journal', 'wb') as f:
++        f.write(_journal_bytes(NEW))
++    with open(dbpath, 'r+') as f:
++        f.truncate(7)
++    with TinyDB(dbpath) as db:
++        assert db.all() == [{'v': 'new'}]
++
++
++def test_read_only_mode_does_not_touch_journal(dbpath):
++    with open(dbpath + '.journal', 'wb') as f:
++        f.write(_journal_bytes(NEW))
++    storage = JSONStorage(dbpath, access_mode='r')
++    assert storage.read() == OLD
++    storage.close()
++    assert os.path.exists(dbpath + '.journal')
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..43c7ea3 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -3,6 +3,7 @@ Contains the :class:`base class <tinydb.storages.Storage>` for storages and
+ implementations.
+ """
+ 
++import hashlib
+ import io
+ import json
+ import os
+@@ -103,6 +104,8 @@ class JSONStorage(Storage):
+         super().__init__()
+ 
+         self._mode = access_mode
++        self._path = path
++        self._journal_path = os.fspath(path) + '.journal'
+         self.kwargs = kwargs
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+@@ -119,6 +122,71 @@ class JSONStorage(Storage):
+         # Open the file for reading/writing
+         self._handle = open(path, mode=self._mode, encoding=encoding)
+ 
++        # Finish (or discard) a write that was interrupted by a crash
++        if self._handle.writable():
++            self._recover()
++
++    def _recover(self) -> None:
++        """
++        Recover from a crash that happened during a previous write.
++
++        A complete journal holds the full new state, so it is replayed (this
++        is idempotent). An incomplete or corrupt journal means the crash
++        happened before the database file was touched, so the database file
++        still holds the old state and the journal is simply dropped.
++        """
++        try:
++            with open(self._journal_path, 'rb') as journal:
++                raw = journal.read()
++        except FileNotFoundError:
++            return
++
++        digest, sep, payload = raw.partition(b'\n')
++        if sep and hashlib.sha256(payload).hexdigest().encode() == digest:
++            self._overwrite(payload.decode(self._handle.encoding))
++
++        self._remove_journal()
++
++    def _remove_journal(self) -> None:
++        try:
++            os.remove(self._journal_path)
++        except FileNotFoundError:
++            pass
++
++    def _write_journal(self, serialized: str) -> None:
++        payload = serialized.encode(self._handle.encoding)
++        digest = hashlib.sha256(payload).hexdigest().encode()
++
++        with open(self._journal_path, 'wb') as journal:
++            journal.write(digest + b'\n' + payload)
++            journal.flush()
++            os.fsync(journal.fileno())
++
++        # Make the journal's directory entry durable (not possible everywhere)
++        try:
++            fd = os.open(os.path.dirname(os.path.abspath(self._journal_path)), os.O_RDONLY)
++        except OSError:
++            return
++        try:
++            os.fsync(fd)
++        except OSError:
++            pass
++        finally:
++            os.close(fd)
++
++    def _overwrite(self, serialized: str) -> None:
++        """Overwrite the database file in place (never replaces the file)."""
++        self._handle.seek(0)
++        self._handle.write(serialized)
++        self._handle.flush()
++        os.fsync(self._handle.fileno())
++
++        # Remove data that is behind the new cursor in case the file has
++        # gotten shorter
++        self._handle.truncate()
++        self._handle.flush()
++        os.fsync(self._handle.fileno())
++
+     def close(self) -> None:
+         self._handle.close()
+ 
+@@ -140,25 +208,21 @@ class JSONStorage(Storage):
+             return json.load(self._handle)
+ 
+     def write(self, data: dict[str, dict[str, Any]]):
+-        # Move the cursor to the beginning of the file just in case
+-        self._handle.seek(0)
+-
+         # Serialize the database state using the user-provided arguments
+         serialized = json.dumps(data, **self.kwargs)
+ 
+-        # Write the serialized data to the file
+-        try:
+-            self._handle.write(serialized)
+-        except io.UnsupportedOperation:
++        if not self._handle.writable():
+             raise IOError('Cannot write to the database. Access mode is "{0}"'.format(self._mode))
+ 
+-        # Ensure the file has been written
+-        self._handle.flush()
+-        os.fsync(self._handle.fileno())
+-
+-        # Remove data that is behind the new cursor in case the file has
+-        # gotten shorter
+-        self._handle.truncate()
++        # Crash safety without replacing the file (it may be a bind mount):
++        # 1. persist the complete new state in a journal,
++        # 2. overwrite the database file in place,
++        # 3. drop the journal.
++        # A crash before 1 completes leaves the old file untouched; a crash
++        # after it is rolled forward from the journal on the next open.
++        self._write_journal(serialized)
++        self._overwrite(serialized)
++        self._remove_journal()
+ 
+ 
+ class MemoryStorage(Storage):

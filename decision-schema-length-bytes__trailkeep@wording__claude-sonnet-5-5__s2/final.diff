@@ -1,0 +1,131 @@
+diff --git a/schema/__init__.py b/schema/__init__.py
+index 10d6e8a..834da8d 100644
+--- a/schema/__init__.py
++++ b/schema/__init__.py
+@@ -40,6 +40,7 @@ __all__ = [
+     "And",
+     "Or",
+     "Regex",
++    "Length",
+     "Optional",
+     "Use",
+     "Forbidden",
+@@ -286,6 +287,55 @@ class Regex:
+             raise SchemaError(error_message)
+ 
+ 
++class Length:
++    """
++    Validates the size of a string, with inclusive bounds.
++
++    The size is the number of UTF-8 encoded bytes, not the number of
++    characters, because the target fields are byte-limited (Oracle
++    VARCHAR2(n BYTE)). "é" counts as 2.
++    """
++
++    def __init__(
++        self,
++        min: Union[int, None] = None,
++        max: Union[int, None] = None,
++        error: Union[str, None] = None,
++    ) -> None:
++        if min is not None and max is not None and min > max:
++            raise ValueError(f"min ({min}) must not be greater than max ({max})")
++        self._min: Union[int, None] = min
++        self._max: Union[int, None] = max
++        self._error: Union[str, None] = error
++
++    def __repr__(self) -> str:
++        return f"{self.__class__.__name__}(min={self._min!r}, max={self._max!r})"
++
++    def validate(self, data: str, **kwargs: Any) -> str:
++        """
++        Validates that the UTF-8 byte length of data is within bounds.
++        :param data: String to be validated.
++        :return: Returns validated data.
++        """
++        e = self._error
++        if not isinstance(data, str):
++            raise SchemaError(
++                f"{self!r} expected a string, got {type(data).__name__}",
++                e.format(data) if e else None,
++            )
++        size = len(data.encode("utf-8"))
++        if (self._min is not None and size < self._min) or (
++            self._max is not None and size > self._max
++        ):
++            bounds = f"min={self._min}, max={self._max}"
++            # Report the length, not the data itself
++            raise SchemaError(
++                f"length of {size} bytes is outside the allowed range ({bounds})",
++                e.format(data) if e else None,
++            )
++        return data
++
++
+ class Use:
+     """
+     For more general use cases, you can use the Use class to transform
+diff --git a/test_schema.py b/test_schema.py
+index 4d78456..1f6b38b 100644
+--- a/test_schema.py
++++ b/test_schema.py
+@@ -21,6 +21,7 @@ from schema import (
+     Const,
+     Forbidden,
+     Hook,
++    Length,
+     Literal,
+     Optional,
+     Or,
+@@ -2100,3 +2101,50 @@ def test_tuple_key_error_message_does_not_crash():
+     with raises(SchemaError) as exc_info:
+         Schema({("a", "b"): int}).validate({("a", "b"): "not-an-int"})
+     assert "Key '('a', 'b')' error:" in exc_info.value.code
++
++
++def test_length():
++    assert Length(min=2, max=4).validate("ab") == "ab"
++    assert Length(min=2, max=4).validate("abcd") == "abcd"
++    assert Length().validate("anything") == "anything"
++    assert Length(min=3).validate("abcdef") == "abcdef"
++    assert Length(max=3).validate("") == ""
++    with SE:
++        Length(min=2).validate("a")
++    with SE:
++        Length(max=3).validate("abcd")
++
++    # Bounds count UTF-8 bytes, not characters
++    assert Length(max=2).validate("\u00e9") == "\u00e9"
++    with SE:
++        Length(max=3).validate("\u00e9\u00e9")
++    with SE:
++        Length(min=3).validate("\u00e9")
++    assert Length(max=3).validate("\u20ac") == "\u20ac"
++    with SE:
++        Length(max=2).validate("\u20ac")
++
++    # Non-strings are rejected
++    with SE:
++        Length(max=3).validate(1)
++    with SE:
++        Length(max=3).validate(None)
++
++    # The message reports the length, not the data
++    with raises(SchemaError) as exc:
++        Length(max=3).validate("secret-value")
++    assert "secret" not in str(exc.value)
++    assert "12" in str(exc.value)
++
++    # Custom error
++    with raises(SchemaError) as exc:
++        Schema(Length(max=1, error="too long: {}")).validate("ab")
++    assert "too long: ab" in exc.value.errors
++
++    # Inside a schema, key and value
++    assert Schema({"name": Length(max=5)}).validate({"name": "bob"}) == {"name": "bob"}
++    with SE:
++        Schema({"name": Length(max=5)}).validate({"name": "bobbybob"})
++
++    with raises(ValueError):
++        Length(min=5, max=2)

@@ -1,0 +1,9 @@
+# acme
+
+Branch: acme · Repo: local__tomli-w-3842860563 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: Acme branch plan: sort_keys is added on main first (user does that, so upstream gets it), then brought over to this branch. On this branch only, sort_keys must default to ON (main's default is the user's call). Reason: Acme's tooling calls plain dumps() and we can't change their call sites, and their reviewers diff every config file and complain about key-order churn between drops. Root cause of the churn is how our side builds the dicts, not the writer; the writer already passes dict order through, but hoists scalars above sub-tables and switches AoTs between inline and [[...]] form at 100 chars.
+- 2026-11-05: sort_keys cherry-picked from main (6299ae0) onto acme; follow-up commit flips its default to True here only (main stays False). Legacy order-dependent tests pin sort_keys=False; README states branch default. Expect conflicts when merging/rebasing with main: keep main's default there.
+

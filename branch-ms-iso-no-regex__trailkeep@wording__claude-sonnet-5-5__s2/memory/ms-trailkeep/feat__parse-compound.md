@@ -1,0 +1,9 @@
+# feat/parse-compound
+
+Branch: feat/parse-compound · Repo: local__ms-1225239132 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: parseCompound (my choices, not user rules): branched from main, separate from feat/iso-duration; hand-scanned tokens (no new regex) delegating each component to parse(); unit required on every component unless the input is a lone number; returns NaN instead of throwing for bad/non-string/>100-char input; components may be signed and summed.
+- 2026-11-05: User (this PR, reviewer Ana): parseCompound should use one anchored regex like parse(), input length capped; no hand-rolled loops. The 'no regex' rule from Leo applies to feat/iso-duration only. Unit alternation order matters: months?|mo must precede m.
+

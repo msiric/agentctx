@@ -1,0 +1,9 @@
+# billing-ui
+
+Branch: billing-ui · Repo: local__bytes-3881671121 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: Branch billing-ui: do NOT change bytes.format code yet. Finance must sign off the page wording first. Once approved, implement truncation (not rounding) in format(), plus tests for 1048575 -> 1023.99KB and 2047 -> 1.99KB.
+- 2026-11-05: billing-ui: finance signed off; bytes.format now truncates (toward zero) instead of rounding via truncate() in index.js. Old rounding tests updated; added tests for 1048575->1023.99KB, 2047->1.99KB.
+

@@ -1,0 +1,1 @@
+- 2026-11-05: User's rule for all their packages: bump the version in the same commit as the change (release script publishes whatever version on main isn't on npm yet). Minor for features, patch for fixes.

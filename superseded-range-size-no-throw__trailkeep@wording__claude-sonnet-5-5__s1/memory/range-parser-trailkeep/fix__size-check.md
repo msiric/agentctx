@@ -1,0 +1,10 @@
+# fix/size-check
+
+Branch: fix/size-check · Repo: local__range-parser-2110766804 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: My choice (not requested by user): rangeParser rejects any non-number size, not just NaN, with TypeError 'argument size must be a number'. Reason: NaN from failed NFS stat in send; broader check also catches undefined/strings. Narrow to NaN-only if string sizes must keep working. Changes uncommitted.
+- 2026-11-05: User decision (2026-11-05): supersedes the earlier TypeError choice. rangeParser is moving into the edge worker, where an uncaught exception kills the whole worker, so a bad (non-number) size must NOT throw; return -2 so the caller ignores the Range header. NOT implemented yet: user said not to change code today and will do it together with the other size cases. index.js still throws TypeError 'argument size must be a number' in the uncommitted diff until then.
+- 2026-11-05: Implemented: rangeParser returns -2 (no throw) for invalid size (non-number, NaN, Infinity, negative, fractional), per user decision; size 0 stays valid. Tests updated. Uncommitted.
+

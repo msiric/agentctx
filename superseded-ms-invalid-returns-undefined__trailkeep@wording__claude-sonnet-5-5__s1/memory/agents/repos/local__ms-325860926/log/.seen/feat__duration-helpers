@@ -1,0 +1,3 @@
+2026-11-05: parseCompound must throw TypeError (message includes JSON.stringify of input) on any bad input, never return NaN. Reason: user once had NaN reach setTimeout and it was hard to track down.
+2026-11-05: parseCompound keeps its throw-TypeError behavior (never NaN) even though later helpers return undefined; the user decided not to change it because it is published.
+2026-11-05: parseClock (my choices, not user-specified): returns number | undefined per repo rule, never throws; m:ss allows any minutes digits, h:mm:ss needs mm<60, seconds always 2 digits <60; no negatives/fractions/whitespace. README section not yet added.

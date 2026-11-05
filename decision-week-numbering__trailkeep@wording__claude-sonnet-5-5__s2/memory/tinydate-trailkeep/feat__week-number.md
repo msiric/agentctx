@@ -1,0 +1,9 @@
+# feat/week-number
+
+Branch: feat/week-number · Repo: local__tinydate-3752054100 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: Week token {WW} must match finance's Excel WEEKNUM(date, 2): weeks start Monday, week 1 = week containing Jan 1 (NOT ISO 8601). User decided this. {DDD} (day-of-year, 3-digit padded) was added first as a separate step for review; {WW} builds on it.
+- 2026-11-05: {WW} implemented in src/index.js (Excel WEEKNUM(date,2) formula: floor((doy-1+mondayBasedJan1Weekday)/7)+1), with tests, readme and index.d.ts entries; 39 tests pass. Changes (with {DDD}) are still uncommitted. Choice of formula derivation was mine; the Excel-not-ISO rule was the user's.
+

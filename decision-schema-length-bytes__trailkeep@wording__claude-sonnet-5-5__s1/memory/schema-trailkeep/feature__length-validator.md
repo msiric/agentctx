@@ -1,0 +1,9 @@
+# feature/length-validator
+
+Branch: feature/length-validator · Repo: local__schema-3092027448 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: Length validator: design sketch approved by the user (str only; Regex-style errors put in autos so the "Key 'x' error:" prefix is kept; default message reports length only and never echoes the data; constructor ValueErrors for no bounds, negative or non-int, min>max; add to __all__, tests, README, CHANGELOG), with the bytes-not-characters change recorded in the repo note. NOT implemented yet: user said they will write it in a later session. Open items: whether error= should also expose {n}/{min}/{max} (my suggestion, not decided), and whether to assume the Oracle DB charset is UTF-8 (AL32UTF8) - user's failures suggest yes, not confirmed.
+- 2026-11-05: Length validator IMPLEMENTED (schema/__init__.py, tests, README, CHANGELOG), uncommitted. My choices, not user-decided: error= is formatted with e.format(data) exactly like Regex (no {n}/{min}/{max} exposed - open item still undecided); non-str input raises SchemaError; bool rejected for min/max; Length falls through json_schema unhandled so emits nothing. Oracle charset UTF-8 still an unconfirmed assumption. README doctest has 5 failures that pre-exist on main.
+

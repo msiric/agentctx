@@ -1,0 +1,175 @@
+diff --git a/History.md b/History.md
+index d60ce0e..b359c85 100644
+--- a/History.md
++++ b/History.md
+@@ -1,3 +1,8 @@
++Unreleased
++==================
++
++  * Truncate instead of round in `format` (fixes `1024KB` output for values just below 1MB)
++
+ 3.1.2 / 2022-01-27
+ ==================
+ 
+diff --git a/Readme.md b/Readme.md
+index 5790e23..8c69a6a 100644
+--- a/Readme.md
++++ b/Readme.md
+@@ -52,8 +52,8 @@ bytes('1KB');
+ 
+ #### bytes.format(number value, [options]): string｜null
+ 
+-Format the given value in bytes into a string. If the value is negative, it is kept as such. If it is a float, it is
+- rounded.
++Format the given value in bytes into a string. If the value is negative, it is kept as such. Extra decimals are truncated
++(toward zero), never rounded up, so the output never exceeds the actual value (e.g. `1048575` bytes is `1023.99KB`).
+ 
+ **Arguments**
+ 
+@@ -91,7 +91,7 @@ bytes.format(1000, {thousandsSeparator: ' '});
+ // output: '1 000B'
+ 
+ bytes.format(1024 * 1.7, {decimalPlaces: 0});
+-// output: '2KB'
++// output: '1KB'
+ 
+ bytes.format(1024, {unitSeparator: ' '});
+ // output: '1 KB'
+diff --git a/index.js b/index.js
+index 6f2d0f8..2667da5 100644
+--- a/index.js
++++ b/index.js
+@@ -66,8 +66,9 @@ function bytes(value, options) {
+ /**
+  * Format the given value in bytes into a string.
+  *
+- * If the value is negative, it is kept as such. If it is a float,
+- * it is rounded.
++ * If the value is negative, it is kept as such. Extra decimals are
++ * truncated (toward zero), never rounded up, so the output is never
++ * greater in magnitude than the actual value.
+  *
+  * @param {number} value
+  * @param {object} [options]
+@@ -110,7 +111,7 @@ function format(value, options) {
+   }
+ 
+   var val = value / map[unit.toLowerCase()];
+-  var str = val.toFixed(decimalPlaces);
++  var str = truncate(val, decimalPlaces);
+ 
+   if (!fixedDecimals) {
+     str = str.replace(formatDecimalsRegExp, '$1');
+@@ -127,6 +128,45 @@ function format(value, options) {
+   return str + unitSeparator + unit;
+ }
+ 
++/**
++ * Format a number with `places` decimals, truncating toward zero.
++ *
++ * Works on the exact decimal expansion of the double to avoid
++ * floating point error from multiply/floor/divide.
++ *
++ * @param {number} val
++ * @param {number} places
++ * @returns {string}
++ * @private
++ */
++
++function truncate(val, places) {
++  var abs = Math.abs(val);
++  var full;
++  if (abs >= 1e21) {
++    // toFixed switches to exponent notation at 1e21; such values are integers
++    /* global BigInt */
++    full = BigInt(abs).toString() + '.' + new Array(101).join('0');
++  } else {
++    // Drop binary float noise (e.g. 1.2 stored as 1.19999999999999995) so
++    // that it is not truncated to 1.19; byte counts are far coarser than
++    // 15 significant digits so real values are unaffected.
++    full = abs < 1e15 ? abs.toPrecision(15) : '';
++    if (!full || full.indexOf('e') !== -1) {
++      full = abs.toFixed(100);
++    } else if (full.indexOf('.') === -1) {
++      full += '.';
++    }
++  }
++  var dot = full.indexOf('.');
++  var frac = full.slice(dot + 1);
++  while (frac.length < places) {
++    frac += '0';
++  }
++  var str = full.slice(0, dot) + (places > 0 ? '.' + frac.slice(0, places) : '');
++  return (val < 0 && /[1-9]/.test(str) ? '-' : '') + str;
++}
++
+ /**
+  * Parse the string value into an integer in bytes.
+  *
+diff --git a/test/byte-format.js b/test/byte-format.js
+index 7e82cee..28a6a86 100644
+--- a/test/byte-format.js
++++ b/test/byte-format.js
+@@ -90,11 +90,12 @@ describe('Test byte format function', function(){
+     assert.equal(bytes.format(kb - 1, {decimalPlaces: 0}).toLowerCase(), '1023b');
+     assert.equal(bytes.format(kb, {decimalPlaces: 0}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(1.4 * kb, {decimalPlaces: 0}).toLowerCase(), '1kb');
+-    assert.equal(bytes.format(1.5 * kb, {decimalPlaces: 0}).toLowerCase(), '2kb');
++    assert.equal(bytes.format(1.5 * kb, {decimalPlaces: 0}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(kb - 1, {decimalPlaces: 1}).toLowerCase(), '1023b');
+     assert.equal(bytes.format(kb, {decimalPlaces: 1}).toLowerCase(), '1kb');
+     assert.equal(bytes.format(1.04 * kb, {decimalPlaces: 1}).toLowerCase(), '1kb');
+-    assert.equal(bytes.format(1.05 * kb, {decimalPlaces: 1}).toLowerCase(), '1.1kb');
++    assert.equal(bytes.format(1.05 * kb, {decimalPlaces: 1}).toLowerCase(), '1kb');
++    assert.equal(bytes.format(1.1 * kb, {decimalPlaces: 1}).toLowerCase(), '1.1kb');
+     assert.equal(bytes.format(1.1005 * kb, {decimalPlaces: 4}).toLowerCase(), '1.1005kb');
+   });
+ 
+@@ -116,4 +117,47 @@ describe('Test byte format function', function(){
+     assert.equal(bytes.format(12 * mb, {unit: ''}).toLowerCase(), '12mb');
+     assert.equal(bytes.format(12 * mb, {unit: 'bb'}).toLowerCase(), '12mb');
+   })
++
++  describe('truncation (never round up)', function () {
++    var mb = Math.pow(1024, 2);
++    var gb = Math.pow(1024, 3);
++    var tb = Math.pow(1024, 4);
++
++    it('should not round up to 1024 of the lower unit', function () {
++      assert.equal(bytes.format(mb - 1), '1023.99KB');
++      assert.equal(bytes.format(mb - 5), '1023.99KB');
++      assert.equal(bytes.format(gb - 1), '1023.99MB');
++      assert.equal(bytes.format(tb - 1), '1023.99GB');
++      assert.equal(bytes.format(mb), '1MB');
++    });
++
++    it('should truncate extra decimals', function () {
++      assert.equal(bytes.format(2047), '1.99KB');
++      assert.equal(bytes.format(1023.999), '1023.99B');
++      assert.equal(bytes.format(1.5 * kb, {decimalPlaces: 0}), '1KB');
++      assert.equal(bytes.format(mb - 1, {decimalPlaces: 0}), '1023KB');
++      assert.equal(bytes.format(mb - 1, {decimalPlaces: 1}), '1023.9KB');
++    });
++
++    it('should truncate toward zero for negatives', function () {
++      assert.equal(bytes.format(-(mb - 1)), '-1023.99KB');
++      assert.equal(bytes.format(-2047), '-1.99KB');
++      assert.equal(bytes.format(-0.001), '0B');
++    });
++
++    it('should honor fixedDecimals and thousandsSeparator', function () {
++      assert.equal(bytes.format(mb - 1, {fixedDecimals: true}), '1023.99KB');
++      assert.equal(bytes.format(1500 * kb - 1, {unit: 'KB', thousandsSeparator: ','}), '1,499.99KB');
++      assert.equal(bytes.format(kb, {fixedDecimals: true}), '1.00KB');
++    });
++
++    it('should not suffer from floating point error', function () {
++      assert.equal(bytes.format(1.15, {decimalPlaces: 2, unit: 'B'}), '1.15B');
++      assert.equal(bytes.format(3 * kb, {decimalPlaces: 2}), '3KB');
++    });
++
++    it('should handle very large values', function () {
++      assert.equal(bytes.format(Math.pow(1024, 5) * 1e7), '10000000PB');
++    });
++  });
+ });

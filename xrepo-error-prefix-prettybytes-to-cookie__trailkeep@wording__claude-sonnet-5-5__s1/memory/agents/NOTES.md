@@ -1,0 +1,1 @@
+- 2026-11-05: User's rule for all their packages: error messages start with the package name as a prefix (e.g. 'pretty-bytes: ...') so a throw deep in an app shows which dependency it came from. Apply to new error messages in any of their packages.

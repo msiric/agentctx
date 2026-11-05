@@ -1,0 +1,1 @@
+- 2026-11-05: User rule: error messages in all their packages start with the package name, e.g. 'pretty-ms: Expected …'. Reason: their log collector drops stack traces, so the prefix is the only way to tell which dependency threw. Apply to every thrown error, including existing ones.

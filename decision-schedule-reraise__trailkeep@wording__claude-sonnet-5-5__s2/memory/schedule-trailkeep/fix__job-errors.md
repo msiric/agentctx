@@ -1,0 +1,9 @@
+# fix/job-errors
+
+Branch: fix/job-errors · Repo: local__schedule-2258584791 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: Job errors (run_pending): user decided to keep running all other due jobs, then re-raise the FIRST exception after they've all run. Do NOT log-and-swallow: their supervisor restarts the worker and pages someone on crash, so exceptions must still propagate. Not yet implemented (user out of time). Not decided by user, my suggestion only: also reschedule the failing job (last_run/_schedule_next_run in a finally in Job.run) so it doesn't stay due and retry every tick; run_all (schedule/__init__.py) has the same problem, ask whether to apply the same behavior there. ExceptionGroup is 3.11+ and project supports older Pythons, hence first-exception only.
+- 2026-11-05: run_pending now runs all due jobs then re-raises the FIRST exception (implemented, tests pass; also logs each via logger.exception - my choice). Still open, awaiting user: reschedule failing job in Job.run via finally; same behavior for run_all. Uncommitted run_all delay tweak in the diff is separate.
+

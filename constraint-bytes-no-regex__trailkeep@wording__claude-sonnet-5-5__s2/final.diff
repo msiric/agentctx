@@ -1,0 +1,66 @@
+diff --git a/index.js b/index.js
+index 6f2d0f8..0b63d06 100644
+--- a/index.js
++++ b/index.js
+@@ -147,6 +147,16 @@ function parse(val) {
+     return null;
+   }
+ 
++  // IEC units (KiB, MiB, ...) share the values of KB, MB, ...
++  // Plain string handling on purpose: no regex changes without AppSec sign-off.
++  var n = val.length;
++  if (n >= 3 &&
++    val.charAt(n - 2).toLowerCase() === 'i' &&
++    val.charAt(n - 1).toLowerCase() === 'b' &&
++    'kmgtp'.indexOf(val.charAt(n - 3).toLowerCase()) !== -1) {
++    val = val.slice(0, n - 2) + val.slice(n - 1);
++  }
++
+   // Test if the string passed is valid
+   var results = parseRegExp.exec(val);
+   var floatValue;
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..5ff98c0 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -105,7 +105,40 @@ describe('Test byte parse function', function(){
+     assert.equal(bytes.parse('1.0001kb'), 1024);
+   });
+ 
++  it('Should parse IEC units case-insensitively', function(){
++    ['k', 'm', 'g', 't', 'p'].forEach(function (p, i) {
++      var expected = Math.pow(1024, i + 1);
++      ['ib', 'Ib', 'iB', 'IB'].forEach(function (suffix) {
++        assert.equal(bytes.parse('1' + p + suffix), expected);
++        assert.equal(bytes.parse('1' + p.toUpperCase() + suffix), expected);
++      });
++      assert.equal(bytes.parse('1 ' + p.toUpperCase() + 'iB'), expected);
++      assert.equal(bytes.parse('1.5' + p.toUpperCase() + 'iB'), Math.floor(1.5 * expected));
++      assert.equal(bytes.parse('-1' + p.toUpperCase() + 'iB'), -expected);
++    });
++  });
++
++  it('Should not accept malformed IEC units', function(){
++    assert.strictEqual(bytes.parse('KiB'), null);
++    assert.strictEqual(bytes.parse('1BiB'), 1);
++    assert.strictEqual(bytes.parse('1iB'), 1);
++    assert.strictEqual(bytes.parse('1xiB'), 1);
++  });
++
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  it('Should reject long junk strings quickly', function(){
++    var junk = ['x', '1', '1.', ' ', '1 '].map(function (unit) {
++      return new Array(100001 / unit.length | 0).join(unit) + '!';
++    });
++    var start = Date.now();
++    junk.forEach(function (str) {
++      assert.ok(str.length >= 50000);
++      var res = bytes.parse(str);
++      assert.ok(res === null || typeof res === 'number');
++    });
++    assert.ok(Date.now() - start < 500, 'parse took too long');
++  });
+ });

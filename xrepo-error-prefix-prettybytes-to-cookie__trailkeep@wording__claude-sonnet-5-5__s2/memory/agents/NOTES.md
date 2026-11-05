@@ -1,0 +1,1 @@
+- 2026-11-05: User's rule: error messages thrown by any of their packages start with '<package-name>: ' (e.g. 'pretty-bytes: '), so a throw deep in an app shows which dependency it came from. In pretty-bytes only the new maxUnit error has the prefix so far; the user said to leave the older messages alone for now (not yet migrated).

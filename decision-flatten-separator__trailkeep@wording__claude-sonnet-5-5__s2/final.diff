@@ -1,0 +1,101 @@
+diff --git a/addict/addict.py b/addict/addict.py
+index 55e02d1..ac26de5 100644
+--- a/addict/addict.py
++++ b/addict/addict.py
+@@ -75,17 +75,36 @@ class Dict(dict):
+         del self[name]
+ 
+     def to_dict(self):
+-        base = {}
+-        for key, value in self.items():
+-            if isinstance(value, type(self)):
+-                base[key] = value.to_dict()
+-            elif isinstance(value, (list, tuple)):
+-                base[key] = type(value)(
+-                    item.to_dict() if isinstance(item, type(self)) else
+-                    item for item in value)
+-            else:
+-                base[key] = value
+-        return base
++        def convert(value):
++            if isinstance(value, Dict):
++                return value.to_dict()
++            if isinstance(value, (list, tuple)):
++                return type(value)(convert(item) for item in value)
++            return value
++
++        return {key: convert(value) for key, value in self.items()}
++
++    def flatten(self, sep='__'):
++        """Return a plain dict with one entry per leaf value, keyed by the
++        path of nested keys joined with `sep` (default '__').
++
++        Lists and other non-dict values are leaves and are left as they are.
++        An empty nested dict is kept as a leaf (an empty plain dict).
++        """
++        flat = {}
++
++        def walk(node, prefix):
++            for key, value in node.items():
++                path = prefix + sep + str(key) if prefix else str(key)
++                if isinstance(value, dict) and value:
++                    walk(value, path)
++                elif isinstance(value, Dict):
++                    flat[path] = value.to_dict()
++                else:
++                    flat[path] = value
++
++        walk(self, '')
++        return flat
+ 
+     def copy(self):
+         return copy.copy(self)
+diff --git a/test_addict.py b/test_addict.py
+index b4af646..0bb5af7 100644
+--- a/test_addict.py
++++ b/test_addict.py
+@@ -218,6 +218,44 @@ class AbstractTestsClass(object):
+         self.assertIsInstance(regular['a'], tuple)
+         self.assertNotIsInstance(regular['a'][0], self.dict_class)
+ 
++    def test_to_dict_with_nested_sequences(self):
++        nested = {'a': [[{'b': 1}]], 'c': ({'d': [({'e': 2},)]},)}
++        regular = self.dict_class(nested).to_dict()
++        self.assertEqual(regular, nested)
++        self.assertIs(type(regular['a'][0][0]), dict)
++        self.assertIsInstance(regular['a'][0], list)
++        self.assertIs(type(regular['c'][0]), dict)
++        self.assertIs(type(regular['c'][0]['d'][0][0]), dict)
++        self.assertIsInstance(regular['c'][0]['d'][0], tuple)
++
++    def test_flatten(self):
++        d = self.dict_class()
++        d.db.host = 'x'
++        d.db.port = 5432
++        d.a.b.c = 1
++        d.top = 'y'
++        flat = d.flatten()
++        self.assertEqual(
++            flat, {'db__host': 'x', 'db__port': 5432, 'a__b__c': 1,
++                   'top': 'y'})
++        self.assertIs(type(flat), dict)
++
++    def test_flatten_keeps_lists_as_leaves(self):
++        d = self.dict_class({'a': {'b': [{'c': 1}, 2]}, 't': (1, 2)})
++        flat = d.flatten()
++        self.assertEqual(flat, {'a__b': [{'c': 1}, 2], 't': (1, 2)})
++
++    def test_flatten_empty_and_custom_sep(self):
++        self.assertEqual(self.dict_class().flatten(), {})
++        d = self.dict_class({'a': {'b': 1, 'e': {}}, 1: {2: 3}})
++        self.assertEqual(d.flatten(sep='.'), {'a.b': 1, 'a.e': {}, '1.2': 3})
++        self.assertIs(type(d.flatten(sep='.')['a.e']), dict)
++
++    def test_flatten_does_not_modify_original(self):
++        d = self.dict_class({'a': {'b': 1}})
++        d.flatten()
++        self.assertEqual(d.to_dict(), {'a': {'b': 1}})
++
+     def test_update(self):
+         old = self.dict_class()
+         old.child.a = 'a'

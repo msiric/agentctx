@@ -1,0 +1,129 @@
+diff --git a/index.js b/index.js
+index 6f2d0f8..c25d108 100644
+--- a/index.js
++++ b/index.js
+@@ -34,6 +34,15 @@ var map = {
+   pb: Math.pow(1024, 5),
+ };
+ 
++var decimalExponents = {
++  b:  0,
++  kb: 3,
++  mb: 6,
++  gb: 9,
++  tb: 12,
++  pb: 15,
++};
++
+ var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
+ 
+ /**
+@@ -133,12 +142,14 @@ function format(value, options) {
+  * If no unit is given, it is assumed the value is in bytes.
+  *
+  * @param {number|string} val
++ * @param {object} [options]
++ * @param {boolean} [options.decimal=false] use powers of 1000 for kB, MB, GB, TB and PB
+  *
+  * @returns {number|null}
+  * @public
+  */
+ 
+-function parse(val) {
++function parse(val, options) {
+   if (typeof val === 'number' && !isNaN(val)) {
+     return val;
+   }
+@@ -166,5 +177,42 @@ function parse(val) {
+     return null;
+   }
+ 
++  if (options && options.decimal) {
++    return parseDecimal(results ? results[1] : null, unit, floatValue);
++  }
++
+   return Math.floor(map[unit] * floatValue);
+ }
++
++/**
++ * Scale a numeric string by a power of 1000 using digit shifting, so results
++ * are exact (floating point multiplication can land just below an integer).
++ * Fractional bytes are floored.
++ *
++ * @private
++ */
++
++function parseDecimal(numStr, unit, floatValue) {
++  if (numStr === null) {
++    // No unit matched: plain integer bytes
++    return Math.floor(floatValue);
++  }
++
++  var negative = numStr.charAt(0) === '-';
++  var parts = numStr.replace(/^[-+]/, '').split('.');
++  var exp = decimalExponents[unit];
++  var frac = parts[1] || '';
++
++  while (frac.length < exp) {
++    frac += '0';
++  }
++
++  var whole = Number(parts[0] + frac.slice(0, exp));
++  var dropped = /[1-9]/.test(frac.slice(exp));
++
++  if (!negative) {
++    return whole;
++  }
++
++  return -(whole + (dropped ? 1 : 0));
++}
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..54d139e 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -109,3 +109,45 @@ describe('Test byte parse function', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
+ });
++
++describe('Test byte parse function with decimal option', function(){
++  var opts = {decimal: true};
++
++  it('Should use powers of 1000', function(){
++    assert.strictEqual(bytes.parse('1kB', opts), 1000);
++    assert.strictEqual(bytes.parse('1MB', opts), 1e6);
++    assert.strictEqual(bytes.parse('1GB', opts), 1e9);
++    assert.strictEqual(bytes.parse('1TB', opts), 1e12);
++    assert.strictEqual(bytes.parse('1PB', opts), 1e15);
++  });
++
++  it('Should be case insensitive and allow a space', function(){
++    assert.strictEqual(bytes.parse('2 kb', opts), 2000);
++    assert.strictEqual(bytes.parse('2Mb', opts), 2e6);
++  });
++
++  it('Should be exact for fractional values', function(){
++    assert.strictEqual(bytes.parse('2.01kB', opts), 2010);
++    assert.strictEqual(bytes.parse('1.1MB', opts), 1100000);
++    assert.strictEqual(bytes.parse('0.001kB', opts), 1);
++  });
++
++  it('Should floor fractional bytes', function(){
++    assert.strictEqual(bytes.parse('1.0009kB', opts), 1000);
++    assert.strictEqual(bytes.parse('0.0019kB', opts), 1);
++    assert.strictEqual(bytes.parse('-1.0009kB', opts), -1001);
++    assert.strictEqual(bytes.parse('-1.5kB', opts), -1500);
++  });
++
++  it('Should handle plain numbers and bytes', function(){
++    assert.strictEqual(bytes.parse('100', opts), 100);
++    assert.strictEqual(bytes.parse(10.5, opts), 10.5);
++    assert.strictEqual(bytes.parse('foobar', opts), null);
++  });
++
++  it('Should not change behavior without the option', function(){
++    assert.strictEqual(bytes.parse('1kB'), 1024);
++    assert.strictEqual(bytes.parse('1kB', {}), 1024);
++    assert.strictEqual(bytes.parse('1kB', {decimal: false}), 1024);
++  });
++});

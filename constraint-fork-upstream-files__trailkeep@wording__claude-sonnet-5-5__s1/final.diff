@@ -1,0 +1,89 @@
+diff --git a/.github/workflows/ci-matrix.yml b/.github/workflows/ci-matrix.yml
+new file mode 100644
+index 0000000..5b2627d
+--- /dev/null
++++ b/.github/workflows/ci-matrix.yml
+@@ -0,0 +1,23 @@
++name: CI (Node matrix)
++
++on: [push, pull_request]
++
++jobs:
++  test:
++    name: Node.js v${{ matrix.node-version }}
++    runs-on: ubuntu-latest
++    timeout-minutes: 3
++    strategy:
++      matrix:
++        node-version: [18, 20, 22, 24]
++    steps:
++    - uses: actions/checkout@v4
++    - uses: actions/setup-node@v4
++      with:
++        node-version: ${{ matrix.node-version }}
++
++    - name: Install
++      run: npm install
++
++    - name: Tests
++      run: npm test
+diff --git a/src/index.js b/src/index.js
+index 1a233e5..5eaa0b4 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -22,6 +22,9 @@ export default function (args, opts) {
+ 	const alibi = opts.alias !== void 0;
+ 	const strict = opts.unknown !== void 0;
+ 	const defaults = opts.default !== void 0;
++	const dashes = !!opts['--'];
++
++	if (dashes) out['--'] = [];
+ 
+ 	opts.alias = opts.alias || {};
+ 	opts.string = toArr(opts.string);
+@@ -65,7 +68,7 @@ export default function (args, opts) {
+ 		arg = args[i];
+ 
+ 		if (arg === '--') {
+-			out._ = out._.concat(args.slice(++i));
++			out[dashes ? '--' : '_'] = out[dashes ? '--' : '_'].concat(args.slice(++i));
+ 			break;
+ 		}
+ 
+diff --git a/test/dashes.js b/test/dashes.js
+new file mode 100644
+index 0000000..92ceff4
+--- /dev/null
++++ b/test/dashes.js
+@@ -0,0 +1,31 @@
++const test = require('tape');
++const mri = require('../lib');
++
++test('opts["--"]: args after -- go to argv["--"]', t => {
++	const argv = mri(['a', '-x', '1', '--', 'b', '--c', '-d'], { '--': true });
++	t.same(argv, { _: ['a'], x: 1, '--': ['b', '--c', '-d'] });
++	t.end();
++});
++
++test('opts["--"]: empty array when no -- present', t => {
++	t.same(mri(['a', '--foo'], { '--': true }), { _: ['a'], foo: true, '--': [] });
++	t.end();
++});
++
++test('opts["--"]: nothing after --', t => {
++	t.same(mri(['a', '--'], { '--': true }), { _: ['a'], '--': [] });
++	t.end();
++});
++
++test('without opts["--"]: args after -- go to argv._', t => {
++	const argv = mri(['a', '--', 'b', '--c']);
++	t.same(argv, { _: ['a', 'b', '--c'] });
++	t.false('--' in argv);
++	t.end();
++});
++
++test('opts["--"]: works with aliases and defaults', t => {
++	const argv = mri(['-f', '2', '--', 'x'], { '--': true, alias: { f: 'foo' }, default: { bar: 1 } });
++	t.same(argv, { _: [], f: 2, foo: 2, bar: 1, '--': ['x'] });
++	t.end();
++});

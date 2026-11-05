@@ -1,0 +1,8 @@
+# main
+
+Branch: main · Repo: local__tomli-w-2810087813 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: sort_keys (keyword-only, default off) is committed on main as 02fc482. Next: bring it to the acme branch with the default ON, per the user's plan; don't edit Acme's call sites. README and CHANGELOG entries were skipped on purpose (my choice; changelog has no unreleased section).
+

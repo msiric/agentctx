@@ -1,0 +1,9 @@
+# vendor/deploy-tools
+
+Branch: vendor/deploy-tools · Repo: local__semver-1592944370 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: Found (not fixed, out of scope of the v-prefix task): the deprecated top-level wrappers (semver.main, semver.cmd_*, semver.createparser, semver.replace, etc. in _deprecated.py) emit DeprecationWarning, which violates the branch's no-warnings rule; ~188 tests fail under -W error. Ask the user before changing. New CLI tests import from semver.cli to stay warning-free.
+- 2026-11-05: next_version: renamed prerelease_token -> token; old keyword kept as silent keyword-only alias (my choice, no DeprecationWarning, per no-warnings rule). Uncommitted Version.compare dict DeprecationWarning (and changelog.d/pr506) conflicts with that rule - ask user before keeping. changelog pr507 number is a guess.
+

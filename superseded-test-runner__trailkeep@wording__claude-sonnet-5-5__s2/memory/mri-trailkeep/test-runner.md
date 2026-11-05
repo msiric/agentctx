@@ -1,0 +1,10 @@
+# test-runner
+
+Branch: test-runner · Repo: local__mri-2339343008 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: Migrating mri tests from tape/tap-spec to uvu (user's choice, matches their other packages). Done: test/num.js only (user approved the look). Next: convert test/index.js and test/unknown.js, then change the test script to plain 'uvu test' and remove tape and tap-spec from devDependencies. Package manager is pnpm (npm install fails on the pnpm node_modules). Check pnpm-lock.yaml was updated after adding uvu. Nothing committed yet.
+- 2026-11-05: Test migration target changed from uvu to Node's built-in node:test: security review blocks adding new devDependencies to published packages. Do not add uvu or any new devDependency. test/num.js (currently uvu-style, plus uvu in package.json) is left as-is on purpose; the user will redo it with the rest of the tests.
+- 2026-11-05: Test migration to node:test is done: all of test/*.js converted, tape/tap-spec/uvu removed, test script is 'node --test test/*.js' (pass the glob; 'node --test test/' only ran index.js). Not committed. CI (.github/workflows/ci.yml) still uses npm install; left unchanged.
+

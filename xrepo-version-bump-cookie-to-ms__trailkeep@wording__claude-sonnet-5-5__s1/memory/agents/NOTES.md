@@ -1,0 +1,1 @@
+- 2026-11-05: Release flow: user's release script publishes whatever version on main isn't on npm yet, so every change must include its own version bump in the same commit. Minor for features, patch for fixes. Applies to all of the user's packages.

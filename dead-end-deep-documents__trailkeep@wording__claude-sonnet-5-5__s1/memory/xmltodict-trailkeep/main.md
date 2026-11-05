@@ -1,0 +1,9 @@
+# main
+
+Branch: main · Repo: local__xmltodict-3144727424 · Kind: branch · Created: 2026-11-05
+
+## Decisions and dead ends
+
+- 2026-11-05: xmltodict evaluation for supplier catalog feed (user's call: only parsing is needed for now). parse() handled a 3000-deep nested test file fine (0.02s), but unparse() raises RecursionError at that depth (recursive _emit in xmltodict.py; works only with a raised recursion limit, safe headroom untested). Recursive walks/json.dumps of the deep result also hit the limit. Flat catalogs and a flat-feed unparse test were NOT tried. No repo changes made.
+- 2026-11-05: drop_keys(doc, names) added to xmltodict.py (my choice: iterative, not recursive, because deep catalog docs hit RecursionError ~3000 deep per earlier finding). Tests in tests/test_xmltodict.py. Not committed; README not updated.
+

@@ -1,0 +1,1 @@
+- 2026-11-05: Every new public function, method or property must have a docstring with a runnable '>>>' example (user's rule, applies to all their projects). Why: they run doctests in CI everywhere and read the examples first in review. Verify the example by running doctests (e.g. pytest --doctest-modules on the file).
