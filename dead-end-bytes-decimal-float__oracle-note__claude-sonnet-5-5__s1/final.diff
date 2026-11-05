@@ -1,0 +1,181 @@
+diff --git a/Readme.md b/Readme.md
+index 5790e23..9f16425 100644
+--- a/Readme.md
++++ b/Readme.md
+@@ -97,7 +97,7 @@ bytes.format(1024, {unitSeparator: ' '});
+ // output: '1 KB'
+ ```
+ 
+-#### bytes.parse(string｜number value): number｜null
++#### bytes.parse(string｜number value, {decimal: boolean}): number｜null
+ 
+ Parse the string value into an integer in bytes. If no unit is given, or `value`
+ is a number, it is assumed the value is in bytes.
+@@ -111,13 +111,14 @@ Supported units and abbreviations are as follows and are case-insensitive:
+   * `tb` for terabytes
+   * `pb` for petabytes
+ 
+-The units are in powers of two, not ten. This means 1kb = 1024b according to this parser.
++The units are in powers of two, not ten. This means 1kb = 1024b according to this parser. Pass `{decimal: true}` to treat `kb`, `mb`, `gb`, `tb` and `pb` as powers of 1000 instead (1kb = 1000b). Partial bytes are dropped either way.
+ 
+ **Arguments**
+ 
+ | Name          | Type   | Description        |
+ |---------------|--------|--------------------|
+ | value   | `string`｜`number` | String to parse, or number in bytes.   |
++| options.decimal | `boolean` | Use powers of 1000 for kb–pb. Defaults to `false`. |
+ 
+ **Returns**
+ 
+@@ -136,6 +137,9 @@ bytes.parse('1024');
+ 
+ bytes.parse(1024);
+ // output: 1024
++
++bytes.parse('2.01 kB', {decimal: true});
++// output: 2010
+ ```
+ 
+ ## License
+diff --git a/index.js b/index.js
+index 6f2d0f8..2041b6f 100644
+--- a/index.js
++++ b/index.js
+@@ -34,6 +34,14 @@ var map = {
+   pb: Math.pow(1024, 5),
+ };
+ 
++var decimalExponents = {
++  kb: 1,
++  mb: 2,
++  gb: 3,
++  tb: 4,
++  pb: 5,
++};
++
+ var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
+ 
+ /**
+@@ -42,6 +50,7 @@ var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
+  * @param {string|number} value
+  * @param {{
+  *  case: [string],
++ *  decimal: [boolean]
+  *  decimalPlaces: [number]
+  *  fixedDecimals: [boolean]
+  *  thousandsSeparator: [string]
+@@ -53,7 +62,7 @@ var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
+ 
+ function bytes(value, options) {
+   if (typeof value === 'string') {
+-    return parse(value);
++    return parse(value, options);
+   }
+ 
+   if (typeof value === 'number') {
+@@ -133,12 +142,14 @@ function format(value, options) {
+  * If no unit is given, it is assumed the value is in bytes.
+  *
+  * @param {number|string} val
++ * @param {object} [options]
++ * @param {boolean} [options.decimal=false] Use powers of 1000 for kb, mb, gb, tb and pb.
+  *
+  * @returns {number|null}
+  * @public
+  */
+ 
+-function parse(val) {
++function parse(val, options) {
+   if (typeof val === 'number' && !isNaN(val)) {
+     return val;
+   }
+@@ -166,5 +177,37 @@ function parse(val) {
+     return null;
+   }
+ 
++  if (options && options.decimal && decimalExponents[unit]) {
++    return scaleDecimal(results[3], decimalExponents[unit] * 3, results[1].charAt(0) === '-');
++  }
++
+   return Math.floor(map[unit] * floatValue);
+ }
++
++/**
++ * Scale a non-negative decimal string by 10^places exactly (by moving the
++ * decimal point) and floor the result.
++ *
++ * @param {string} digits
++ * @param {number} places
++ * @param {boolean} negative
++ * @returns {number}
++ * @private
++ */
++
++function scaleDecimal(digits, places, negative) {
++  var parts = digits.split('.');
++  var frac = parts[1] || '';
++  var whole = parts[0] + (frac + new Array(places + 1).join('0')).slice(0, places);
++  var rest = frac.slice(places);
++  var result = Number(whole);
++
++  if (negative) {
++    result = -result;
++    if (/[1-9]/.test(rest)) {
++      result -= 1;
++    }
++  }
++
++  return result;
++}
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..1d01f73 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -108,4 +108,47 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  describe('with decimal option', function(){
++    var opts = {decimal: true};
++
++    it('Should use powers of 1000', function(){
++      assert.equal(bytes.parse('1kB', opts), 1000);
++      assert.equal(bytes.parse('1MB', opts), 1e6);
++      assert.equal(bytes.parse('1GB', opts), 1e9);
++      assert.equal(bytes.parse('1TB', opts), 1e12);
++      assert.equal(bytes.parse('1PB', opts), 1e15);
++      assert.equal(bytes.parse('1 kb', opts), 1000);
++    });
++
++    it('Should scale decimals exactly', function(){
++      assert.equal(bytes.parse('2.01 kB', opts), 2010);
++      assert.equal(bytes.parse('4.1 MB', opts), 4100000);
++      assert.equal(bytes.parse('1.5GB', opts), 1500000000);
++    });
++
++    it('Should drop partial bytes', function(){
++      assert.equal(bytes.parse('1.0009kB', opts), 1000);
++      assert.equal(bytes.parse('1.0000001MB', opts), 1000000);
++      assert.equal(bytes.parse('-1.0005kB', opts), -1001);
++      assert.equal(bytes.parse('-1.5kB', opts), -1500);
++    });
++
++    it('Should not change bytes or plain numbers', function(){
++      assert.equal(bytes.parse('1024', opts), 1024);
++      assert.equal(bytes.parse('1.1b', opts), 1);
++      assert.equal(bytes.parse(5, opts), 5);
++      assert.strictEqual(bytes.parse('foo', opts), null);
++    });
++
++    it('Should work through bytes()', function(){
++      assert.equal(bytes('2kB', opts), 2000);
++    });
++
++    it('Should default to binary units', function(){
++      assert.equal(bytes.parse('1kB'), 1024);
++      assert.equal(bytes.parse('1kB', {}), 1024);
++      assert.equal(bytes.parse('1kB', {decimal: false}), 1024);
++    });
++  });
+ });

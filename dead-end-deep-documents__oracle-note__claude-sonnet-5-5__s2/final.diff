@@ -1,0 +1,114 @@
+diff --git a/tests/test_xmltodict.py b/tests/test_xmltodict.py
+index 75b825a..65e895d 100644
+--- a/tests/test_xmltodict.py
++++ b/tests/test_xmltodict.py
+@@ -720,3 +720,55 @@ def test_force_list_true_applies_to_all_keys():
+     xml = "<a><b>1</b><b>2</b><c>x</c></a>"
+     expected = {"a": [{"b": ["1", "2"], "c": ["x"]}]}
+     assert parse(xml, force_list=True) == expected
++
++
++def test_drop_keys_any_depth_and_attributes():
++    from xmltodict import drop_keys
++    doc = parse('<a id="1"><b id="2" k="x"><c>t</c></b><b id="3"/>'
++                '<c>u</c></a>')
++    assert drop_keys(doc, ['@id', 'c']) == {
++        'a': {'b': [{'@k': 'x'}, {}]}}
++
++
++def test_drop_keys_does_not_mutate_input():
++    from xmltodict import drop_keys
++    doc = parse('<a id="1"><b id="2"/><b id="3"/></a>')
++    before = parse('<a id="1"><b id="2"/><b id="3"/></a>')
++    out = drop_keys(doc, {'@id'})
++    assert doc == before
++    assert out == {'a': {'b': [{}, {}]}}
++    assert out['a']['b'] is not doc['a']['b']
++
++
++def test_drop_keys_noop_and_scalars():
++    from xmltodict import drop_keys
++    doc = parse('<a><b>1</b></a>')
++    out = drop_keys(doc, [])
++    assert out == doc and out is not doc
++    assert drop_keys('text', ['x']) == 'text'
++
++
++def test_drop_keys_preserves_dict_type_and_order():
++    from xmltodict import drop_keys
++    doc = parse('<a><x>1</x><y>2</y><z>3</z></a>',
++                dict_constructor=collections.OrderedDict)
++    out = drop_keys(doc, ['y'])
++    assert isinstance(out['a'], collections.OrderedDict)
++    assert list(out['a']) == ['x', 'z']
++
++
++def test_drop_keys_deeply_nested():
++    from xmltodict import drop_keys
++    depth = 5000
++    xml = '<p id="0">' * depth + '</p>' * depth
++    doc = parse(xml)
++    out = drop_keys(doc, ['@id'])
++    n = 0
++    node = out
++    while 'p' in node:
++        assert '@id' not in node
++        node = node['p']
++        n += 1
++    assert n == depth
++    assert node == {}
++    assert doc['p']['@id'] == '0'
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..1e657d9 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -632,6 +632,49 @@ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
+         return value
+ 
+ 
++def drop_keys(doc, names):
++    """Return a copy of a parsed document without any key in ``names``.
++
++    Keys are removed at every depth (attribute keys such as ``'@id'``
++    included). The input is not mutated. The walk is iterative, so
++    arbitrarily deeply nested documents do not hit the recursion limit.
++    """
++    names = frozenset(names)
++
++    def shell(node):
++        if isinstance(node, dict):
++            return type(node)()
++        if isinstance(node, list):
++            return []
++        return None
++
++    root = shell(doc)
++    if root is None:
++        return doc
++    stack = [(doc, root)]
++    while stack:
++        src, dst = stack.pop()
++        if isinstance(src, dict):
++            for key, value in src.items():
++                if key in names:
++                    continue
++                child = shell(value)
++                if child is None:
++                    dst[key] = value
++                else:
++                    dst[key] = child
++                    stack.append((value, child))
++        else:
++            for value in src:
++                child = shell(value)
++                if child is None:
++                    dst.append(value)
++                else:
++                    dst.append(child)
++                    stack.append((value, child))
++    return root
++
++
+ if __name__ == '__main__':  # pragma: no cover
+     import marshal
+     import sys

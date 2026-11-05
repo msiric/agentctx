@@ -1,0 +1,98 @@
+diff --git a/tests/test_drop_keys.py b/tests/test_drop_keys.py
+new file mode 100644
+index 0000000..dc42cd7
+--- /dev/null
++++ b/tests/test_drop_keys.py
+@@ -0,0 +1,56 @@
++import copy
++from collections import OrderedDict
++
++from xmltodict import drop_keys, parse
++
++
++def test_removes_at_any_depth_including_attributes():
++    doc = parse('<a id="1"><b id="2" k="v"><c id="3">x</c></b><b id="4"/></a>')
++    assert drop_keys(doc, ['@id']) == {
++        'a': {'b': [{'@k': 'v', 'c': {'#text': 'x'}}, {}]}
++    }
++
++
++def test_removes_element_keys_and_lists():
++    doc = {'a': {'skip': '1', 'b': [{'skip': '2', 'c': '3'}, 'text']}}
++    assert drop_keys(doc, {'skip'}) == {'a': {'b': [{'c': '3'}, 'text']}}
++
++
++def test_does_not_mutate_input():
++    doc = parse('<a id="1"><b id="2">x</b><b id="3">y</b></a>')
++    snapshot = copy.deepcopy(doc)
++    result = drop_keys(doc, ['@id'])
++    assert doc == snapshot
++    assert result is not doc
++    assert result['a'] is not doc['a']
++    assert result['a']['b'] is not doc['a']['b']
++
++
++def test_no_names_returns_equal_copy():
++    doc = {'a': [{'b': '1'}]}
++    result = drop_keys(doc, [])
++    assert result == doc
++    assert result['a'] is not doc['a']
++
++
++def test_single_string_is_one_name():
++    assert drop_keys({'id': 1, 'i': 2, 'd': 3}, 'id') == {'i': 2, 'd': 3}
++
++
++def test_all_keys_removed_and_missing_names():
++    assert drop_keys({'a': {'b': '1'}}, ['a']) == {}
++    assert drop_keys({'a': '1'}, ['zzz']) == {'a': '1'}
++
++
++def test_scalars_and_none():
++    assert drop_keys(None, ['a']) is None
++    assert drop_keys('s', ['a']) == 's'
++
++
++def test_preserves_ordered_dict_and_order():
++    doc = OrderedDict([('z', '1'), ('a', OrderedDict([('m', '2'), ('x', '3')]))])
++    result = drop_keys(doc, ['m'])
++    assert isinstance(result, OrderedDict)
++    assert isinstance(result['a'], OrderedDict)
++    assert list(result) == ['z', 'a']
++    assert result['a'] == {'x': '3'}
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..fc90bc5 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -558,6 +558,31 @@ def _emit(key, value, content_handler,
+             content_handler.ignorableWhitespace(newl)
+ 
+ 
++def drop_keys(doc, names):
++    """Return a copy of a parsed document with every key in `names` removed
++    at any depth (attribute keys such as '@id' included).
++
++    `names` is an iterable of keys; a single string is treated as one key.
++    The input is never mutated; non-container values are shared, not copied.
++    """
++    if isinstance(names, str):
++        names = (names,)
++    names = frozenset(names)
++
++    def walk(node):
++        if isinstance(node, dict):
++            new = node.__class__() if type(node) is not dict else {}
++            for k, v in node.items():
++                if k not in names:
++                    new[k] = walk(v)
++            return new
++        if isinstance(node, list):
++            return [walk(v) for v in node]
++        return node
++
++    return walk(doc)
++
++
+ class _XMLGenerator(XMLGenerator):
+     def comment(self, text):
+         text = _validate_comment(text)

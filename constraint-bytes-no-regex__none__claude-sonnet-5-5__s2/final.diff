@@ -1,0 +1,71 @@
+diff --git a/index.js b/index.js
+index 6f2d0f8..d61f902 100644
+--- a/index.js
++++ b/index.js
+@@ -34,7 +34,7 @@ var map = {
+   pb: Math.pow(1024, 5),
+ };
+ 
+-var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
++var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kib|mib|gib|tib|pib|kb|mb|gb|tb|pb)$/i;
+ 
+ /**
+  * Convert the given value in bytes into a string or parse to string to an integer in bytes.
+@@ -159,7 +159,8 @@ function parse(val) {
+   } else {
+     // Retrieve the value and the unit
+     floatValue = parseFloat(results[1]);
+-    unit = results[4].toLowerCase();
++    // IEC units (KiB, MiB, ...) share the values of KB, MB, ...
++    unit = results[4].toLowerCase().replace('ib', 'b');
+   }
+ 
+   if (isNaN(floatValue)) {
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..7842649 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -100,6 +100,23 @@ describe('Test byte parse function', function(){
+     assert.equal(bytes.parse('-1.5TB'), -1.5 * Math.pow(1024, 4));
+   });
+ 
++  it('Should parse IEC units case-insensitively', function(){
++    ['KiB', 'MiB', 'GiB', 'TiB', 'PiB'].forEach(function (unit, i) {
++      var factor = Math.pow(1024, i + 1);
++      [unit, unit.toLowerCase(), unit.toUpperCase(), unit[0].toLowerCase() + 'IB'].forEach(function (u) {
++        assert.strictEqual(bytes.parse('1' + u), factor);
++        assert.strictEqual(bytes.parse('1 ' + u), factor);
++        assert.strictEqual(bytes.parse('1.5' + u), Math.floor(1.5 * factor));
++        assert.strictEqual(bytes.parse('-1' + u), -factor);
++      });
++      assert.strictEqual(bytes.parse('1' + unit), bytes.parse('1' + unit.replace('i', '')));
++    });
++  });
++
++  it('Should not format using IEC units', function(){
++    assert.strictEqual(bytes.format(1024, {unit: 'KiB'}), '1KB');
++  });
++
+   it('Should drop partial bytes', function(){
+     assert.equal(bytes.parse('1.1b'), 1);
+     assert.equal(bytes.parse('1.0001kb'), 1024);
+@@ -108,4 +125,19 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  it('Should reject long junk strings quickly', function(){
++    var n = 100000;
++    var start = Date.now();
++
++    assert.strictEqual(bytes.parse('x'.repeat(n)), null);
++    assert.strictEqual(bytes.parse(' '.repeat(n) + 'x'), null);
++    assert.strictEqual(bytes.parse('.'.repeat(n) + 'kb'), null);
++    // near-matches that make the regexp do the most work before failing
++    assert.strictEqual(bytes.parse('1'.repeat(n) + '!'), Number('1'.repeat(n)) || Infinity);
++    assert.strictEqual(bytes.parse('1.' + '1'.repeat(n) + 'x'), 1);
++    assert.strictEqual(bytes.parse('1' + ' '.repeat(n) + 'x'), 1);
++
++    assert.ok(Date.now() - start < 500, 'parse took too long on long input');
++  });
+ });

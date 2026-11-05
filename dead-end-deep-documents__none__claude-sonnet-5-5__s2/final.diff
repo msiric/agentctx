@@ -1,0 +1,90 @@
+diff --git a/tests/test_drop_keys.py b/tests/test_drop_keys.py
+new file mode 100644
+index 0000000..b47b8b3
+--- /dev/null
++++ b/tests/test_drop_keys.py
+@@ -0,0 +1,51 @@
++import copy
++
++from xmltodict import drop_keys, parse
++
++
++def test_removes_keys_at_any_depth():
++    doc = {"a": {"b": "1", "c": {"b": "2", "d": "3"}}}
++    assert drop_keys(doc, ["b"]) == {"a": {"c": {"d": "3"}}}
++
++
++def test_removes_attribute_keys():
++    doc = parse('<a id="1"><b id="2" n="x">t</b></a>')
++    assert drop_keys(doc, ["@id"]) == {"a": {"b": {"@n": "x", "#text": "t"}}}
++
++
++def test_descends_into_lists():
++    doc = {"a": [{"@id": "1", "v": "x"}, {"@id": "2", "v": "y"}, "s"]}
++    assert drop_keys(doc, {"@id"}) == {"a": [{"v": "x"}, {"v": "y"}, "s"]}
++
++
++def test_does_not_mutate_input():
++    doc = {"a": [{"@id": "1", "b": {"@id": "2"}}], "@id": "3"}
++    snapshot = copy.deepcopy(doc)
++    result = drop_keys(doc, ["@id"])
++    assert doc == snapshot
++    assert result == {"a": [{"b": {}}]}
++    assert result is not doc and result["a"] is not doc["a"]
++
++
++def test_result_shares_no_containers_with_input():
++    doc = {"a": {"b": [1, 2]}}
++    result = drop_keys(doc, ["zzz"])
++    assert result == doc
++    result["a"]["b"].append(3)
++    assert doc == {"a": {"b": [1, 2]}}
++
++
++def test_empty_names_and_single_string():
++    doc = {"a": "1", "b": {"a": "2"}}
++    assert drop_keys(doc, []) == doc
++    assert drop_keys(doc, "a") == {"b": {}}  # str is one name, not chars
++
++
++def test_scalars_and_none():
++    assert drop_keys("x", ["a"]) == "x"
++    assert drop_keys(None, ["a"]) is None
++    assert drop_keys({"a": None, "b": None}, ["a"]) == {"b": None}
++
++
++def test_dropping_all_keys_gives_empty_dict():
++    assert drop_keys({"a": "1"}, ["a"]) == {}
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..8005ee6 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -378,6 +378,28 @@ def parse(xml_input, encoding=None, expat=expat, process_namespaces=False,
+     return handler.item
+ 
+ 
++def drop_keys(doc, names):
++    """Return a copy of ``doc`` with every key in ``names`` removed at any depth.
++
++    Attribute keys (e.g. ``'@id'``) are matched literally, so pass them with
++    their prefix. Dicts and lists are copied recursively; the input is never
++    mutated. A single string is treated as one name. Container types are
++    normalized to ``dict`` and ``list``.
++    """
++    if isinstance(names, str):
++        names = (names,)
++    names = frozenset(names)
++
++    def walk(value):
++        if isinstance(value, dict):
++            return {k: walk(v) for k, v in value.items() if k not in names}
++        if isinstance(value, (list, tuple)):
++            return [walk(v) for v in value]
++        return value
++
++    return walk(doc)
++
++
+ def _convert_value_to_string(value, encoding='utf-8', bytes_errors='replace'):
+     """Convert a value to its string representation for XML output.
+ 

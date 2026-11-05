@@ -1,0 +1,121 @@
+diff --git a/README.md b/README.md
+index a756c37..0aeae0b 100644
+--- a/README.md
++++ b/README.md
+@@ -71,9 +71,8 @@ with open("path_to_file/conf.toml", "wb") as f:
+ 
+ ### Does Tomli-W sort the document?<a name="does-tomli-w-sort-the-document"></a>
+ 
+-Not by default: it respects the order of the input data.
+-Pass `sort_keys=True` to `tomli_w.dumps` or `tomli_w.dump`
+-to write keys in sorted order at every level (inline tables included).
++Yes, by default: `tomli_w.dumps` and `tomli_w.dump` write keys in sorted order at every level (inline tables included).
++Pass `sort_keys=False` to respect the order of the input data instead.
+ Arrays keep their element order.
+ 
+ ### Does Tomli-W support writing documents with comments?<a name="does-tomli-w-support-writing-documents-with-comments"></a>
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index 0b4f0db..2da8f1d 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -31,7 +31,7 @@ COMPACT_ESCAPES = MappingProxyType(
+ 
+ 
+ class Context:
+-    def __init__(self, allow_multiline: bool, indent: int, sort_keys: bool = False):
++    def __init__(self, allow_multiline: bool, indent: int, sort_keys: bool = True):
+         if indent < 0:
+             raise ValueError("Indent width must be non-negative")
+         self.allow_multiline: Final = allow_multiline
+@@ -48,7 +48,7 @@ def dump(
+     *,
+     multiline_strings: bool = False,
+     indent: int = 4,
+-    sort_keys: bool = False,
++    sort_keys: bool = True,
+ ) -> None:
+     ctx = Context(multiline_strings, indent, sort_keys)
+     for chunk in gen_table_chunks(obj, ctx, name=""):
+@@ -61,7 +61,7 @@ def dumps(
+     *,
+     multiline_strings: bool = False,
+     indent: int = 4,
+-    sort_keys: bool = False,
++    sort_keys: bool = True,
+ ) -> str:
+     ctx = Context(multiline_strings, indent, sort_keys)
+     return "".join(gen_table_chunks(obj, ctx, name=""))
+diff --git a/tests/test_style.py b/tests/test_style.py
+index 5eca4d9..2dc38c9 100644
+--- a/tests/test_style.py
++++ b/tests/test_style.py
+@@ -13,7 +13,7 @@ def test_newline_before_table():
+     expected = "[table]\n"
+     assert actual == expected
+ 
+-    actual = tomli_w.dumps({"table": {"nested": {}, "val3": 3}, "val2": 2, "val1": 1})
++    actual = tomli_w.dumps({"table": {"nested": {}, "val3": 3}, "val2": 2, "val1": 1}, sort_keys=False)
+     expected = """\
+ val2 = 2
+ val1 = 1
+@@ -61,7 +61,7 @@ def test_only_tables():
+ 
+ 
+ def test_tricky_keys():
+-    actual = tomli_w.dumps({"f": 1, "tab1": {}, "": {"f": 2, "": {"": 1}}, "tab3": {}})
++    actual = tomli_w.dumps({"f": 1, "tab1": {}, "": {"f": 2, "": {"": 1}}, "tab3": {}}, sort_keys=False)
+     expected = """\
+ f = 1
+ 
+@@ -143,7 +143,7 @@ long-value = "Lorem ipsum sith"
+ another-long-value = "consectetur adipis"
+ simple-value = 3
+ """
+-    actual = tomli_w.dumps(example)
++    actual = tomli_w.dumps(example, sort_keys=False)
+     assert actual == expected
+     assert tomli.loads(actual) == example
+ 
+@@ -253,7 +253,7 @@ another-long-value = "consectetur adipiscing elit"
+ a-third-one = "sed do eiusmod tempor incididunt ut labore et dolore magna"
+ simple-value = 3
+ """
+-    actual = tomli_w.dumps(example)
++    actual = tomli_w.dumps(example, sort_keys=False)
+     assert actual == expected
+     assert tomli.loads(actual) == example
+ 
+@@ -320,11 +320,16 @@ arr = [
+     assert tomli_w.dumps(data, sort_keys=True) == expected
+ 
+ 
+-def test_sort_keys_off_by_default():
++def test_sort_keys_on_by_default():
+     data = {"b": 1, "a": 2, "t": {"z": 1, "y": {"b": 1, "a": 1}}}
+-    assert tomli_w.dumps(data) == tomli_w.dumps(data, sort_keys=False)
+-    assert tomli_w.dumps(data).startswith("b = 1\na = 2\n")
+-    assert tomli_w.dumps({"t": {"z": 1, "a": 2}}) == "[t]\nz = 1\na = 2\n"
++    assert tomli_w.dumps(data) == tomli_w.dumps(data, sort_keys=True)
++    assert tomli_w.dumps(data).startswith("a = 2\nb = 1\n")
++
++
++def test_sort_keys_opt_out():
++    assert tomli_w.dumps({"t": {"z": 1, "a": 2}}, sort_keys=False) == (
++        "[t]\nz = 1\na = 2\n"
++    )
+ 
+ 
+ def test_sort_keys_exact_output():
+diff --git a/tests/test_types.py b/tests/test_types.py
+index e4c9782..6ff986b 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -16,7 +16,7 @@ def test_decimal():
+         "float-2E16": float("2E16"),
+     }
+     assert (
+-        tomli_w.dumps(obj)
++        tomli_w.dumps(obj, sort_keys=False)
+         == """\
+ decimal-0 = 0.0
+ decimal-4 = 4.0

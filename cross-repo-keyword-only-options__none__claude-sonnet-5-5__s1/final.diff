@@ -1,0 +1,63 @@
+diff --git a/addict/addict.py b/addict/addict.py
+index 55e02d1..bee165c 100644
+--- a/addict/addict.py
++++ b/addict/addict.py
+@@ -74,17 +74,19 @@ class Dict(dict):
+     def __delattr__(self, name):
+         del self[name]
+ 
+-    def to_dict(self):
++    def to_dict(self, skip_none=False):
++        def convert(value):
++            if isinstance(value, Dict):
++                return value.to_dict(skip_none=skip_none)
++            elif isinstance(value, (list, tuple)):
++                return type(value)(convert(item) for item in value)
++            return value
++
+         base = {}
+         for key, value in self.items():
+-            if isinstance(value, type(self)):
+-                base[key] = value.to_dict()
+-            elif isinstance(value, (list, tuple)):
+-                base[key] = type(value)(
+-                    item.to_dict() if isinstance(item, type(self)) else
+-                    item for item in value)
+-            else:
+-                base[key] = value
++            if skip_none and value is None:
++                continue
++            base[key] = convert(value)
+         return base
+ 
+     def copy(self):
+diff --git a/test_addict.py b/test_addict.py
+index b4af646..de9a5c6 100644
+--- a/test_addict.py
++++ b/test_addict.py
+@@ -218,6 +218,25 @@ class AbstractTestsClass(object):
+         self.assertIsInstance(regular['a'], tuple)
+         self.assertNotIsInstance(regular['a'][0], self.dict_class)
+ 
++    def test_to_dict_skip_none(self):
++        nested = {'a': None, 'b': 1,
++                  'c': {'d': None, 'e': 2, 'f': {'g': None}},
++                  'h': [{'i': None, 'j': 3}, None, ({'k': None},)]}
++        prop = self.dict_class(nested)
++        self.assertDictEqual(prop.to_dict(skip_none=True), {
++            'b': 1,
++            'c': {'e': 2, 'f': {}},
++            'h': [{'j': 3}, None, ({},)]})
++        self.assertIsInstance(prop.to_dict(skip_none=True)['h'][2], tuple)
++        # input is not mutated
++        self.assertIsNone(prop.a)
++        self.assertIn('d', prop.c)
++
++    def test_to_dict_keeps_none_by_default(self):
++        nested = {'a': None, 'b': [{'c': None}]}
++        prop = self.dict_class(nested)
++        self.assertDictEqual(prop.to_dict(), nested)
++
+     def test_update(self):
+         old = self.dict_class()
+         old.child.a = 'a'

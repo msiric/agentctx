@@ -1,0 +1,111 @@
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index 0f318fc..7be5740 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -98,6 +98,9 @@ def gen_table_chunks(
+ 
+ 
+ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
++    if obj is None:
++        # None is written as an empty string so that it reads back as explicitly unset
++        return '""'
+     if isinstance(obj, bool):
+         return "true" if obj else "false"
+     if isinstance(obj, (int, float, date, datetime)):
+@@ -115,9 +118,12 @@ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
+ 
+     # Lazy import to improve module import time
+     from decimal import Decimal
++    from pathlib import PurePath
+ 
+     if isinstance(obj, Decimal):
+         return format_decimal(obj)
++    if isinstance(obj, PurePath):
++        return format_string(str(obj), allow_multiline=ctx.allow_multiline)
+     raise TypeError(
+         f"Object of type '{type(obj).__qualname__}' is not TOML serializable"
+     )
+@@ -138,17 +144,10 @@ def format_inline_table(obj: Mapping, ctx: Context) -> str:
+     if obj_id in ctx.inline_table_cache:
+         return ctx.inline_table_cache[obj_id]
+ 
+-    if not obj:
+-        rendered = "{}"
+-    else:
+-        rendered = (
+-            "{ "
+-            + ", ".join(
+-                f"{format_key_part(k)} = {format_literal(v, ctx)}"
+-                for k, v in obj.items()
+-            )
+-            + " }"
+-        )
++    items = [
++        f"{format_key_part(k)} = {format_literal(v, ctx)}" for k, v in obj.items()
++    ]
++    rendered = "{ " + ", ".join(items) + " }" if items else "{}"
+     ctx.inline_table_cache[obj_id] = rendered
+     return rendered
+ 
+diff --git a/tests/test_invalid.py b/tests/test_invalid.py
+index 3d5e8e8..89b846e 100644
+--- a/tests/test_invalid.py
++++ b/tests/test_invalid.py
+@@ -38,3 +38,4 @@ def test_invalid_key__truthy():
+         str(exc_info.value)
+         == "Invalid mapping key '2' of type 'int'. A string is required."
+     )
++
+diff --git a/tests/test_valid.py b/tests/test_valid.py
+index 5413ac9..4cd5b69 100644
+--- a/tests/test_valid.py
++++ b/tests/test_valid.py
+@@ -58,3 +58,48 @@ def replace_nans(cont: dict | list) -> dict | list:
+ )
+ def test_obj_to_str_mapping(obj, expected_str, multiline_strings):
+     assert tomli_w.dumps(obj, multiline_strings=multiline_strings) == expected_str
++
++
++def test_none_values_as_empty_string():
++    assert tomli_w.dumps({"a": None, "b": 1}) == 'a = ""\nb = 1\n'
++    assert tomli_w.dumps({"a": None}) == 'a = ""\n'
++    assert tomli_w.dumps({"t": {"a": None, "b": 1}}) == '[t]\na = ""\nb = 1\n'
++
++
++def test_none_in_arrays():
++    assert tomli_w.dumps({"a": [1, None]}) == 'a = [\n    1,\n    "",\n]\n'
++    assert tomli_w.dumps({"a": [[None]]}) == (
++        'a = [\n    [\n        "",\n    ],\n]\n'
++    )
++
++
++def test_none_in_inline_tables():
++    assert (
++        tomli_w.dumps({"l": [{"a": None, "b": 1}, {"a": None}]})
++        == 'l = [\n    { a = "", b = 1 },\n    { a = "" },\n]\n'
++    )
++    assert tomli_w.dumps({"l": [{"b": [None]}]}) == '[[l]]\nb = [\n    "",\n]\n'
++
++
++def test_none_dump():
++    import io
++
++    buf = io.BytesIO()
++    tomli_w.dump({"a": None, "b": {"c": None, "d": 2}}, buf)
++    assert buf.getvalue() == b'a = ""\n\n[b]\nc = ""\nd = 2\n'
++
++
++def test_pathlib_paths():
++    import pathlib
++
++    assert (
++        tomli_w.dumps({"p": pathlib.PurePosixPath("/a/b"), "l": [pathlib.PurePosixPath("c")]})
++        == 'p = "/a/b"\nl = [\n    "c",\n]\n'
++    )
++    assert (
++        tomli_w.dumps({"t": {"p": pathlib.PurePosixPath("x y")}}) == '[t]\np = "x y"\n'
++    )
++    assert tomli_w.dumps({"p": pathlib.Path("rel/file.txt")}) == (
++        f'p = "{pathlib.Path("rel/file.txt")}"\n'.replace("\\", "\\\\")
++    )
++    assert tomli_w.dumps({"p": pathlib.PureWindowsPath("C:/a")}) == 'p = "C:\\\\a"\n'

@@ -1,0 +1,151 @@
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index 0f318fc..d73a517 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -71,6 +71,10 @@ def gen_table_chunks(
+     literals = []
+     tables: list[tuple[str, Any, bool]] = []  # => [(key, value, inside_aot)]
+     for k, v in table.items():
++        if v is None:
++            continue
++        if isinstance(v, ARRAY_TYPES):
++            v = [i for i in v if i is not None]
+         if isinstance(v, Mapping):
+             tables.append((k, v, False))
+         elif is_aot(v) and not all(is_suitable_inline_table(t, ctx) for t in v):
+@@ -115,9 +119,12 @@ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
+ 
+     # Lazy import to improve module import time
+     from decimal import Decimal
++    from pathlib import PurePath
+ 
+     if isinstance(obj, Decimal):
+         return format_decimal(obj)
++    if isinstance(obj, PurePath):
++        return format_string(str(obj), allow_multiline=ctx.allow_multiline)
+     raise TypeError(
+         f"Object of type '{type(obj).__qualname__}' is not TOML serializable"
+     )
+@@ -138,14 +145,14 @@ def format_inline_table(obj: Mapping, ctx: Context) -> str:
+     if obj_id in ctx.inline_table_cache:
+         return ctx.inline_table_cache[obj_id]
+ 
+-    if not obj:
++    items = [(k, v) for k, v in obj.items() if v is not None]
++    if not items:
+         rendered = "{}"
+     else:
+         rendered = (
+             "{ "
+             + ", ".join(
+-                f"{format_key_part(k)} = {format_literal(v, ctx)}"
+-                for k, v in obj.items()
++                f"{format_key_part(k)} = {format_literal(v, ctx)}" for k, v in items
+             )
+             + " }"
+         )
+@@ -154,6 +161,7 @@ def format_inline_table(obj: Mapping, ctx: Context) -> str:
+ 
+ 
+ def format_inline_array(obj: tuple | list, ctx: Context, nest_level: int) -> str:
++    obj = [item for item in obj if item is not None]
+     if not obj:
+         return "[]"
+     item_indent = ctx.indent_str * (1 + nest_level)
+diff --git a/tests/test_types.py b/tests/test_types.py
+index e4c9782..39c6e60 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -1,4 +1,7 @@
+ from decimal import Decimal
++import pathlib
++
++import pytest
+ 
+ import tomli_w
+ 
+@@ -46,3 +49,84 @@ non-empty-tuple = [
+ ]
+ """
+     )
++
++
++def test_none_values_skipped():
++    obj = {
++        "a": 1,
++        "b": None,
++        "tbl": {"x": None, "y": 2},
++        "inline": [{"p": None, "q": 1}],
++        "inline_tbl_in_arr": {"k": [{"p": None, "q": 1}]},
++    }
++    assert (
++        tomli_w.dumps(obj)
++        == """\
++a = 1
++inline = [
++    { q = 1 },
++]
++
++[tbl]
++y = 2
++
++[inline_tbl_in_arr]
++k = [
++    { q = 1 },
++]
++"""
++    )
++
++
++def test_none_skipped_in_inline_table_and_aot():
++    long = "x" * 100
++    obj = {"t": [{"a": None}], "u": [{"long": long, "n": None}]}
++    out = tomli_w.dumps(obj)
++    assert "t = [\n    {},\n]\n" in out
++    assert "n" not in out.replace("long", "")
++    assert tomli_w.dumps({"only_none": {"a": None}}) == "[only_none]\n"
++    assert tomli_w.dumps({"a": None}) == ""
++
++
++def test_none_skipped_in_arrays():
++    assert tomli_w.dumps({"a": [1, None, 2]}) == "a = [\n    1,\n    2,\n]\n"
++    assert tomli_w.dumps({"a": [None]}) == "a = []\n"
++    assert tomli_w.dumps({"a": (None, None)}) == "a = []\n"
++    assert (
++        tomli_w.dumps({"a": [[1, None], [None]]})
++        == "a = [\n    [\n        1,\n    ],\n    [],\n]\n"
++    )
++    assert (
++        tomli_w.dumps({"t": {"b": [None, 1]}}) == "[t]\nb = [\n    1,\n]\n"
++    )
++    # None among tables
++    assert tomli_w.dumps({"a": [None, {"x": 1}]}) == "a = [\n    { x = 1 },\n]\n"
++    long = "x" * 100
++    assert (
++        tomli_w.dumps({"a": [{"long": long}, None]})
++        == f'[[a]]\nlong = "{long}"\n'
++    )
++
++
++def test_pathlib():
++    obj = {
++        "p": pathlib.PurePosixPath("/usr/local/bin"),
++        "concrete": pathlib.Path("relative/dir"),
++        "win": pathlib.PureWindowsPath("C:/Users/me"),
++        "arr": [pathlib.PurePosixPath("a/b")],
++        "tbl": {"q": pathlib.PurePosixPath("x")},
++    }
++    assert (
++        tomli_w.dumps(obj)
++        == """\
++p = "/usr/local/bin"
++concrete = "relative/dir"
++win = "C:\\\\Users\\\\me"
++arr = [
++    "a/b",
++]
++
++[tbl]
++q = "x"
++"""
++    )
