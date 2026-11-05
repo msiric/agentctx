@@ -88,3 +88,33 @@ held-out (PREREGISTRATION.md, addendum).
 | constraint-schema-no-values-in-errors | 3/3 | 3/3 | drop: no headroom |
 
 11 of 12 kept. The perfect note passed every kept trap 3/3.
+
+# Headroom gate, held-out set 3 (2026-11-05)
+
+Same rule, same model, frozen versions, runs 41938134373 and 42030193246 (the
+first paused at the usage limit). Every set-3 trap is held-out
+(PREREGISTRATION.md, set 3 addendum).
+
+| Trap | none | oracle-note | Verdict |
+|---|---|---|---|
+| branch-isolation-bytes-rounding | 0/3 | 2/3 | keep |
+| branch-isolation-sort-default | 0/3 | 3/3 | keep |
+| constraint-bytes-no-regex | 0/3 | 3/3 | keep |
+| constraint-no-runtime-warnings | 1/3 | 3/3 | keep |
+| cross-repo-error-prefix | 0/3 | 3/3 | keep |
+| cross-repo-keyword-only-options | 0/3 | 3/3 | keep |
+| dead-end-bytes-decimal-float | 0/3 | 3/3 | keep |
+| dead-end-deep-documents | 0/3 | 3/3 | keep |
+| decision-flatten-separator | 0/3 | 3/3 | keep |
+| decision-range-limit-coalesce | 0/3 | 3/3 | keep |
+| superseded-none-values | 0/3 | 3/3 | keep |
+| superseded-range-size-no-throw | 0/3 | 3/3 | keep |
+
+All 12 kept. The one oracle-note failure (branch-isolation-bytes-rounding s1)
+honoured both facts and missed the task: it printed '1.19MB' where the task
+wants '1.2MB'.
+
+Note: cross-repo-error-prefix has the same kind of fact as the dev trap
+xrepo-error-prefix-prettybytes-to-cookie (prefix error messages with the
+package name). Its author was blind to the dev traps, so it stays as written.
+The report will also give set-3 results without it.
