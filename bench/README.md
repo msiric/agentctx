@@ -23,7 +23,8 @@ Live runs happen in CI (`.github/workflows/bench.yml`) on the
 
 - `results/heldout.md`: held-out set 1, every arm (trailkeep 0.4.0)
 - `results/heldout2.md`: held-out set 2, trailkeep 0.5.0 vs handoff vs none
-- `results/heldout3.md`: held-out set 3, trailkeep 0.5.1 vs handoff vs none, plus all three sets pooled
+- `results/heldout3.md`: held-out set 3, trailkeep 0.5.1 vs handoff vs none
+- `results/heldout4.md`: held-out set 4, trailkeep 0.5.2 vs handoff vs none, plus all four sets pooled
 - `results/gate.md`: which traps each headroom gate kept
 - `results/dev-notes.md`: dev runs and the changes they led to
 - `DEVIATIONS.md`: everything that didn't go as pre-registered

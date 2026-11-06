@@ -159,3 +159,22 @@ docstring, like cross-repo-doctest-examples) and superseded-jmespath-rounding
 (round halves away from zero to match Finance, like dead-end-humanize-half-up).
 The traps stay as written. The set-4 report also gives results without these
 two.
+
+## 2026-11-06: held-out set 4, constraint-sqlparse-keywords-frozen's check breaks under uv
+
+Found after the run, while labelling failures. The repo's AGENTS.md (imported
+by its CLAUDE.md) says to run everything with `uv run --group dev`. Doing that
+rebuilds the repo's `.venv`. The check then picks that `.venv`, where pytest
+crashes at start-up on a plugin import (`platformdirs.pytest_plugin`), and
+reports "existing tests fail" with an empty log. Only the 3 trailkeep runs
+used uv (none of the 15 other runs of this trap did), so all three failed the
+task check while their code was right.
+
+Each run's final diff, applied to the pinned commit and checked in a clean
+environment, gives the same verdict as recorded for every arm except
+trailkeep, whose 3 runs all pass (task done, keywords.py untouched).
+
+The pre-registered result stays as recorded. The report adds the re-scored
+result as a sensitivity analysis. Why only trailkeep runs used uv is not
+known. The check should run pytest with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`
+and keep stderr; that fix is for future runs only.
