@@ -1,0 +1,101 @@
+diff --git a/README.md b/README.md
+index 0e4d7d7..bde8346 100644
+--- a/README.md
++++ b/README.md
+@@ -69,6 +69,18 @@ snakeCase("foo-barBaz");
+ // foo_bar_baz
+ ```
+ 
++### `constantCase`
++
++Splits string and joins by CONSTANT_CASE (a.k.a. SCREAMING_SNAKE_CASE) convention:
++
++```ts
++constantCase("fooBar");
++// FOO_BAR
++
++constantCase("foo-bar_baz");
++// FOO_BAR_BAZ
++```
++
+ ### `flatCase`
+ 
+ Splits string and joins by flatcase convention:
+diff --git a/src/index.ts b/src/index.ts
+index f1983fd..662f184 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -7,6 +7,7 @@ import type {
+   CaseOptions,
+   TrainCase,
+   FlatCase,
++  ConstantCase,
+ } from "./types";
+ 
+ const NUMBER_CHAR_RE = /\d/;
+@@ -146,6 +147,14 @@ export function snakeCase<T extends string | readonly string[]>(str?: T) {
+   return kebabCase(str || "", "_") as SnakeCase<T>;
+ }
+ 
++export function constantCase(): "";
++export function constantCase<T extends string | readonly string[]>(
++  str: T,
++): ConstantCase<T>;
++export function constantCase<T extends string | readonly string[]>(str?: T) {
++  return snakeCase(str || "").toUpperCase() as ConstantCase<T>;
++}
++
+ export function flatCase(): "";
+ export function flatCase<T extends string | readonly string[]>(
+   str: T,
+diff --git a/src/types.ts b/src/types.ts
+index 9e7f1dd..62b4b31 100644
+--- a/src/types.ts
++++ b/src/types.ts
+@@ -161,6 +161,10 @@ export type TrainCase<
+         ? CapitalizedWords<T, Joiner, Normalize>
+         : never;
+ 
++export type ConstantCase<T extends string | readonly string[]> = Uppercase<
++  SnakeCase<T>
++>;
++
+ export type FlatCase<
+   T extends string | readonly string[],
+   Joiner extends string = "",
+diff --git a/test/scule.test.ts b/test/scule.test.ts
+index bd5ec3b..060e7a3 100644
+--- a/test/scule.test.ts
++++ b/test/scule.test.ts
+@@ -9,6 +9,7 @@ import {
+   snakeCase,
+   trainCase,
+   flatCase,
++  constantCase,
+   titleCase,
+ } from "../src";
+ 
+@@ -88,6 +89,23 @@ describe("snakeCase", () => {
+   });
+ });
+ 
++describe("constantCase", () => {
++  test.each([
++    ["", ""],
++    ["foo", "FOO"],
++    ["fooBar", "FOO_BAR"],
++    ["foo-bar_baz", "FOO_BAR_BAZ"],
++    ["FooBarBaz", "FOO_BAR_BAZ"],
++    ["FOO_BAR", "FOO_BAR"],
++  ])("%s => %s", (input, expected) => {
++    expect(constantCase(input)).toBe(expected);
++  });
++
++  test("accepts arrays", () => {
++    expect(constantCase(["foo", "Bar"])).toBe("FOO_BAR");
++  });
++});
++
+ describe("upperFirst", () => {
+   test.each([
+     ["", ""],

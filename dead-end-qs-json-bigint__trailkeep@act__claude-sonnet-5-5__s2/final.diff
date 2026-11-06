@@ -1,0 +1,73 @@
+diff --git a/base.js b/base.js
+index bb2a093..0a1eef5 100644
+--- a/base.js
++++ b/base.js
+@@ -481,12 +481,21 @@ function parseValue(value, options, type) {
+ 		return [parseValue(value, options, type.slice(0, -2))];
+ 	}
+ 
++	if (type === 'json' && typeof value === 'string') {
++		try {
++			return JSON.parse(value);
++		} catch {
++			// A value that is not valid JSON stays a string.
++			return value;
++		}
++	}
++
+ 	if (type === 'number' && typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value))) {
+ 		return Number(value);
+ 	}
+ 
+ 	// An explicit type takes precedence over `parseNumbers` and `parseBooleans`. A value that does not match its type stays a string. With `arrayFormat: 'none'`, a single value with an array type is not an array and stays a string too.
+-	if (['boolean', 'number', 'string[]', 'number[]'].includes(type)) {
++	if (['boolean', 'number', 'json', 'string[]', 'number[]'].includes(type)) {
+ 		return value;
+ 	}
+ 
+diff --git a/readme.md b/readme.md
+index 3e2992b..d6edc1f 100644
+--- a/readme.md
++++ b/readme.md
+@@ -287,6 +287,22 @@ queryString.parse('?age=20&id=01234&zipcode=90210', {
+ //=> {age: 20, id: '01234', zipcode: '90210'}
+ ```
+ 
++- `'json'`: Parse `filter` as JSON. A value that is not valid JSON stays a string:
++
++```js
++import queryString from 'query-string';
++
++queryString.parse('?filter=%7B%22status%22%3A%22open%22%7D&other=%7Bnope', {
++	types: {
++		filter: 'json',
++		other: 'json',
++	}
++});
++//=> {filter: {status: 'open'}, other: '{nope'}
++```
++
++Note: The value is decoded with `JSON.parse()`, so an integer above `Number.MAX_SAFE_INTEGER` loses precision. Send large IDs as strings inside the JSON.
++
+ - `'string[]'`:  Parse `items` as an array of strings (overriding the `parseNumbers` option):
+ 
+ ```js
+diff --git a/test/parse.js b/test/parse.js
+index 00a1abf..03c734e 100644
+--- a/test/parse.js
++++ b/test/parse.js
+@@ -1492,3 +1492,14 @@ test('rejects an invalid `arrayFormatSeparator`', () => {
+ 
+ 	assert.deepEqual(structuredClone(queryString.parse('foo=a·b', {arrayFormat: 'separator', arrayFormatSeparator: '·'})), {foo: ['a', 'b']});
+ });
++
++test('parses a value with the json type', () => {
++	assert.deepEqual(structuredClone(queryString.parse('filter=%7B%22status%22%3A%22open%22%7D', {types: {filter: 'json'}})), {filter: {status: 'open'}});
++	const types = {a: 'json', b: 'json', c: 'json'};
++	assert.deepEqual(structuredClone(queryString.parse('a=%5B1%2C2%5D&b=true&c=1', {types})), {a: [1, 2], b: true, c: 1});
++});
++
++test('the json type leaves a value that is not valid JSON as a string', () => {
++	assert.deepEqual(structuredClone(queryString.parse('filter=%7Bnope&other=007', {parseNumbers: true, types: {filter: 'json', other: 'json'}})), {filter: '{nope', other: '007'});
++	assert.deepEqual(structuredClone(queryString.parse('filter', {types: {filter: 'json'}})), {filter: null});
++});

@@ -1,0 +1,10 @@
+# acme-feed
+
+Branch: acme-feed · Repo: local__tabulate-3956486444 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: Acme nightly feed runs 'tabulate -r jsonl -f tsv' on event dumps that end with blank lines. Done: _read_jsonl_file in tabulate/cli.py skips blank/whitespace-only lines (with a test). Malformed non-blank lines still raise, which was my choice.
+- 2026-11-06: Next task on acme-feed (user deferred it until the blank-line fix ships alone): records missing keys currently give empty cells; Acme's loader is a SAS job, so missing values must render as a single '.'. Not started.
+- 2026-11-06: Done: jsonl reader in tabulate/cli.py passes missingval='.' to tabulate by default (no flag; csv/rsv unchanged, still ''). Reason: Acme SAS loader needs single '.'; cron cmd 'tabulate -r jsonl -f tsv' has no extra flags. Note JSON null also renders '.' (my choice, side effect of tabulate's None handling).
+

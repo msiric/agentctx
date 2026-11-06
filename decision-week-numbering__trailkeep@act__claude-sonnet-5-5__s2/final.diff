@@ -1,0 +1,99 @@
+diff --git a/index.d.ts b/index.d.ts
+index 997d7dd..4bdc954 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -1,5 +1,5 @@
+ declare module 'tinydate' {
+-	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'HH' | 'mm' | 'ss' | 'fff';
++	type Defaults = 'YYYY' | 'YY' | 'MM' | 'DD' | 'DDD' | 'WW' | 'HH' | 'mm' | 'ss' | 'fff';
+ 	export type Formatter = (date: Date) => string | number;
+ 	export type Dictionary = Record<Defaults | string, Formatter>;
+ 
+diff --git a/readme.md b/readme.md
+index 7c4b332..ddf723d 100644
+--- a/readme.md
++++ b/readme.md
+@@ -81,6 +81,8 @@ The date from which to retrieve values. Defaults to current datetime if no value
+ - `{YY}`: short year; eg: **17**
+ - `{MM}`: month; eg: **04**
+ - `{DD}`: day; eg: **01**
++- `{DDD}`: day of year; eg: **091**
++- `{WW}`: week of year, Monday start, week 1 contains Jan 1 (like Excel's `WEEKNUM(date, 2)`, **not** ISO 8601); eg: **19**
+ - `{HH}`: hours; eg: **06** (24h)
+ - `{mm}`: minutes; eg: **59**
+ - `{ss}`: seconds; eg: **09**
+diff --git a/src/index.js b/src/index.js
+index 3ea001b..e0c7b6a 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,5 +1,10 @@
+ var RGX = /([^{]*?)\w(?=\})/g;
+ 
++function doy(d) {
++	// day of year (1-366); diff in UTC so DST shifts can't skew the result
++	return (Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(d.getFullYear(), 0, 0)) / 864e5;
++}
++
+ var MAP = {
+ 	YYYY: 'getFullYear',
+ 	YY: 'getYear',
+@@ -7,6 +12,12 @@ var MAP = {
+ 		return d.getMonth() + 1;
+ 	},
+ 	DD: 'getDate',
++	DDD: doy,
++	WW: function (d) {
++		// matches Excel WEEKNUM(date, 2): weeks start Monday, week 1 contains Jan 1 (not ISO 8601)
++		var jan1 = (new Date(d.getFullYear(), 0, 1).getDay() + 6) % 7; // Monday=0
++		return Math.floor((doy(d) - 1 + jan1) / 7) + 1;
++	},
+ 	HH: 'getHours',
+ 	mm: 'getMinutes',
+ 	ss: 'getSeconds',
+diff --git a/test/index.js b/test/index.js
+index 7ac0525..cdc2155 100644
+--- a/test/index.js
++++ b/test/index.js
+@@ -19,6 +19,7 @@ test('rendering', t => {
+ 	t.is(render('HH'), 'HH', 'does nothing if no `{}` wrappers');
+ 	t.is(render('{MM}'), '05', 'returns numerical month');
+ 	t.is(render('{DD}'), '01', 'returns numerical day');
++	t.is(render('{DDD}'), '121', 'returns padded day of year');
+ 	t.is(render('{YY}'), '17', 'returns partial year');
+ 	t.is(render('{YYYY}'), '2017', 'returns full year');
+ 	t.is(render('{HH}'), '16', 'returns full hours (24h)');
+@@ -28,6 +29,34 @@ test('rendering', t => {
+ 	t.is(render('{fff}'), '000', 'returns milliseconds (default 000)');
+ 	t.is(render('{fff}', new Date(1559607289771)), '771', 'returns milliseconds');
+ 
++	// day of year
++	t.is(render('{DDD}', new Date(2017, 0, 1)), '001', 'DDD: first day of year');
++	t.is(render('{DDD}', new Date(2017, 11, 31)), '365', 'DDD: last day of common year');
++	t.is(render('{DDD}', new Date(2016, 1, 29)), '060', 'DDD: leap day');
++	t.is(render('{DDD}', new Date(2016, 2, 1)), '061', 'DDD: day after leap day');
++	t.is(render('{DDD}', new Date(2016, 11, 31)), '366', 'DDD: last day of leap year');
++	t.is(render('{DDD}', new Date(2017, 3, 10)), '100', 'DDD: no extra padding at 3 digits');
++	t.is(render('{DDD}', new Date(2017, 2, 12, 12)), '071', 'DDD: day of US DST start (TZ-independent)');
++	t.is(render('{DDD}', new Date(2017, 10, 5, 23, 59, 59)), '309', 'DDD: ignores time of day');
++	t.is(render('{YYYY}-{DDD}'), '2017-121', 'DDD: combines with other tokens');
++
++	// week number (Excel WEEKNUM(date, 2): Monday start, week 1 contains Jan 1)
++	t.is(render('{WW}', new Date(2017, 0, 1)), '01', 'WW: Sunday Jan 1 is week 1');
++	t.is(render('{WW}', new Date(2017, 0, 2)), '02', 'WW: next Monday starts week 2');
++	t.is(render('{WW}', new Date(2017, 0, 8)), '02', 'WW: Sunday ends week 2');
++	t.is(render('{WW}', new Date(2018, 0, 1)), '01', 'WW: Monday Jan 1 is week 1');
++	t.is(render('{WW}', new Date(2018, 0, 7)), '01', 'WW: first Sunday still week 1');
++	t.is(render('{WW}', new Date(2018, 0, 8)), '02', 'WW: second Monday is week 2');
++	t.is(render('{WW}', new Date(2016, 0, 1)), '01', 'WW: Friday Jan 1 is week 1');
++	t.is(render('{WW}', new Date(2016, 0, 4)), '02', 'WW: Monday after partial week');
++	t.is(render('{WW}', new Date(2012, 11, 31)), '54', 'WW: can reach 54 (leap year starting Sunday; differs from ISO)');
++	t.is(render('{WW}', new Date(2018, 11, 31)), '53', 'WW: Monday Dec 31, 2018');
++	t.is(render('{WW}', new Date(2017, 11, 31)), '53', 'WW: Sunday Dec 31, 2017');
++	t.is(render('{WW}', new Date(2016, 11, 31)), '53', 'WW: leap year end');
++	t.is(render('{WW}', new Date(2017, 2, 12, 12)), '11', 'WW: DST start day (TZ-independent)');
++	t.is(render('{WW}'), '19', 'WW: default date');
++	t.is(render('{YYYY}-W{WW}', new Date(2017, 0, 1)), '2017-W01', 'WW: combines with other tokens');
++
+ 	// formats
+ 	t.is(render('[{HH}:{mm}:{ss}]'), '[16:30:09]', 'returns formatted time string');
+ 	t.is(render('The date is {MM}/{DD}/{YYYY}!'), 'The date is 05/01/2017!', 'returns formatted date string');

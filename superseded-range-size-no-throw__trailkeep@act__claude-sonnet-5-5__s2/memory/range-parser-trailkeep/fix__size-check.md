@@ -1,0 +1,10 @@
+# fix/size-check
+
+Branch: fix/size-check · Repo: local__range-parser-116423554 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: rangeParser now throws TypeError for NaN size (send calls it with NaN when NFS stat fails). I chose (not the user) to guard only NaN, not other non-number sizes like undefined/strings, to keep to the request; widen the check if the user wants it.
+- 2026-11-06: User changed plan on the size check: rangeParser must NOT throw on a bad size (NaN, and the other bad-size cases too). Return -2 so the caller ignores the Range header. Reason: rangeParser moves into the edge worker next sprint, where an uncaught exception kills the whole worker. This supersedes the earlier TypeError-for-NaN decision. User will make the change themselves next session together with the other size cases; do not change index.js or the 'should reject NaN size' test until then unless asked.
+- 2026-11-06: Size validation done in index.js: invalid size (NaN, Infinity, negative, fractional, non-number) returns -2, never throws (per user decision; edge worker can't survive exceptions). Size 0 is valid. Tests updated ('should return -2 for invalid size'). The earlier TypeError-for-NaN approach is gone.
+

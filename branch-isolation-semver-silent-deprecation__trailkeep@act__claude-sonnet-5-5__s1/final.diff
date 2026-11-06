@@ -1,0 +1,301 @@
+diff --git a/changelog.d/cli-v-prefix.feature.rst b/changelog.d/cli-v-prefix.feature.rst
+new file mode 100644
+index 0000000..154317b
+--- /dev/null
++++ b/changelog.d/cli-v-prefix.feature.rst
+@@ -0,0 +1,3 @@
++Every ``pysemver`` subcommand now accepts an optional leading ``v`` or ``V``
++on its version arguments (for example ``v1.4.2`` from a git tag). The output
++is printed without the prefix.
+diff --git a/changelog.d/compare-dict.deprecation.rst b/changelog.d/compare-dict.deprecation.rst
+new file mode 100644
+index 0000000..6c740e9
+--- /dev/null
++++ b/changelog.d/compare-dict.deprecation.rst
+@@ -0,0 +1,4 @@
++Passing a ``dict`` to ``Version.compare()`` is deprecated and now emits a
++``DeprecationWarning``. Pass a ``str``, ``tuple``, ``list`` or ``Version``
++instead (for example ``Version(**mydict)``). Comparison operators such as ``==``
++are not affected.
+diff --git a/changelog.d/next-version-token.deprecation.rst b/changelog.d/next-version-token.deprecation.rst
+new file mode 100644
+index 0000000..be7f4b7
+--- /dev/null
++++ b/changelog.d/next-version-token.deprecation.rst
+@@ -0,0 +1,3 @@
++``Version.next_version()`` now names its keyword ``token``, matching
++``bump_prerelease()`` and ``bump_build()``. The old ``prerelease_token=``
++keyword still works and is deprecated, but emits no warning.
+diff --git a/docs/usage/increase-parts-of-a-version_prereleases.rst b/docs/usage/increase-parts-of-a-version_prereleases.rst
+index bead3c9..7006660 100644
+--- a/docs/usage/increase-parts-of-a-version_prereleases.rst
++++ b/docs/usage/increase-parts-of-a-version_prereleases.rst
+@@ -33,7 +33,7 @@ while switching to an earlier token increments the patch version to prevent a do
+ .. code-block:: python
+ 
+     >>> v = Version.parse("1.2.3-alpha.1")
+-    >>> str(v.next_version("prerelease", prerelease_token="beta"))
++    >>> str(v.next_version("prerelease", token="beta"))
+     '1.2.3-beta.1'
+-    >>> str(Version.parse("1.2.3-rc.1").next_version("prerelease", prerelease_token="alpha"))
++    >>> str(Version.parse("1.2.3-rc.1").next_version("prerelease", token="alpha"))
+     '1.2.4-alpha.1'
+diff --git a/src/semver/cli.py b/src/semver/cli.py
+index 43e101e..023a219 100644
+--- a/src/semver/cli.py
++++ b/src/semver/cli.py
+@@ -18,6 +18,19 @@ from .version import Version
+ from .__about__ import __version__
+ 
+ 
++def _version_arg(value: str) -> str:
++    """
++    Argparse type for version arguments: strip one optional leading ``v``/``V``
++    (as in git tags like ``v1.4.2``).
++
++    :param value: the raw command line argument
++    :return: the argument without the leading ``v``/``V``
++    """
++    if value[:1] in ("v", "V"):
++        return value[1:]
++    return value
++
++
+ def cmd_bump(args: argparse.Namespace) -> str:
+     """
+     Subcommand: Bumps a version.
+@@ -99,8 +112,8 @@ def createparser() -> argparse.ArgumentParser:
+     # create compare subcommand
+     parser_compare = s.add_parser("compare", help="Compare two versions")
+     parser_compare.set_defaults(func=cmd_compare)
+-    parser_compare.add_argument("version1", help="First version")
+-    parser_compare.add_argument("version2", help="Second version")
++    parser_compare.add_argument("version1", type=_version_arg, help="First version")
++    parser_compare.add_argument("version2", type=_version_arg, help="Second version")
+ 
+     # create bump subcommand
+     parser_bump = s.add_parser("bump", help="Bumps a version")
+@@ -115,21 +128,21 @@ def createparser() -> argparse.ArgumentParser:
+         sb.add_parser("prerelease", help="Bump the prerelease part of the version"),
+         sb.add_parser("build", help="Bump the build part of the version"),
+     ):
+-        p.add_argument("version", help="Version to raise")
++        p.add_argument("version", type=_version_arg, help="Version to raise")
+ 
+     # Create the check subcommand
+     parser_check = s.add_parser(
+         "check", help="Checks if a string is a valid semver version"
+     )
+     parser_check.set_defaults(func=cmd_check)
+-    parser_check.add_argument("version", help="Version to check")
++    parser_check.add_argument("version", type=_version_arg, help="Version to check")
+ 
+     # Create the nextver subcommand
+     parser_nextver = s.add_parser(
+         "nextver", help="Determines the next version, taking prereleases into account."
+     )
+     parser_nextver.set_defaults(func=cmd_nextver)
+-    parser_nextver.add_argument("version", help="Version to raise")
++    parser_nextver.add_argument("version", type=_version_arg, help="Version to raise")
+     parser_nextver.add_argument(
+         "part", help="One of 'major', 'minor', 'patch', or 'prerelease'"
+     )
+diff --git a/src/semver/version.py b/src/semver/version.py
+index c3e5a73..165b97c 100644
+--- a/src/semver/version.py
++++ b/src/semver/version.py
+@@ -1,6 +1,7 @@
+ """Version handling by a semver compatible version class."""
+ 
+ import re
++import warnings
+ from functools import wraps
+ from typing import (
+     Any,
+@@ -461,6 +462,11 @@ build='build.10')
+         """
+         Compare self with other.
+ 
++        .. deprecated:: 3.1.0
++           Passing a :class:`dict` as ``other`` is deprecated and emits a
++           :class:`DeprecationWarning`. Use a :class:`str`, :class:`tuple`,
++           :class:`list` or :class:`Version` instead.
++
+         :param other: the second version
+         :return: The return value is negative if ver1 < ver2,
+              zero if ver1 == ver2 and strictly positive if ver1 > ver2
+@@ -476,6 +482,13 @@ build='build.10')
+         if isinstance(other, String.__args__):  # type: ignore
+             other = cls.parse(other)
+         elif isinstance(other, dict):
++            warnings.warn(
++                "Passing a dict to 'semver.Version.compare' is deprecated. "
++                "Pass a str, tuple, list or Version instead, for example "
++                "'Version(**mydict)'.",
++                DeprecationWarning,
++                stacklevel=2,
++            )
+             other = cls(**other)
+         elif isinstance(other, (tuple, list)):
+             other = cls(*other)
+@@ -503,7 +516,13 @@ build='build.10')
+ 
+         return rccmp
+ 
+-    def next_version(self, part: str, prerelease_token: str = "rc") -> "Version":
++    def next_version(
++        self,
++        part: str,
++        token: str = "rc",
++        *,
++        prerelease_token: Optional[str] = None,
++    ) -> "Version":
+         """
+         Determines next version, preserving natural order.
+ 
+@@ -531,9 +550,17 @@ build='build.10')
+         '1.2.4-rc10'
+ 
+         :param part: One of "major", "minor", "patch", or "prerelease"
+-        :param prerelease_token: prefix string of prerelease, defaults to 'rc'
++        :param token: prefix string of prerelease, defaults to 'rc'
++        :param prerelease_token: deprecated alias of ``token``; if given,
++            it takes precedence over ``token``
++
++        .. deprecated:: 3.0.0
++           Use ``token`` instead of ``prerelease_token``. The old keyword
++           keeps working and does not emit a warning.
+         :return: new object with the appropriate part raised
+         """
++        if prerelease_token is not None:
++            token = prerelease_token
+         cls = type(self)
+         # "build" is currently not used, that's why we use [:-1]
+         validparts = cls.NAMES[:-1]
+@@ -553,21 +580,21 @@ build='build.10')
+         if part in cls.NAMES[:3]:
+             return getattr(version, "bump_" + part)()
+         else:
+-            if version.prerelease and prerelease_token:
+-                prerelease_token = str(prerelease_token)
++            if version.prerelease and token:
++                token = str(token)
+                 cls._validate_identifiers(
+-                    prerelease_token,
++                    token,
+                     cls._PRERELEASE_IDENTIFIER,
+                     "prerelease token",
+                 )
+                 # Handle old-style prereleases like "rc3" (no dot separator)
+                 match = re.fullmatch(
+-                    rf"{re.escape(prerelease_token)}(\d+)", version.prerelease
++                    rf"{re.escape(token)}(\d+)", version.prerelease
+                 )
+                 if match:
+                     num = int(match.group(1))
+                     candidate = version.replace(
+-                        prerelease=f"{prerelease_token}{num + 1}", build=None
++                        prerelease=f"{token}{num + 1}", build=None
+                     )
+                     if candidate > version:
+                         return candidate
+@@ -576,16 +603,16 @@ build='build.10')
+                     )
+ 
+                 if not (
+-                    version.prerelease == prerelease_token
+-                    or version.prerelease.startswith(prerelease_token + ".")
++                    version.prerelease == token
++                    or version.prerelease.startswith(token + ".")
+                 ):
+                     candidate = version.replace(
+-                        prerelease=f"{prerelease_token}.1", build=None
++                        prerelease=f"{token}.1", build=None
+                     )
+                     if candidate > version:
+                         return candidate
+-                    return version.bump_patch().bump_prerelease(prerelease_token)
+-            return version.bump_prerelease(prerelease_token, bump_when_empty=True)
++                    return version.bump_patch().bump_prerelease(token)
++            return version.bump_prerelease(token, bump_when_empty=True)
+ 
+     @_comparator
+     def __eq__(self, other: Comparable) -> bool:  # type: ignore
+diff --git a/tests/test_compare.py b/tests/test_compare.py
+index 354f3fe..ba60a01 100644
+--- a/tests/test_compare.py
++++ b/tests/test_compare.py
+@@ -387,7 +387,28 @@ def test_direct_compare_with_collections():
+     v1 = Version(1, 0, 0)
+     assert v1.compare((1, 0, 0)) == 0
+     assert v1.compare([1, 0, 0]) == 0
+-    assert v1.compare({"major": 1, "minor": 0, "patch": 0}) == 0
++
++
++
++def test_direct_compare_with_dict_is_deprecated():
++    v1 = Version(1, 0, 0)
++    with pytest.warns(DeprecationWarning, match="dict to 'semver.Version.compare'") as rec:
++        assert v1.compare({"major": 1, "minor": 0, "patch": 0}) == 0
++    # the warning points at the caller, not at semver internals
++    assert rec[0].filename == __file__
++
++
++def test_no_deprecation_warning_for_other_compare_arguments():
++    import warnings
++
++    v1 = Version(1, 0, 0)
++    with warnings.catch_warnings():
++        warnings.simplefilter("error")
++        assert v1.compare("1.0.0") == 0
++        assert v1.compare((1, 0, 0)) == 0
++        assert v1.compare([1, 0, 0]) == 0
++        assert v1.compare(Version(1, 0, 0)) == 0
++        assert v1 == {"major": 1, "minor": 0, "patch": 0}
+ 
+ @pytest.mark.parametrize(
+     "other",
+diff --git a/tests/test_pysemver-cli.py b/tests/test_pysemver-cli.py
+index 9933b0d..a850322 100644
+--- a/tests/test_pysemver-cli.py
++++ b/tests/test_pysemver-cli.py
+@@ -4,6 +4,7 @@ from unittest.mock import patch
+ 
+ import pytest
+ 
++from semver.cli import main as cli_main
+ from semver import (
+     cmd_bump,
+     cmd_check,
+@@ -155,3 +156,31 @@ def test_should_return_documented_error_code_for_invalid_version(cliargs, capsys
+     # docs/pysemver.rst shows ``echo $?`` printing 2 for both commands
+     assert main(cliargs) == 2
+     assert capsys.readouterr().err.startswith("ERROR")
++
++
++@pytest.mark.parametrize("prefix", ["v", "V"])
++@pytest.mark.parametrize(
++    "cliargs,expected",
++    [
++        (["bump", "major", "{v}1.2.3"], "2.0.0"),
++        (["bump", "minor", "{v}1.2.3"], "1.3.0"),
++        (["bump", "patch", "{v}1.2.3"], "1.2.4"),
++        (["bump", "prerelease", "{v}1.2.3-rc.1"], "1.2.3-rc.2"),
++        (["bump", "build", "{v}1.2.3+build.1"], "1.2.3+build.2"),
++        (["nextver", "{v}1.2.3", "minor"], "1.3.0"),
++        (["compare", "{v}1.2.3", "{v}1.2.4"], "-1"),
++        (["compare", "{v}1.2.3", "1.2.3"], "0"),
++        (["compare", "1.2.4", "{v}1.2.3"], "1"),
++        (["check", "{v}1.2.3"], None),
++    ],
++)
++def test_cli_accepts_leading_v(prefix, cliargs, expected, capsys):
++    cliargs = [a.format(v=prefix) for a in cliargs]
++    assert cli_main(cliargs) == 0
++    out = capsys.readouterr().out.strip()
++    assert out == (expected or "")
++
++
++@pytest.mark.parametrize("arg", ["vv1.2.3", "v", "v-1.2.3", "1.2.3v"])
++def test_cli_rejects_malformed_v_prefix(arg, capsys):
++    assert cli_main(["check", arg]) == 2

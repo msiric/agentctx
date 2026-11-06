@@ -22,6 +22,8 @@
 | resume (control) | claude-sonnet-5-5 | 2 | 6 | 100% (100%-100%) | 139246 | 15971 | - |
 | trailkeep | claude-sonnet-5-5 | 48 | 126 | 78% (68%-86%) | 137764 | 16717 | 2 |
 | trailkeep (control) | claude-sonnet-5-5 | 1 | 3 | 100% (100%-100%) | 201954 | 16399 | - |
+| trailkeep@act | claude-sonnet-5-5 | 44 | 88 | 90% (81%-97%) | 143268 | 16970 | 2 |
+| trailkeep@act (control) | claude-sonnet-5-5 | 1 | 2 | 100% (100%-100%) | 135654 | 16514 | - |
 | trailkeep@capture | claude-sonnet-5-5 | 11 | 33 | 91% (73%-100%) | 140380 | 16655 | 1 |
 | trailkeep@capture (control) | claude-sonnet-5-5 | 1 | 3 | 100% (100%-100%) | 104994 | 16424 | - |
 | trailkeep@finish | claude-sonnet-5-5 | 22 | 66 | 91% (82%-98%) | 139241 | 16771 | 3 |
@@ -46,6 +48,7 @@ Paired difference in pass rate vs `none` (same trap and seed, non-control traps)
 | oracle-note | claude-sonnet-5-5 | 180 | +82% (+73% to +91%) |
 | resume | claude-sonnet-5-5 | 51 | +69% (+47% to +88%) |
 | trailkeep | claude-sonnet-5-5 | 126 | +75% (+65% to +83%) |
+| trailkeep@act | claude-sonnet-5-5 | 88 | +86% (+77% to +94%) |
 | trailkeep@capture | claude-sonnet-5-5 | 33 | +88% (+70% to +100%) |
 | trailkeep@finish | claude-sonnet-5-5 | 66 | +88% (+79% to +95%) |
 | trailkeep@scope | claude-sonnet-5-5 | 33 | +91% (+82% to +100%) |

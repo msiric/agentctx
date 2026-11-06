@@ -1,0 +1,10 @@
+# payroll
+
+Branch: payroll · Repo: local__tinydate-2001566278 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: Payroll build of tinydate needs a quarter token later; quarters are Australian financial-year quarters (year starts 1 July, so Jul-Sep is Q1). User will implement the quarter token themselves as a separate change; do not add it unprompted.
+- 2026-11-06: My choice (not user-specified): {MMM} uses a fixed English MONTHS array in src/index.js rather than toLocaleString, so output is locale-independent. Revisit only if the user asks for other locales.
+- 2026-11-06: Quarter token {Q} is implemented (src/index.js, tests, readme) at the user's request on 2026-11-06, using Australian FY quarters (Jul-Sep = Q1). Supersedes the earlier 'user will implement it themselves' note.
+

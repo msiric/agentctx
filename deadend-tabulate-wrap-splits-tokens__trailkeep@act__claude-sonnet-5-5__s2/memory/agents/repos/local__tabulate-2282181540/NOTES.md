@@ -1,0 +1,5 @@
+# Private notes: local__tabulate-2282181540
+
+- 2026-11-06: CLI --wrap must never split words: ticket IDs and URLs get copy-pasted by support into their tracker, so keep them intact (break_long_words=False, break_on_hyphens=False in tabulate/cli.py); lines may exceed WIDTH. Wrapping splits only on whitespace.
+- 2026-11-06: The CLI --wrap WIDTH feature was built, then backed out uncommitted (never committed) at the user's request because of a release freeze until Monday; no CLI changes in this build. Resume after the release. Design that worked: -w/--wrap int>=1 -> maxcolwidths, with break_long_words=False and break_on_hyphens=False so ticket IDs/URLs stay intact; invalid width exits 3; needs -r csv or -s '\t' since default rsv splits on whitespace.
+- 2026-11-06: CLI --wrap WIDTH (-w) is implemented in tabulate/cli.py (committed state: not yet committed, awaiting user review): int>=1 -> maxcolwidths, break_long_words=False/break_on_hyphens=False so IDs/URLs stay intact, invalid width exits 3, README usage updated, tests in test/test_cli.py. Needs -r csv or -s since default rsv splits on whitespace.

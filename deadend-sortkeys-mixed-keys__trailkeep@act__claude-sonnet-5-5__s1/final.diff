@@ -1,0 +1,114 @@
+diff --git a/tests/test_storages.py b/tests/test_storages.py
+index 6e433a1..21a13ba 100644
+--- a/tests/test_storages.py
++++ b/tests/test_storages.py
+@@ -49,6 +49,41 @@ def test_json_kwargs(tmpdir):
+     db.close()
+ 
+ 
++def test_json_sorts_keys_by_default(tmpdir):
++    path = str(tmpdir.join('test.db'))
++    storage = JSONStorage(path)
++    storage.write({'b': 1, 'a': {'d': 1, 'c': 2}})
++    storage.close()
++
++    with open(path) as f:
++        assert f.read() == '{"a": {"c": 2, "d": 1}, "b": 1}'
++
++
++def test_json_sort_keys_opt_out(tmpdir):
++    path = str(tmpdir.join('test.db'))
++    storage = JSONStorage(path, sort_keys=False)
++    storage.write({'b': 1, 'a': 2})
++    storage.close()
++
++    with open(path) as f:
++        assert f.read() == '{"b": 1, "a": 2}'
++
++
++def test_json_sort_keys_mixed_key_types(tmpdir):
++    path = str(tmpdir.join('test.db'))
++    data = {'hits': {200: 1520, 'other': 3}}
++
++    storage = JSONStorage(path)
++    storage.write(data)
++    assert storage.read() == {'hits': {'200': 1520, 'other': 3}}
++    storage.close()
++
++    db = TinyDB(str(tmpdir.join('db.json')))
++    db.insert(data)
++    assert db.all() == [{'hits': {'200': 1520, 'other': 3}}]
++    db.close()
++
++
+ def test_json_readwrite(tmpdir):
+     """
+     Regression test for issue #1
+diff --git a/tinydb/storages.py b/tinydb/storages.py
+index 59337a1..e9a0bff 100644
+--- a/tinydb/storages.py
++++ b/tinydb/storages.py
+@@ -33,6 +33,33 @@ def touch(path: str, create_dirs: bool):
+         pass
+ 
+ 
++def _json_key(key: Any) -> Any:
++    # Mirror how ``json.dumps`` converts non-string keys so that mixed-type
++    # keys can be sorted. Other key types are left alone so that ``json``
++    # raises its usual error (or honors ``skipkeys``).
++    if isinstance(key, str):
++        return key
++    if key is True:
++        return 'true'
++    if key is False:
++        return 'false'
++    if key is None:
++        return 'null'
++    if isinstance(key, float):
++        return float.__repr__(key)
++    if isinstance(key, int):
++        return int.__repr__(key)
++    return key
++
++
++def _stringify_keys(obj: Any) -> Any:
++    if isinstance(obj, dict):
++        return {_json_key(k): _stringify_keys(v) for k, v in obj.items()}
++    if isinstance(obj, (list, tuple)):
++        return [_stringify_keys(v) for v in obj]
++    return obj
++
++
+ class Storage(ABC):
+     """
+     The abstract base class for all Storages.
+@@ -98,12 +125,17 @@ class JSONStorage(Storage):
+         :param path: Where to store the JSON data.
+         :param access_mode: mode in which the file is opened (r, r+)
+         :type access_mode: str
++
++        By default, keys are written sorted (``sort_keys=True``) so the file
++        content is stable between writes. Non-string keys are converted to
++        strings first, so mixed key types (e.g. ``{200: 1, 'other': 3}``) can
++        be sorted. Pass ``sort_keys=False`` to keep insertion order.
+         """
+ 
+         super().__init__()
+ 
+         self._mode = access_mode
+-        self.kwargs = kwargs
++        self.kwargs = {'sort_keys': True, **kwargs}
+ 
+         if access_mode not in ('r', 'rb', 'r+', 'rb+'):
+             warnings.warn(
+@@ -144,6 +176,10 @@ class JSONStorage(Storage):
+         self._handle.seek(0)
+ 
+         # Serialize the database state using the user-provided arguments
++        if self.kwargs.get('sort_keys'):
++            # ``json.dumps(sort_keys=True)`` fails on mixed-type keys
++            data = _stringify_keys(data)
++
+         serialized = json.dumps(data, **self.kwargs)
+ 
+         # Write the serialized data to the file

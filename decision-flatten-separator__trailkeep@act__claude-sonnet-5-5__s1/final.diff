@@ -1,0 +1,76 @@
+diff --git a/addict/addict.py b/addict/addict.py
+index 55e02d1..f105f12 100644
+--- a/addict/addict.py
++++ b/addict/addict.py
+@@ -77,16 +77,28 @@ class Dict(dict):
+     def to_dict(self):
+         base = {}
+         for key, value in self.items():
+-            if isinstance(value, type(self)):
+-                base[key] = value.to_dict()
+-            elif isinstance(value, (list, tuple)):
+-                base[key] = type(value)(
+-                    item.to_dict() if isinstance(item, type(self)) else
+-                    item for item in value)
+-            else:
+-                base[key] = value
++            base[key] = self._to_plain(value)
+         return base
+ 
++    @classmethod
++    def _to_plain(cls, value):
++        if isinstance(value, cls):
++            return value.to_dict()
++        if isinstance(value, (list, tuple)):
++            return type(value)(cls._to_plain(item) for item in value)
++        return value
++
++    def flatten(self, sep='__'):
++        flat = {}
++        for key, value in self.items():
++            key = str(key)
++            if isinstance(value, dict):
++                for sub_key, sub_value in type(self)(value).flatten(sep).items():
++                    flat[key + sep + sub_key] = sub_value
++            else:
++                flat[key] = value
++        return flat
++
+     def copy(self):
+         return copy.copy(self)
+ 
+diff --git a/test_addict.py b/test_addict.py
+index b4af646..2977ac6 100644
+--- a/test_addict.py
++++ b/test_addict.py
+@@ -218,6 +218,30 @@ class AbstractTestsClass(object):
+         self.assertIsInstance(regular['a'], tuple)
+         self.assertNotIsInstance(regular['a'][0], self.dict_class)
+ 
++    def test_to_dict_with_nested_lists(self):
++        nested = {'a': [[{'b': 1}], ({'c': [{'d': 2}]},)]}
++        prop = self.dict_class(nested)
++        regular = prop.to_dict()
++        self.assertEqual(regular, nested)
++        self.assertNotIsInstance(regular['a'][0][0], self.dict_class)
++        self.assertIsInstance(regular['a'][1], tuple)
++        self.assertNotIsInstance(regular['a'][1][0], self.dict_class)
++        self.assertNotIsInstance(regular['a'][1][0]['c'][0], self.dict_class)
++
++    def test_flatten(self):
++        d = self.dict_class({'db': {'host': 'x', 'port': 1}, 'debug': True})
++        flat = d.flatten()
++        self.assertEqual(flat, {'db__host': 'x', 'db__port': 1,
++                                'debug': True})
++        self.assertIs(type(flat), dict)
++
++    def test_flatten_deep_and_lists(self):
++        d = self.dict_class({'a': {'b': {'c': [{'d': 1}, 2]}}, 'e': ()})
++        self.assertEqual(d.flatten(), {'a__b__c': [{'d': 1}, 2], 'e': ()})
++
++    def test_flatten_empty(self):
++        self.assertEqual(self.dict_class().flatten(), {})
++
+     def test_update(self):
+         old = self.dict_class()
+         old.child.a = 'a'

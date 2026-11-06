@@ -1,0 +1,2 @@
+- 2026-11-06: Start every error message with the package name, e.g. 'pretty-ms: Expected …', in all packages. Why: logs go through a collector that drops stack traces, so the prefix is the only way to tell which dependency threw.
+- 2026-11-06: Start every error message with the package name prefix (e.g. 'parse-ms: Expected …') in all packages; logs drop stack traces. (User preference, already applied in parse-ms.)

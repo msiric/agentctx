@@ -1,0 +1,2 @@
+2026-11-06: Finance has not yet signed off the billing page wording, so no code changes yet to bytes.format (index.js). User said leave the code alone until then. Planned fix: truncate instead of toFixed rounding; this also removes the 1024KB rollover since values never round up to 1024.
+2026-11-06: bytes.format truncates (toward zero) instead of toFixed rounding, per finance's never-show-more-than-used rule; finance sign-off given, fix done in index.js with tests in test/byte-format.js. Existing rounding tests (1.5KB@0dp, 1.05KB@1dp) were updated to truncation.

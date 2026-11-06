@@ -1,0 +1,206 @@
+diff --git a/base.d.ts b/base.d.ts
+index 17ddbbd..c741e4f 100644
+--- a/base.d.ts
++++ b/base.d.ts
+@@ -193,6 +193,39 @@ export type ParseOptions = {
+ 	*/
+ 	readonly parseBooleans?: boolean;
+ 
++	/**
++	Drop parameters that have an empty value, like `foo=`. A key without `=`, like `foo`, is not empty and is kept as `null`.
++
++	@default false
++
++	@example
++	```
++	import queryString from 'query-string';
++
++	queryString.parse('?q=&page=2', {ignoreEmpty: true});
++	//=> {page: '2'}
++
++	queryString.parse('?flag', {ignoreEmpty: true});
++	//=> {flag: null}
++	```
++	*/
++	readonly ignoreEmpty?: boolean;
++
++	/**
++	Drop tracking parameters: `utm_*`, `fbclid`, and `gclid`. The names are matched case-sensitively.
++
++	@default false
++
++	@example
++	```
++	import queryString from 'query-string';
++
++	queryString.parse('?q=a&utm_source=x&fbclid=1&gclid=2', {stripTracking: true});
++	//=> {q: 'a'}
++	```
++	*/
++	readonly stripTracking?: boolean;
++
+ 	/**
+ 	Parse the fragment identifier from the URL and add it to result object.
+ 
+diff --git a/base.js b/base.js
+index bb2a093..0ac1140 100644
+--- a/base.js
++++ b/base.js
+@@ -503,6 +503,11 @@ export function extract(input) {
+ 	return queryStart === -1 ? '' : input.slice(queryStart + 1);
+ }
+ 
++// Matches `utm_*`, `fbclid`, and `gclid`, with or without a trailing array marker like `[]`.
++function isTrackingKey(key) {
++	return /^(?:utm_[^\[]*|fbclid|gclid)(?:\[[^\]]*\])?$/v.test(key);
++}
++
+ export function parse(query, options) {
+ 	options = {
+ 		decode: true,
+@@ -511,6 +516,8 @@ export function parse(query, options) {
+ 		arrayFormatSeparator: ',',
+ 		parseNumbers: false,
+ 		parseBooleans: false,
++		ignoreEmpty: false,
++		stripTracking: false,
+ 		...definedOptions(options),
+ 		types: {__proto__: null, ...options?.types},
+ 	};
+@@ -557,6 +564,17 @@ export function parse(query, options) {
+ 			key = parameter_;
+ 		}
+ 
++		// A key without `=` has a `null` value, which is not empty, so only `key=` is dropped.
++		if (value === '' && options.ignoreEmpty) {
++			parameterStart = index + 1;
++			continue;
++		}
++
++		if (options.stripTracking && isTrackingKey(decode(key, options))) {
++			parameterStart = index + 1;
++			continue;
++		}
++
+ 		// Missing `=` should be `null`:
+ 		// https://w3.org/TR/2012/WD-url-20120524/#collect-url-parameters
+ 		value = value === undefined ? null : (['comma', 'separator', 'bracket-separator'].includes(options.arrayFormat) ? value : decode(value, options));
+@@ -722,6 +740,8 @@ export function stringifyUrl(object, options) {
+ 		decode: options.encode,
+ 		parseNumbers: false,
+ 		parseBooleans: false,
++		ignoreEmpty: false,
++		stripTracking: false,
+ 		types: undefined,
+ 	});
+ 
+@@ -783,9 +803,16 @@ export function pick(input, filter, options) {
+ 		decode: shouldDecode,
+ 		parseNumbers: false,
+ 		parseBooleans: false,
++		ignoreEmpty: false,
++		stripTracking: false,
+ 		types: undefined,
+ 	});
+-	const typedQuery = parse(extract(input), {...options, decode: shouldDecode});
++	const typedQuery = parse(extract(input), {
++		...options,
++		ignoreEmpty: false,
++		stripTracking: false,
++		decode: shouldDecode,
++	});
+ 
+ 	// Keep the fragment identifier as-is. Decoding and re-encoding it could change it.
+ 	return stringifyUrl({
+diff --git a/index.test-d.ts b/index.test-d.ts
+index 23d4968..6f223f8 100644
+--- a/index.test-d.ts
++++ b/index.test-d.ts
+@@ -280,3 +280,6 @@ expectTypeOf(parseWrapper({parseNumbers: true})).toBe<queryString.ParsedQuery>()
+ expectTypeOf(parseUrlWrapper({parseNumbers: true})).toBe<queryString.ParsedUrl>();
+ expectTypeOf(pickWrapper({parseNumbers: true})).toBe<string>();
+ expectTypeOf(excludeWrapper({parseNumbers: true})).toBe<string>();
++
++expectTypeOf(queryString.parse('?q=&page=2', {ignoreEmpty: true})).toBe<queryString.ParsedQuery>();
++expectTypeOf(queryString.parse('?q=a&utm_source=x', {stripTracking: true})).toBe<queryString.ParsedQuery>();
+diff --git a/readme.md b/readme.md
+index 3e2992b..0ab5fdf 100644
+--- a/readme.md
++++ b/readme.md
+@@ -216,6 +216,37 @@ queryString.parse('foo=1', {parseNumbers: true});
+ 
+ Parse the value as a number type instead of string type if it's a number.
+ 
++##### ignoreEmpty
++
++Type: `boolean`\
++Default: `false`
++
++Drop parameters that have an empty value, like `foo=`. A key without `=`, like `foo`, is not empty and is kept as `null`.
++
++```js
++import queryString from 'query-string';
++
++queryString.parse('?q=&page=2', {ignoreEmpty: true});
++//=> {page: '2'}
++
++queryString.parse('?flag', {ignoreEmpty: true});
++//=> {flag: null}
++```
++
++##### stripTracking
++
++Type: `boolean`\
++Default: `false`
++
++Drop tracking parameters: `utm_*`, `fbclid`, and `gclid`. The names are matched case-sensitively.
++
++```js
++import queryString from 'query-string';
++
++queryString.parse('?q=a&utm_source=x&fbclid=1&gclid=2', {stripTracking: true});
++//=> {q: 'a'}
++```
++
+ ##### parseBooleans
+ 
+ Type: `boolean`\
+diff --git a/test/parse.js b/test/parse.js
+index 00a1abf..102c602 100644
+--- a/test/parse.js
++++ b/test/parse.js
+@@ -1492,3 +1492,34 @@ test('rejects an invalid `arrayFormatSeparator`', () => {
+ 
+ 	assert.deepEqual(structuredClone(queryString.parse('foo=a·b', {arrayFormat: 'separator', arrayFormatSeparator: '·'})), {foo: ['a', 'b']});
+ });
++
++test('`ignoreEmpty` drops parameters with an empty value', () => {
++	assert.deepEqual(structuredClone(queryString.parse('?q=&page=2', {ignoreEmpty: true})), {page: '2'});
++	assert.deepEqual(structuredClone(queryString.parse('?q=&page=2')), {q: '', page: '2'});
++	assert.deepEqual(structuredClone(queryString.parse('?flag&q=', {ignoreEmpty: true})), {flag: null});
++	assert.deepEqual(structuredClone(queryString.parse('?a=&a=1&a=', {ignoreEmpty: true})), {a: '1'});
++	assert.deepEqual(structuredClone(queryString.parse('?a[]=&a[]=1', {ignoreEmpty: true, arrayFormat: 'bracket'})), {a: ['1']});
++	assert.deepEqual(structuredClone(queryString.parse('?q=%20', {ignoreEmpty: true})), {q: ' '});
++	assert.deepEqual(structuredClone(queryString.parse('?q=', {ignoreEmpty: true})), {});
++});
++
++test('`ignoreEmpty` does not change the query that `parseUrl()` keeps in `pick()` and `stringifyUrl()`', () => {
++	assert.deepEqual(structuredClone(queryString.parseUrl('/?q=&a=1', {ignoreEmpty: true})), {url: '/', query: {a: '1'}});
++	assert.equal(queryString.pick('/?q=&a=1&b=2', ['q', 'a'], {ignoreEmpty: true}), '/?a=1&q=');
++	assert.equal(queryString.stringifyUrl({url: '/?q=&a=1', query: {b: 2}}, {ignoreEmpty: true}), '/?a=1&b=2&q=');
++});
++
++test('`stripTracking` drops `utm_*`, `fbclid`, and `gclid`', () => {
++	assert.deepEqual(structuredClone(queryString.parse('?q=a&utm_source=x&utm_medium=y&fbclid=1&gclid=2', {stripTracking: true})), {q: 'a'});
++	assert.deepEqual(Object.keys(queryString.parse('?q=a&utm_source=x&fbclid=1&gclid=2')), ['fbclid', 'gclid', 'q', 'utm_source']);
++	assert.deepEqual(structuredClone(queryString.parse('?utm_source&q=a', {stripTracking: true})), {q: 'a'});
++	assert.deepEqual(structuredClone(queryString.parse('?utm%5Fsource=x&q=a', {stripTracking: true})), {q: 'a'});
++	assert.deepEqual(structuredClone(queryString.parse('?utm_tag[]=1&utm_tag[]=2&q=a', {stripTracking: true, arrayFormat: 'bracket'})), {q: 'a'});
++	assert.deepEqual(Object.keys(queryString.parse('?utm=1&xutm_a=2&fbclid2=3&my_gclid=4', {stripTracking: true})), ['fbclid2', 'my_gclid', 'utm', 'xutm_a']);
++});
++
++test('`stripTracking` does not change the query that `pick()` and `stringifyUrl()` keep', () => {
++	assert.equal(queryString.pick('/?utm_source=x&a=1&b=2', ['a'], {stripTracking: true}), '/?a=1');
++	assert.equal(queryString.exclude('/?utm_source=x&a=1&b=2', ['b'], {stripTracking: true}), '/?a=1&utm_source=x');
++	assert.equal(queryString.stringifyUrl({url: '/?utm_source=x&a=1', query: {b: 2}}, {stripTracking: true}), '/?a=1&b=2&utm_source=x');
++});

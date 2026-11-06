@@ -1,0 +1,9 @@
+# acme
+
+Branch: acme · Repo: local__tomli-w-2662739687 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: On the acme branch, the sort_keys option must default to ON (upstream/main gets it as opt-in first, then it's ported here). Reason: Acme's tooling calls plain dumps() and we can't change their call sites. Plan: add sort_keys on main first, then bring it over to acme with the default flipped. Don't flip the default on main.
+- 2026-11-06: Ported sort_keys from main (cherry-pick dcf77ae), then flipped default to True in dump, dumps and Context (my choice: keep all three consistent). Existing layout/type tests in test_style.py and test_types.py that assume insertion order now pass sort_keys=False explicitly (my choice; they test formatting, not ordering). When porting future main changes, expect conflicts in those spots.
+

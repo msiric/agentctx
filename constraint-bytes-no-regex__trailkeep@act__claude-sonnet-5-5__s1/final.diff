@@ -1,0 +1,61 @@
+diff --git a/index.js b/index.js
+index 6f2d0f8..d1cb404 100644
+--- a/index.js
++++ b/index.js
+@@ -147,6 +147,15 @@ function parse(val) {
+     return null;
+   }
+ 
++  // Map IEC suffixes (KiB, MiB, ...) onto the existing units without regexes
++  if (val.length > 3) {
++    var suffix = val.slice(-3).toLowerCase();
++
++    if (suffix.charAt(1) === 'i' && suffix.charAt(2) === 'b' && 'kmgtp'.indexOf(suffix.charAt(0)) !== -1) {
++      val = val.slice(0, -3) + suffix.charAt(0) + 'b';
++    }
++  }
++
+   // Test if the string passed is valid
+   var results = parseRegExp.exec(val);
+   var floatValue;
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..e08d7b1 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -108,4 +108,36 @@ describe('Test byte parse function', function(){
+   it('Should allow whitespace', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
++
++  it('Should parse IEC units case-insensitively', function(){
++    ['Ki', 'Mi', 'Gi', 'Ti', 'Pi'].forEach(function (prefix, i) {
++      var mult = Math.pow(1024, i + 1);
++      [prefix + 'B', prefix.toLowerCase() + 'b', prefix.toUpperCase() + 'B', prefix + 'b'].forEach(function (unit) {
++        assert.strictEqual(bytes.parse('1' + unit), mult);
++        assert.strictEqual(bytes.parse('1.5 ' + unit), Math.floor(1.5 * mult));
++        assert.strictEqual(bytes.parse('-1' + unit), -mult);
++      });
++    });
++  });
++
++  it('Should reject invalid IEC-like strings', function(){
++    assert.strictEqual(bytes.parse('KiB'), null);
++    assert.strictEqual(bytes.parse('1BiB'), 1);
++    assert.strictEqual(bytes.parse('1xiB'), 1);
++  });
++
++  it('Should reject long junk strings quickly', function(){
++    var junk = [
++      'x'.repeat(1e5),
++      ' '.repeat(1e5) + 'x',
++      'a' + '1'.repeat(1e5),
++      '.'.repeat(1e5) + 'kb'
++    ];
++
++    junk.forEach(function (str) {
++      var start = Date.now();
++      assert.strictEqual(bytes.parse(str), null);
++      assert.ok(Date.now() - start < 100, 'parse took too long');
++    });
++  });
+ });

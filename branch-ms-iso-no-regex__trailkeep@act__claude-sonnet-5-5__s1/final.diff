@@ -1,0 +1,489 @@
+diff --git a/src/format-iso.test.ts b/src/format-iso.test.ts
+new file mode 100644
+index 0000000..de6cd59
+--- /dev/null
++++ b/src/format-iso.test.ts
+@@ -0,0 +1,58 @@
++import { describe, expect, it } from '@jest/globals';
++import { formatISO } from './index';
++
++describe('formatISO(number)', () => {
++  it('should format hours and minutes', () => {
++    expect(formatISO(5400000)).toBe('PT1H30M');
++  });
++
++  it('should format days, hours, minutes and seconds', () => {
++    expect(formatISO(90061000)).toBe('P1DT1H1M1S');
++  });
++
++  it('should omit the time designator when there is no time part', () => {
++    expect(formatISO(86400000)).toBe('P1D');
++    expect(formatISO(7 * 86400000)).toBe('P7D');
++    expect(formatISO(400 * 86400000)).toBe('P400D');
++  });
++
++  it('should format single units', () => {
++    expect(formatISO(3600000)).toBe('PT1H');
++    expect(formatISO(60000)).toBe('PT1M');
++    expect(formatISO(1000)).toBe('PT1S');
++  });
++
++  it('should skip zero components', () => {
++    expect(formatISO(86400000 + 1000)).toBe('P1DT1S');
++  });
++
++  it('should format zero', () => {
++    expect(formatISO(0)).toBe('PT0S');
++  });
++
++  it('should support fractional seconds', () => {
++    expect(formatISO(500)).toBe('PT0.5S');
++    expect(formatISO(1500)).toBe('PT1.5S');
++    expect(formatISO(1001)).toBe('PT1.001S');
++    expect(formatISO(1050)).toBe('PT1.05S');
++  });
++
++  it('should round to the nearest millisecond', () => {
++    expect(formatISO(1000.4)).toBe('PT1S');
++    expect(formatISO(1000.6)).toBe('PT1.001S');
++    expect(formatISO(0.4)).toBe('PT0S');
++    expect(formatISO(-0.4)).toBe('PT0S');
++  });
++
++  it('should support negative values', () => {
++    expect(formatISO(-5400000)).toBe('-PT1H30M');
++    expect(formatISO(-90061000)).toBe('-P1DT1H1M1S');
++  });
++
++  it('should throw on non-finite or non-number values', () => {
++    expect(() => formatISO(NaN)).toThrow();
++    expect(() => formatISO(Infinity)).toThrow();
++    // @ts-expect-error testing runtime validation
++    expect(() => formatISO('1h')).toThrow();
++  });
++});
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..127840a 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -6,30 +6,21 @@ const w = d * 7;
+ const y = d * 365.25;
+ const mo = y / 12;
+ 
+-type Years = 'years' | 'year' | 'yrs' | 'yr' | 'y';
+-type Months = 'months' | 'month' | 'mo';
+-type Weeks = 'weeks' | 'week' | 'w';
+-type Days = 'days' | 'day' | 'd';
+-type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h';
+-type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm';
+-type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's';
+-type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms';
++type Years = "years" | "year" | "yrs" | "yr" | "y";
++type Months = "months" | "month" | "mo";
++type Weeks = "weeks" | "week" | "w";
++type Days = "days" | "day" | "d";
++type Hours = "hours" | "hour" | "hrs" | "hr" | "h";
++type Minutes = "minutes" | "minute" | "mins" | "min" | "m";
++type Seconds = "seconds" | "second" | "secs" | "sec" | "s";
++type Milliseconds = "milliseconds" | "millisecond" | "msecs" | "msec" | "ms";
+ type Unit =
+-  | Years
+-  | Months
+-  | Weeks
+-  | Days
+-  | Hours
+-  | Minutes
+-  | Seconds
+-  | Milliseconds;
++  Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds;
+ 
+ type UnitAnyCase = Capitalize<Unit> | Uppercase<Unit> | Unit;
+ 
+ export type StringValue =
+-  | `${number}`
+-  | `${number}${UnitAnyCase}`
+-  | `${number} ${UnitAnyCase}`;
++  `${number}` | `${number}${UnitAnyCase}` | `${number} ${UnitAnyCase}`;
+ 
+ interface Options {
+   /**
+@@ -51,9 +42,9 @@ export function ms(
+   value: StringValue | number,
+   options?: Options,
+ ): number | string {
+-  if (typeof value === 'string') {
++  if (typeof value === "string") {
+     return parse(value);
+-  } else if (typeof value === 'number') {
++  } else if (typeof value === "number") {
+     return format(value, options);
+   }
+   throw new Error(
+@@ -69,7 +60,7 @@ export function ms(
+  * parsed
+  */
+ export function parse(str: string): number {
+-  if (typeof str !== 'string' || str.length === 0 || str.length > 100) {
++  if (typeof str !== "string" || str.length === 0 || str.length > 100) {
+     throw new Error(
+       `Value provided to ms.parse() must be a string with length between 1 and 99. value=${JSON.stringify(str)}`,
+     );
+@@ -85,7 +76,7 @@ export function parse(str: string): number {
+ 
+   // Named capture groups need to be manually typed today.
+   // https://github.com/microsoft/TypeScript/issues/32098
+-  const { value, unit = 'ms' } = match.groups as {
++  const { value, unit = "ms" } = match.groups as {
+     value: string;
+     unit: string | undefined;
+   };
+@@ -96,47 +87,47 @@ export function parse(str: string): number {
+ 
+   /* istanbul ignore next - istanbul doesn't understand, but thankfully the TypeScript the exhaustiveness check in the default case keeps us type safe here */
+   switch (matchUnit) {
+-    case 'years':
+-    case 'year':
+-    case 'yrs':
+-    case 'yr':
+-    case 'y':
++    case "years":
++    case "year":
++    case "yrs":
++    case "yr":
++    case "y":
+       return n * y;
+-    case 'months':
+-    case 'month':
+-    case 'mo':
++    case "months":
++    case "month":
++    case "mo":
+       return n * mo;
+-    case 'weeks':
+-    case 'week':
+-    case 'w':
++    case "weeks":
++    case "week":
++    case "w":
+       return n * w;
+-    case 'days':
+-    case 'day':
+-    case 'd':
++    case "days":
++    case "day":
++    case "d":
+       return n * d;
+-    case 'hours':
+-    case 'hour':
+-    case 'hrs':
+-    case 'hr':
+-    case 'h':
++    case "hours":
++    case "hour":
++    case "hrs":
++    case "hr":
++    case "h":
+       return n * h;
+-    case 'minutes':
+-    case 'minute':
+-    case 'mins':
+-    case 'min':
+-    case 'm':
++    case "minutes":
++    case "minute":
++    case "mins":
++    case "min":
++    case "m":
+       return n * m;
+-    case 'seconds':
+-    case 'second':
+-    case 'secs':
+-    case 'sec':
+-    case 's':
++    case "seconds":
++    case "second":
++    case "secs":
++    case "sec":
++    case "s":
+       return n * s;
+-    case 'milliseconds':
+-    case 'millisecond':
+-    case 'msecs':
+-    case 'msec':
+-    case 'ms':
++    case "milliseconds":
++    case "millisecond":
++    case "msecs":
++    case "msec":
++    case "ms":
+       return n;
+     default:
+       matchUnit satisfies never;
+@@ -192,25 +183,25 @@ function fmtShort(ms: number): StringValue {
+ function fmtLong(ms: number): StringValue {
+   const msAbs = Math.abs(ms);
+   if (msAbs >= y) {
+-    return plural(ms, msAbs, y, 'year');
++    return plural(ms, msAbs, y, "year");
+   }
+   if (msAbs >= mo) {
+-    return plural(ms, msAbs, mo, 'month');
++    return plural(ms, msAbs, mo, "month");
+   }
+   if (msAbs >= w) {
+-    return plural(ms, msAbs, w, 'week');
++    return plural(ms, msAbs, w, "week");
+   }
+   if (msAbs >= d) {
+-    return plural(ms, msAbs, d, 'day');
++    return plural(ms, msAbs, d, "day");
+   }
+   if (msAbs >= h) {
+-    return plural(ms, msAbs, h, 'hour');
++    return plural(ms, msAbs, h, "hour");
+   }
+   if (msAbs >= m) {
+-    return plural(ms, msAbs, m, 'minute');
++    return plural(ms, msAbs, m, "minute");
+   }
+   if (msAbs >= s) {
+-    return plural(ms, msAbs, s, 'second');
++    return plural(ms, msAbs, s, "second");
+   }
+   return `${ms} ms`;
+ }
+@@ -223,8 +214,8 @@ function fmtLong(ms: number): StringValue {
+  * @returns The formatted string
+  */
+ export function format(ms: number, options?: Options): string {
+-  if (typeof ms !== 'number' || !Number.isFinite(ms)) {
+-    throw new Error('Value provided to ms.format() must be of type number.');
++  if (typeof ms !== "number" || !Number.isFinite(ms)) {
++    throw new Error("Value provided to ms.format() must be of type number.");
+   }
+ 
+   return options?.long ? fmtLong(ms) : fmtShort(ms);
+@@ -240,5 +231,131 @@ function plural(
+   name: string,
+ ): StringValue {
+   const isPlural = msAbs >= n * 1.5;
+-  return `${Math.round(ms / n)} ${name}${isPlural ? 's' : ''}` as StringValue;
++  return `${Math.round(ms / n)} ${name}${isPlural ? "s" : ""}` as StringValue;
++}
++
++/**
++ * Format the given milliseconds as an ISO 8601 duration string.
++ *
++ * Days are the largest unit used, since months and years are ambiguous.
++ * Fractional seconds are included when needed (e.g. `PT1.5S`). Negative values
++ * are prefixed with `-` and zero is `PT0S`.
++ *
++ * @param ms - milliseconds (rounded to the nearest millisecond)
++ * @returns The ISO 8601 duration, e.g. `P1DT1H1M1S`
++ * @throws Error if `ms` is not a finite number
++ */
++export function formatISO(ms: number): string {
++  if (typeof ms !== "number" || !Number.isFinite(ms)) {
++    throw new Error("Value provided to ms.formatISO() must be of type number.");
++  }
++
++  let rest = Math.round(Math.abs(ms));
++  const days = Math.floor(rest / d);
++  rest %= d;
++  const hours = Math.floor(rest / h);
++  rest %= h;
++  const minutes = Math.floor(rest / m);
++  rest %= m;
++  const secs = Math.floor(rest / s);
++  const millis = rest % s;
++
++  let date = days ? `${days}D` : "";
++  let time = hours ? `${hours}H` : "";
++  time += minutes ? `${minutes}M` : "";
++  if (secs || millis) {
++    let digits = String(millis).padStart(3, "0");
++    while (digits.endsWith("0")) digits = digits.slice(0, -1);
++    const frac = millis ? `.${digits}` : "";
++    time += `${secs}${frac}S`;
++  }
++
++  if (!date && !time) {
++    return "PT0S";
++  }
++  date = `P${date}`;
++  const sign = ms < 0 && Math.round(Math.abs(ms)) > 0 ? "-" : "";
++  return `${sign}${date}${time ? `T${time}` : ""}`;
++}
++
++/**
++ * Parse an ISO 8601 duration string into milliseconds. The inverse of
++ * `formatISO`.
++ *
++ * Supports weeks (`W`), days (`D`), hours (`H`), minutes (`M`) and seconds
++ * (`S`), with an optional leading `-` or `+` and decimal fractions (`.` or `,`).
++ * Years and months are rejected because their length is ambiguous.
++ * Hand-written scanner; intentionally uses no regular expressions.
++ *
++ * @param str - e.g. `PT1H30M`, `P1DT1H1M1S`, `-PT1.5S`
++ * @returns The duration in milliseconds (rounded to the nearest millisecond)
++ * @throws Error if `str` is not a valid ISO 8601 duration
++ */
++export function parseISO(str: string): number {
++  if (typeof str !== "string") {
++    throw new Error("Value provided to ms.parseISO() must be of type string.");
++  }
++  const fail = (): never => {
++    throw new Error(`Invalid ISO 8601 duration: "${str.slice(0, 100)}"`);
++  };
++
++  let i = 0;
++  let sign = 1;
++  if (str[i] === "-" || str[i] === "+") {
++    sign = str[i] === "-" ? -1 : 1;
++    i++;
++  }
++  if (str[i] !== "P") return fail();
++  i++;
++
++  const isDigit = (c: string | undefined) =>
++    c !== undefined && c >= "0" && c <= "9";
++
++  let total = 0;
++  let inTime = false;
++  let components = 0;
++  let timeComponents = 0;
++  // Index of the last unit seen, to enforce W/D then H, M, S ordering.
++  let lastRank = -1;
++  const ranks: Record<string, number> = { W: 0, D: 1, H: 2, M: 3, S: 4 };
++  const units: Record<string, number> = { W: 7 * d, D: d, H: h, M: m, S: s };
++
++  while (i < str.length) {
++    if (str[i] === "T") {
++      if (inTime) return fail();
++      inTime = true;
++      i++;
++      continue;
++    }
++    // number: digits, optionally followed by a fraction
++    const start = i;
++    while (isDigit(str[i])) i++;
++    if (i === start) return fail();
++    if (str[i] === "." || str[i] === ",") {
++      i++;
++      const fracStart = i;
++      while (isDigit(str[i])) i++;
++      if (i === fracStart) return fail();
++    }
++    const value = Number(str.slice(start, i).replace(",", "."));
++    const unit = str[i];
++    i++;
++    if (unit === undefined || !(unit in units)) return fail();
++    // Date units before T, time units (H, M, S) after it.
++    const isTimeUnit = unit === "H" || unit === "M" || unit === "S";
++    if (isTimeUnit !== inTime) return fail();
++    const rank = ranks[unit]!;
++    if (rank <= lastRank) return fail();
++    lastRank = rank;
++    total += value * units[unit]!;
++    components++;
++    if (inTime) timeComponents++;
++  }
++
++  if (components === 0) return fail();
++  // A trailing "T" with no time components is invalid.
++  if (inTime && timeComponents === 0) return fail();
++
++  const result = sign * Math.round(total);
++  return result === 0 ? 0 : result;
+ }
+diff --git a/src/parse-iso.test.ts b/src/parse-iso.test.ts
+new file mode 100644
+index 0000000..cea4c29
+--- /dev/null
++++ b/src/parse-iso.test.ts
+@@ -0,0 +1,85 @@
++import { describe, expect, it } from "@jest/globals";
++import { formatISO, parseISO } from "./index";
++
++describe("parseISO(string)", () => {
++  it("should parse hours and minutes", () => {
++    expect(parseISO("PT1H30M")).toBe(5400000);
++  });
++  it("should parse days and time", () => {
++    expect(parseISO("P1DT1H1M1S")).toBe(90061000);
++  });
++  it("should parse single units", () => {
++    expect(parseISO("P1D")).toBe(86400000);
++    expect(parseISO("P400D")).toBe(400 * 86400000);
++    expect(parseISO("P2W")).toBe(14 * 86400000);
++    expect(parseISO("PT1H")).toBe(3600000);
++    expect(parseISO("PT1M")).toBe(60000);
++    expect(parseISO("PT1S")).toBe(1000);
++  });
++  it("should parse fractional seconds", () => {
++    expect(parseISO("PT1.5S")).toBe(1500);
++    expect(parseISO("PT0,25S")).toBe(250);
++    expect(parseISO("PT0.001S")).toBe(1);
++  });
++  it("should parse zero", () => {
++    expect(parseISO("PT0S")).toBe(0);
++    expect(Object.is(parseISO("-PT0S"), 0)).toBe(true);
++  });
++  it("should parse signs", () => {
++    expect(parseISO("-PT1H")).toBe(-3600000);
++    expect(parseISO("+PT1H")).toBe(3600000);
++  });
++  it("should round-trip with formatISO", () => {
++    for (const v of [
++      0,
++      1,
++      999,
++      1000,
++      1500,
++      60000,
++      5400000,
++      90061001,
++      -90061001,
++      400 * 86400000,
++    ]) {
++      expect(parseISO(formatISO(v))).toBe(v);
++    }
++  });
++  it("should throw on invalid input", () => {
++    for (const bad of [
++      "",
++      "P",
++      "PT",
++      "P1DT",
++      "1H",
++      "PT1",
++      "PT1X",
++      "P1Y",
++      "P1M",
++      "P1Y2M",
++      "PT1H1H",
++      "PT1M1H",
++      "P1H",
++      "PT1D",
++      "PT.5S",
++      "PT1.S",
++      "PTT1S",
++      "P1DT1H ",
++      " PT1H",
++      "pt1h",
++      "PT-1H",
++      "PT1,S",
++    ]) {
++      expect(() => parseISO(bad)).toThrow();
++    }
++  });
++  it("should throw on non-string input", () => {
++    expect(() => parseISO(undefined as unknown as string)).toThrow();
++    expect(() => parseISO(5 as unknown as string)).toThrow();
++  });
++  it("should handle very long input quickly", () => {
++    const start = Date.now();
++    expect(() => parseISO("P" + "1".repeat(100000) + "X")).toThrow();
++    expect(Date.now() - start).toBeLessThan(1000);
++  });
++});

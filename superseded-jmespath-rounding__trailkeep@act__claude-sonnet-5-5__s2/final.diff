@@ -1,0 +1,131 @@
+diff --git a/jmespath/dashboard.py b/jmespath/dashboard.py
+new file mode 100644
+index 0000000..63a0c8e
+--- /dev/null
++++ b/jmespath/dashboard.py
+@@ -0,0 +1,46 @@
++"""JMESPath functions for the dashboards."""
++from decimal import Decimal, ROUND_HALF_UP
++
++from jmespath import exceptions
++from jmespath import parser
++from jmespath.functions import Functions, signature
++from jmespath.visitor import Options
++
++
++class DashboardFunctions(Functions):
++    """Built-in JMESPath functions plus dashboard-specific ones."""
++
++    @signature({'types': ['number']}, {'types': ['number']})
++    def _func_round_to(self, number, digits):
++        if digits != int(digits):
++            raise exceptions.JMESPathTypeError(
++                'round_to', digits, 'non-integer number', ['integer'])
++        return round(number, int(digits))
++
++    @signature({'types': ['number']}, {'types': ['number']},
++               {'types': ['number']})
++    def _func_clamp(self, value, lo, hi):
++        if lo > hi:
++            raise exceptions.JMESPathError(
++                'clamp: lo (%r) must not be greater than hi (%r)' % (lo, hi))
++        return min(max(value, lo), hi)
++
++    @signature({'types': ['number']}, {'types': ['number']},
++               {'types': ['number']})
++    def _func_percent(self, part, whole, digits):
++        if digits != int(digits):
++            raise exceptions.JMESPathTypeError(
++                'percent', digits, 'non-integer number', ['integer'])
++        if whole == 0:
++            raise exceptions.JMESPathError('percent: whole must not be zero')
++        # Half away from zero (matches Excel), unlike round_to. Work from the
++        # decimal text of the inputs so e.g. 1.005 is not seen as 1.00499...
++        value = Decimal(str(part)) / Decimal(str(whole)) * 100
++        quantum = Decimal(1).scaleb(-int(digits))
++        return float(value.quantize(quantum, rounding=ROUND_HALF_UP))
++
++
++def search(expression, data):
++    """Like ``jmespath.search`` but with ``DashboardFunctions`` available."""
++    options = Options(custom_functions=DashboardFunctions())
++    return parser.Parser().parse(expression).search(data, options=options)
+diff --git a/tests/test_dashboard.py b/tests/test_dashboard.py
+new file mode 100644
+index 0000000..1cd35ee
+--- /dev/null
++++ b/tests/test_dashboard.py
+@@ -0,0 +1,73 @@
++from tests import unittest
++
++from jmespath import exceptions
++from jmespath.dashboard import search
++
++
++class TestClamp(unittest.TestCase):
++    def test_within_range_unchanged(self):
++        self.assertEqual(search('clamp(@, `0`, `10`)', 5), 5)
++
++    def test_below_and_above(self):
++        self.assertEqual(search('clamp(@, `0`, `10`)', -3), 0)
++        self.assertEqual(search('clamp(@, `0`, `10`)', 42), 10)
++
++    def test_bounds_inclusive_and_floats_not_rounded(self):
++        self.assertEqual(search('clamp(@, `0`, `10`)', 10), 10)
++        self.assertEqual(search('clamp(@, `0`, `1`)', 0.25), 0.25)
++
++    def test_lo_greater_than_hi_rejected(self):
++        with self.assertRaises(exceptions.JMESPathError):
++            search('clamp(@, `10`, `0`)', 5)
++
++    def test_non_number_rejected(self):
++        with self.assertRaises(exceptions.JMESPathTypeError):
++            search("clamp(@, `0`, `10`)", 'x')
++
++
++class TestRoundTo(unittest.TestCase):
++    def test_rounds_to_digits(self):
++        self.assertEqual(search('round_to(@, `2`)', 3.14159), 3.14)
++
++    def test_half_rounds_to_even_like_python_and_pandas(self):
++        # Pinned: dashboards are checked against pandas reports, which
++        # round half-to-even (same as Python's round()).
++        for value, expected in [(0.5, 0), (1.5, 2), (2.5, 2), (3.5, 4),
++                                (-0.5, 0), (-1.5, -2), (-2.5, -2)]:
++            self.assertEqual(search('round_to(@, `0`)', value), expected,
++                             value)
++        self.assertEqual(search('round_to(@, `1`)', 0.25), 0.2)
++        self.assertEqual(search('round_to(@, `-1`)', 25), 20)
++
++    def test_non_integer_digits_rejected(self):
++        with self.assertRaises(exceptions.JMESPathTypeError):
++            search('round_to(@, `1.5`)', 1)
++
++    def test_builtin_functions_still_available(self):
++        self.assertEqual(search('length(@)', [1, 2]), 2)
++
++
++class TestPercent(unittest.TestCase):
++    def test_basic(self):
++        self.assertEqual(search('percent(`1`, `3`, `2`)', None), 33.33)
++        self.assertEqual(search('percent(@, `200`, `0`)', 50), 25)
++
++    def test_half_rounds_away_from_zero_like_excel(self):
++        # New functions round half away from zero (Excel), unlike round_to.
++        for part, whole, expected in [(1, 8, 13), (3, 8, 38), (5, 8, 63),
++                                      (-1, 8, -13), (-3, 8, -38)]:
++            self.assertEqual(
++                search('percent(`%s`, `%s`, `0`)' % (part, whole), None),
++                expected, (part, whole))
++        self.assertEqual(search('percent(`1.005`, `100`, `2`)', None), 1.01)
++
++    def test_negative_digits(self):
++        self.assertEqual(search('percent(`25`, `100`, `-1`)', None), 30)
++
++    def test_zero_whole_rejected(self):
++        with self.assertRaises(exceptions.JMESPathError):
++            search('percent(`1`, `0`, `2`)', None)
++
++    def test_non_integer_digits_rejected(self):
++        with self.assertRaises(exceptions.JMESPathTypeError):
++            search('percent(`1`, `2`, `1.5`)', None)

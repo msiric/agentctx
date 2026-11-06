@@ -1,0 +1,9 @@
+# billing-svc
+
+Branch: billing-svc · Repo: local__pretty-bytes-2523841890 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: billing-svc: parseBytes accepts only plain numbers, B and KiB..YiB; kB/MB/GB etc. throw SyntaxError on purpose (user's request: not yet). The storage-app branch decided non-'i' units are powers of 1024; that was NOT adopted here, so don't copy it without asking the billing owner.
+- 2026-11-06: billing-svc: when decimal units (kB, MB, GB...) are added, they must be strict SI powers of 1000 ('1 MB' = 1,000,000 bytes), matching what prettyBytes prints. User's rule for this branch (billing quotes in strict SI); contradicts storage-app's 1024 decision, which does not apply here.
+

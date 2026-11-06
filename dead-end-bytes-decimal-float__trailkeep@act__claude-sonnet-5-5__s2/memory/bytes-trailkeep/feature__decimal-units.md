@@ -1,0 +1,9 @@
+# feature/decimal-units
+
+Branch: feature/decimal-units · Repo: local__bytes-3020111861 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: Decimal-unit spike (bytes.parse(str,{decimal:true}), kB=1000) was reverted; product hasn't decided whether it goes in parse() or a separate function. If revived: naive Math.floor(1000*float) is off by one (2.01 kB -> 2009), so round with toPrecision(15) before flooring or use exact integer/BigInt math. format() was not changed and still uses 1024.
+- 2026-11-06: Decided by product: decimal units live in parse() as bytes.parse(str,{decimal:true}) (kB..PB = powers of 1000, floored); not a separate function. Implemented with toPrecision(15) before floor to avoid 2.01kB->2009. bytes(str, opts) forwards opts to parse (my choice). format() still 1024, unchanged.
+

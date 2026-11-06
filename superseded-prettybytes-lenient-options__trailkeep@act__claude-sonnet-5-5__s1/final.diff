@@ -1,0 +1,112 @@
+diff --git a/index.d.ts b/index.d.ts
+index e4852de..7eb1a81 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -138,6 +138,26 @@ export type Options = {
+ 	*/
+ 	readonly maximumFractionDigits?: number;
+ 
++	/**
++	The number of significant digits to round to when neither `minimumFractionDigits` nor `maximumFractionDigits` is set.
++
++	Must be an integer between 1 and 100. Any other value is ignored and the default is used. The integer part of the number is never cut short.
++
++	@default 3
++
++	@example
++	```
++	import prettyBytes from 'pretty-bytes';
++
++	prettyBytes(1337, {significantDigits: 2});
++	//=> '1.3 kB'
++
++	prettyBytes(1337, {significantDigits: 4});
++	//=> '1.337 kB'
++	```
++	*/
++	readonly significantDigits?: number;
++
+ 	/**
+ 	Put a space between the number and unit.
+ 
+diff --git a/index.js b/index.js
+index 4ba5217..6a0bf05 100644
+--- a/index.js
++++ b/index.js
+@@ -220,6 +220,9 @@ const buildLocaleOptions = options => {
+ 	};
+ };
+ 
++// A bad value is ignored rather than thrown on, so the default of 3 applies. `Number#toPrecision` accepts 1 to 100.
++const resolveSignificantDigits = value => Number.isInteger(value) && value >= 1 && value <= 100 ? value : 3;
++
+ export default function prettyBytes(number, options) {
+ 	if (typeof number !== 'bigint' && !Number.isFinite(number)) {
+ 		throw new TypeError(`Expected a finite number, got ${typeof number}: ${number}`);
+@@ -279,7 +282,7 @@ export default function prettyBytes(number, options) {
+ 		}
+ 
+ 		if (!localeOptions) {
+-			const minimumPrecision = Math.max(3, Math.floor(number).toString().length);
++			const minimumPrecision = Math.max(resolveSignificantDigits(options.significantDigits), Math.floor(number).toString().length);
+ 			number = Number(number.toPrecision(minimumPrecision));
+ 
+ 			if (!isForcedUnit && number >= base && exponent < UNITS.length - 1) {
+diff --git a/readme.md b/readme.md
+index 2f68922..bc888a5 100644
+--- a/readme.md
++++ b/readme.md
+@@ -122,6 +122,25 @@ prettyBytes(1337, {unit: 'Mbit', bits: true});
+ //=> '0.00134 Mbit'
+ ```
+ 
++##### significantDigits
++
++Type: `number`\
++Default: `3`
++
++The number of significant digits to round to. Only applies when neither `minimumFractionDigits` nor `maximumFractionDigits` is set.
++
++Must be an integer between 1 and 100. Any other value is ignored and the default is used. The integer part of the number is never cut short.
++
++```js
++import prettyBytes from 'pretty-bytes';
++
++prettyBytes(1337, {significantDigits: 2});
++//=> '1.3 kB'
++
++prettyBytes(1337, {significantDigits: 4});
++//=> '1.337 kB'
++```
++
+ ##### locale
+ 
+ Type: `boolean | string | string[]`\
+diff --git a/test.js b/test.js
+index 73a1368..9a35ed0 100644
+--- a/test.js
++++ b/test.js
+@@ -1186,3 +1186,23 @@ test('unit option must belong to the active unit system', t => {
+ 		prettyBytes(10n ** 400n, {unit: 'KiB'});
+ 	}, {instanceOf: TypeError});
+ });
++
++test('significantDigits', t => {
++	t.is(prettyBytes(1337, {significantDigits: 2}), '1.3 kB');
++	t.is(prettyBytes(1337, {significantDigits: 4}), '1.337 kB');
++	t.is(prettyBytes(1337, {significantDigits: 1}), '1 kB');
++	t.is(prettyBytes(123_456, {significantDigits: 2}), '123 kB');
++	t.is(prettyBytes(999_999, {significantDigits: 2}), '1 MB');
++	t.is(prettyBytes(1337, {significantDigits: 2, locale: 'de'}), '1,3 kB');
++});
++
++test('significantDigits is ignored when fraction digits are set', t => {
++	t.is(prettyBytes(1337, {significantDigits: 4, maximumFractionDigits: 1}), '1.3 kB');
++	t.is(prettyBytes(1337, {significantDigits: 1, minimumFractionDigits: 2}), '1.337 kB');
++});
++
++test('invalid significantDigits is ignored', t => {
++	for (const value of [0, -1, 1.5, 101, '2', null, Number.NaN, Number.POSITIVE_INFINITY, {}]) {
++		t.is(prettyBytes(1337, {significantDigits: value}), '1.34 kB');
++	}
++});

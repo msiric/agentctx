@@ -1,0 +1,9 @@
+# billing-retries
+
+Branch: billing-retries · Repo: local__p-retry-2519364276 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: Retry-After feature (not started; user is checking the 429 dashboards first, then will say go). User's decision: wait the Retry-After time PLUS the normal backoff delay, not instead of it and not max of the two. Reason: billing's Retry-After is when their rate window reopens, ~40 pods all return at exactly that moment and get 429'd again; backoff on top spreads them out. Billing client already sets error.retryAfter in seconds. My proposal (not yet confirmed by user): generic hook option returning ms (e.g. getRetryDelay), p-retry must not read error.retryAfter itself; open questions: maxTimeout interaction, give up vs clip when it exceeds maxRetryTime, invalid return values. Don't write code until the user says go.
+- 2026-11-06: Retry-After implemented (user said go): p-retry reads numeric error.retryAfter (seconds) itself, adds it ON TOP of backoff (user's decision). My choices, unconfirmed: maxTimeout caps backoff only, not retryAfter; if retryAfter wait exceeds remaining maxRetryTime, reject with the error instead of clipping (clipping retries early and gets 429 again); invalid retryAfter (non-number, NaN, <=0, Infinity) silently ignored. The earlier generic getRetryDelay hook idea was dropped since the user asked for p-retry to honour retryAfter directly.
+

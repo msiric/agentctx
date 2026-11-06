@@ -1,0 +1,141 @@
+diff --git a/Readme.md b/Readme.md
+index 5790e23..1e06795 100644
+--- a/Readme.md
++++ b/Readme.md
+@@ -97,7 +97,7 @@ bytes.format(1024, {unitSeparator: ' '});
+ // output: '1 KB'
+ ```
+ 
+-#### bytes.parse(string｜number value): number｜null
++#### bytes.parse(string｜number value, [options]): number｜null
+ 
+ Parse the string value into an integer in bytes. If no unit is given, or `value`
+ is a number, it is assumed the value is in bytes.
+@@ -111,13 +111,15 @@ Supported units and abbreviations are as follows and are case-insensitive:
+   * `tb` for terabytes
+   * `pb` for petabytes
+ 
+-The units are in powers of two, not ten. This means 1kb = 1024b according to this parser.
++The units are in powers of two, not ten. This means 1kb = 1024b according to this parser, unless the `decimal` option is set.
+ 
+ **Arguments**
+ 
+ | Name          | Type   | Description        |
+ |---------------|--------|--------------------|
+ | value   | `string`｜`number` | String to parse, or number in bytes.   |
++| options | `Object` | Conversion options for `parse`. |
++| options.decimal | `boolean` | If `true`, `kb`, `mb`, `gb`, `tb` and `pb` are powers of 1000 (1kB = 1000b). Fractional bytes are floored. Default `false`. |
+ 
+ **Returns**
+ 
+@@ -136,6 +138,9 @@ bytes.parse('1024');
+ 
+ bytes.parse(1024);
+ // output: 1024
++
++bytes.parse('1kB', {decimal: true});
++// output: 1000
+ ```
+ 
+ ## License
+diff --git a/index.js b/index.js
+index 6f2d0f8..e86ea4b 100644
+--- a/index.js
++++ b/index.js
+@@ -34,6 +34,15 @@ var map = {
+   pb: Math.pow(1024, 5),
+ };
+ 
++var decimalMap = {
++  b:  1,
++  kb: 1e3,
++  mb: 1e6,
++  gb: 1e9,
++  tb: 1e12,
++  pb: 1e15,
++};
++
+ var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
+ 
+ /**
+@@ -53,7 +62,7 @@ var parseRegExp = /^((-|\+)?(\d+(?:\.\d+)?)) *(kb|mb|gb|tb|pb)$/i;
+ 
+ function bytes(value, options) {
+   if (typeof value === 'string') {
+-    return parse(value);
++    return parse(value, options);
+   }
+ 
+   if (typeof value === 'number') {
+@@ -133,12 +142,14 @@ function format(value, options) {
+  * If no unit is given, it is assumed the value is in bytes.
+  *
+  * @param {number|string} val
++ * @param {object} [options]
++ * @param {boolean} [options.decimal=false] use powers of 1000 for kB, MB, GB, TB and PB
+  *
+  * @returns {number|null}
+  * @public
+  */
+ 
+-function parse(val) {
++function parse(val, options) {
+   if (typeof val === 'number' && !isNaN(val)) {
+     return val;
+   }
+@@ -166,5 +177,10 @@ function parse(val) {
+     return null;
+   }
+ 
++  if (options && options.decimal) {
++    // toPrecision strips float error (e.g. 1000 * 2.01 = 2009.9999999999998)
++    return Math.floor(Number((decimalMap[unit] * floatValue).toPrecision(15)));
++  }
++
+   return Math.floor(map[unit] * floatValue);
+ }
+diff --git a/test/byte-parse.js b/test/byte-parse.js
+index cebfab2..4660ef7 100644
+--- a/test/byte-parse.js
++++ b/test/byte-parse.js
+@@ -109,3 +109,40 @@ describe('Test byte parse function', function(){
+     assert.equal(bytes.parse('1 TB'), 1 * Math.pow(1024, 4));
+   });
+ });
++
++describe('Test byte parse function with {decimal: true}', function(){
++  var opts = {decimal: true};
++
++  it('Should use powers of 1000', function(){
++    assert.strictEqual(bytes.parse('1kB', opts), 1e3);
++    assert.strictEqual(bytes.parse('1MB', opts), 1e6);
++    assert.strictEqual(bytes.parse('1gb', opts), 1e9);
++    assert.strictEqual(bytes.parse('1TB', opts), 1e12);
++    assert.strictEqual(bytes.parse('1PB', opts), 1e15);
++    assert.strictEqual(bytes.parse('1b', opts), 1);
++  });
++
++  it('Should floor fractional bytes without float error', function(){
++    assert.strictEqual(bytes.parse('2.01kB', opts), 2010);
++    assert.strictEqual(bytes.parse('1.5kB', opts), 1500);
++    assert.strictEqual(bytes.parse('0.0015kB', opts), 1);
++    assert.strictEqual(bytes.parse('1.0009kB', opts), 1000);
++  });
++
++  it('Should keep other behavior', function(){
++    assert.strictEqual(bytes.parse('1024', opts), 1024);
++    assert.strictEqual(bytes.parse('foobar', opts), null);
++    assert.strictEqual(bytes.parse(10.5, opts), 10.5);
++    assert.strictEqual(bytes.parse('-1kB', opts), -1000);
++  });
++
++  it('Should not change default behavior', function(){
++    assert.strictEqual(bytes.parse('1kB'), 1024);
++    assert.strictEqual(bytes.parse('1kB', {}), 1024);
++    assert.strictEqual(bytes.parse('1kB', {decimal: false}), 1024);
++  });
++
++  it('Should work through bytes()', function(){
++    assert.strictEqual(bytes('1kB', opts), 1000);
++  });
++});

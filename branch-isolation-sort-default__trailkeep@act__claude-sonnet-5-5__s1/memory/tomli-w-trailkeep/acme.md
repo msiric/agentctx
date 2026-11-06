@@ -1,0 +1,9 @@
+# acme
+
+Branch: acme · Repo: local__tomli-w-3265375604 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: On this branch (acme, the build shipped to Acme), a sort_keys option for dumps()/dump() must default to ON, because Acme's tooling calls plain dumps() and we can't change their call sites. Plan from the user: they add sort_keys on main first (for upstream), then bring it over to this branch. The default-on difference is specific to this branch; don't carry it back to main. Writer currently never sorts (checked src/tomli_w/_writer.py); the order churn comes from how Acme-bound dicts are built on our side.
+- 2026-11-06: sort_keys cherry-picked from main (f494602 -> f442b0d) and flipped to default True on acme (dump, dumps, Context). Existing order-sensitive tests in test_style.py/test_types.py now pass sort_keys=False explicitly; test_sort_keys.py asserts default-sorted. When re-syncing with main, keep default True here; don't carry it back to main.
+

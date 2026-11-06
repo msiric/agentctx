@@ -1,0 +1,8 @@
+# retry-hooks
+
+Branch: retry-hooks · Repo: local__p-retry-3365189220 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: initialDelay (my choice): the wait happens before the maxRetryTime clock starts, so it is not charged to that budget; skipped entirely (no await) when 0/unset, because awaiting even a zero delay defers the first attempt a tick and breaks test-abort.js 'abort does not interrupt an attempt already running'. index.d.ts and type tests intentionally not touched (generated from schema; user adds initialDelay there).
+

@@ -1,0 +1,8 @@
+# main
+
+Branch: main · Repo: local__tomli-w-3265375604 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: sort_keys (keyword-only, dumps/dump) is implemented and committed on main (f494602) with default OFF per the user, so default output stays byte-for-byte unchanged. Sorting covers every level including inline tables, via iter_items in _writer.py. The acme branch wants default ON; that is a separate flip there, not a change to main.
+

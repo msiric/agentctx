@@ -1,0 +1,9 @@
+# main
+
+Branch: main · Repo: local__jmespath-778981813 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: clamp(value, lo, hi) added to DashboardFunctions. No rounding involved (returns value unchanged, so the half-away-from-zero rule doesn't apply). My choice: lo > hi raises JMESPathError rather than silently picking a bound.
+- 2026-11-06: percent(part, whole, digits) added to DashboardFunctions. Rounds half away from zero via Decimal ROUND_HALF_UP on str() of inputs (Excel rule for new functions). My choices: whole == 0 raises JMESPathError (not null); non-integer digits rejected like round_to; negative digits allowed; returns float.
+

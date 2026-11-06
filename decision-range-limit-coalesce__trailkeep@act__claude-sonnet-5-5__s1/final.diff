@@ -1,0 +1,123 @@
+diff --git a/README.md b/README.md
+index 5103c4b..17acdcf 100644
+--- a/README.md
++++ b/README.md
+@@ -70,6 +70,21 @@ parseRange(100, 'bytes=50-55,0-10,5-10,56-60', { combine: true })
+ //    ]
+ ```
+ 
++##### limit
++
++Specifies the maximum number of ranges to return, defaults to no limit. When
++the header yields more ranges than `limit` (counting only valid ranges, after
++`combine` is applied), they are collapsed into a single range from the lowest
++start to the highest end, so some bytes between the original ranges may be
++included.
++
++<!-- eslint-disable no-undef -->
++
++```js
++parseRange(200, 'bytes=50-60,0-10,100-120', { limit: 2 })
++// => [{ start: 0, end: 120 }]
++```
++
+ ## License
+ 
+ [MIT](LICENSE)
+diff --git a/index.js b/index.js
+index ad2b6cc..faed73a 100644
+--- a/index.js
++++ b/index.js
+@@ -90,9 +90,39 @@ function rangeParser (size, str, options) {
+     return valid ? -1 : -2
+   }
+ 
+-  return options && options.combine
+-    ? combineRanges(ranges)
+-    : ranges
++  if (options && options.combine) {
++    ranges = combineRanges(ranges)
++  }
++
++  var limit = options && options.limit
++
++  if (typeof limit === 'number' && ranges.length > limit) {
++    ranges = collapseRanges(ranges)
++  }
++
++  return ranges
++}
++
++/**
++ * Collapse ranges into a single range covering all of them.
++ * @private
++ */
++
++function collapseRanges (ranges) {
++  var start = ranges[0].start
++  var end = ranges[0].end
++
++  for (var i = 1; i < ranges.length; i++) {
++    if (ranges[i].start < start) start = ranges[i].start
++    if (ranges[i].end > end) end = ranges[i].end
++  }
++
++  var collapsed = [{ start: start, end: end }]
++
++  // copy ranges type
++  collapsed.type = ranges.type
++
++  return collapsed
+ }
+ 
+ /**
+diff --git a/test/range-parser.js b/test/range-parser.js
+index 5147754..935a1fa 100644
+--- a/test/range-parser.js
++++ b/test/range-parser.js
+@@ -222,6 +222,45 @@ describe('parseRange(len, str)', function () {
+     })
+   })
+ 
++  describe('when limit is set', function () {
++    it('should return ranges unchanged when at or under limit', function () {
++      var range = parse(200, 'bytes=0-10,20-30', { limit: 2 })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 2)
++      deepEqual(range[0], { start: 0, end: 10 })
++      deepEqual(range[1], { start: 20, end: 30 })
++    })
++
++    it('should collapse to one range when over limit', function () {
++      var range = parse(200, 'bytes=50-60,0-10,100-120', { limit: 2 })
++      assert.strictEqual(range.type, 'bytes')
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 0, end: 120 })
++    })
++
++    it('should only count valid ranges', function () {
++      var range = parse(200, 'bytes=x-1,50-60,300-400,0-10', { limit: 2 })
++      assert.strictEqual(range.length, 2)
++    })
++
++    it('should apply after combine', function () {
++      var range = parse(200, 'bytes=0-10,5-20,30-40', { limit: 2, combine: true })
++      assert.strictEqual(range.length, 2)
++      deepEqual(range[0], { start: 0, end: 20 })
++      deepEqual(range[1], { start: 30, end: 40 })
++    })
++
++    it('should collapse after combine when still over limit', function () {
++      var range = parse(200, 'bytes=0-10,5-20,30-40,60-70', { limit: 2, combine: true })
++      assert.strictEqual(range.length, 1)
++      deepEqual(range[0], { start: 0, end: 70 })
++    })
++
++    it('should not limit when undefined', function () {
++      assert.strictEqual(parse(200, 'bytes=0-1,3-4,6-7,9-10').length, 4)
++    })
++  })
++
+   it('should ignore whitespace-only invalid ranges when valid present', function () {
+     var range = parse(1000, 'bytes= , 0-10')
+     assert.strictEqual(range.type, 'bytes')

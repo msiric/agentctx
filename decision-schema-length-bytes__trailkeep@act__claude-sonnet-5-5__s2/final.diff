@@ -1,0 +1,215 @@
+diff --git a/schema/__init__.py b/schema/__init__.py
+index 10d6e8a..2be0abf 100644
+--- a/schema/__init__.py
++++ b/schema/__init__.py
+@@ -40,6 +40,7 @@ __all__ = [
+     "And",
+     "Or",
+     "Regex",
++    "Length",
+     "Optional",
+     "Use",
+     "Forbidden",
+@@ -286,6 +287,77 @@ class Regex:
+             raise SchemaError(error_message)
+ 
+ 
++class Length:
++    """
++    Validates the length of a string, counting UTF-8 *bytes* (not characters).
++
++    Bounds are inclusive and either may be omitted. Bytes are counted because
++    the values are meant for storage with byte-based limits (e.g. Oracle
++    ``VARCHAR2(n BYTE)``), where accented characters take more than one byte.
++    ``bytes`` and ``bytearray`` values are measured as they are.
++    """
++
++    def __init__(
++        self,
++        min: Union[int, None] = None,
++        max: Union[int, None] = None,
++        error: Union[str, None] = None,
++    ) -> None:
++        for name, bound in (("min", min), ("max", max)):
++            if bound is None:
++                continue
++            if isinstance(bound, bool) or not isinstance(bound, int):
++                raise TypeError(f"Length {name} must be an int or None, not {bound!r}")
++            if bound < 0:
++                raise ValueError(f"Length {name} must not be negative, not {bound!r}")
++        if min is not None and max is not None and min > max:
++            raise ValueError(f"Length min ({min}) must not exceed max ({max})")
++        self._min: Union[int, None] = min
++        self._max: Union[int, None] = max
++        self._error: Union[str, None] = error
++
++    def __repr__(self) -> str:
++        return f"{self.__class__.__name__}(min={self._min!r}, max={self._max!r})"
++
++    @property
++    def min(self) -> Union[int, None]:
++        return self._min
++
++    @property
++    def max(self) -> Union[int, None]:
++        return self._max
++
++    def validate(self, data: Any, **kwargs: Any) -> Any:
++        """
++        Validates that the UTF-8 byte length of data is within the bounds.
++        :param data: String (or bytes) to be validated.
++        :return: Returns validated data.
++        """
++        if isinstance(data, str):
++            try:
++                size = len(data.encode("utf-8"))
++            except UnicodeEncodeError:  # e.g. lone surrogates
++                raise SchemaError(
++                    f"{data!r} cannot be encoded as UTF-8",
++                    self._error.format(data) if self._error else None,
++                )
++        elif isinstance(data, (bytes, bytearray)):
++            size = len(data)
++        else:
++            raise SchemaError(
++                f"{data!r} is not a string",
++                self._error.format(data) if self._error else None,
++            )
++
++        if self._min is not None and size < self._min:
++            message = f"{data!r} is {size} bytes long, expected at least {self._min} bytes"
++        elif self._max is not None and size > self._max:
++            message = f"{data!r} is {size} bytes long, expected at most {self._max} bytes"
++        else:
++            return data
++        raise SchemaError(message, self._error.format(data) if self._error else None)
++
++
+ class Use:
+     """
+     For more general use cases, you can use the Use class to transform
+@@ -769,6 +841,14 @@ class Schema(object):
+                         return_schema["type"] = "null"
+                     else:
+                         return_schema["const"] = _to_json_type(s)
++                elif flavor == VALIDATOR and type(s) == Length:
++                    return_schema["type"] = "string"
++                    # JSON schema lengths count characters, Length counts UTF-8
++                    # bytes (1-4 per character), so emit only the implied bounds.
++                    if s.min:
++                        return_schema["minLength"] = -(-s.min // 4)
++                    if s.max is not None:
++                        return_schema["maxLength"] = s.max
+                 elif flavor == VALIDATOR and type(s) == Regex:
+                     return_schema["type"] = "string"
+                     # JSON schema uses ECMAScript regex syntax
+diff --git a/test_schema.py b/test_schema.py
+index 4d78456..55ef51a 100644
+--- a/test_schema.py
++++ b/test_schema.py
+@@ -21,6 +21,7 @@ from schema import (
+     Const,
+     Forbidden,
+     Hook,
++    Length,
+     Literal,
+     Optional,
+     Or,
+@@ -167,6 +168,97 @@ def test_test():
+         schema.validate(bad_data)
+ 
+ 
++def test_length():
++    # Inclusive bounds
++    assert Length(min=2, max=4).validate("ab") == "ab"
++    assert Length(min=2, max=4).validate("abcd") == "abcd"
++    with SE:
++        Length(min=2, max=4).validate("a")
++    with SE:
++        Length(min=2, max=4).validate("abcde")
++
++    # Open-ended bounds
++    assert Length(min=1).validate("x" * 1000) == "x" * 1000
++    assert Length(max=3).validate("") == ""
++    assert Length().validate("anything") == "anything"
++    with SE:
++        Length(min=1).validate("")
++    with SE:
++        Length(max=3).validate("abcd")
++
++    # Bytes, not characters: "é" is 2 bytes in UTF-8
++    assert Length(max=4).validate("abcd") == "abcd"
++    assert Length(max=4).validate("éé") == "éé"
++    with SE:
++        Length(max=4).validate("ééé")  # 3 characters, 6 bytes
++    with SE:
++        Length(min=5).validate("éé")  # 2 characters, 4 bytes
++    assert Length(min=4).validate("éé") == "éé"
++
++    # Messages say bytes
++    with raises(SchemaError, match="6 bytes long, expected at most 4 bytes"):
++        Length(max=4).validate("ééé")
++    with raises(SchemaError, match="expected at least 5 bytes"):
++        Length(min=5).validate("éé")
++
++    # bytes are measured as they are
++    assert Length(max=2).validate(b"ab") == b"ab"
++    with SE:
++        Length(max=1).validate(b"ab")
++
++    # Non-strings are rejected
++    for bad in (1, None, [], {}, ["a", "b"]):
++        with SE:
++            Length(max=10).validate(bad)
++
++    # Unencodable string
++    with SE:
++        Length(max=10).validate("\ud800")
++
++    # Custom error goes in the errors slot
++    with raises(SchemaError) as e:
++        Length(max=1, error="{!r} too long").validate("ab")
++    assert e.value.errors == ["'ab' too long"]
++    assert e.value.code == "'ab' too long"
++
++    # Bad arguments
++    with raises(ValueError):
++        Length(min=-1)
++    with raises(ValueError):
++        Length(max=-1)
++    with raises(ValueError):
++        Length(min=5, max=2)
++    with raises(TypeError):
++        Length(min="1")
++    with raises(TypeError):
++        Length(max=1.5)
++    with raises(TypeError):
++        Length(min=True)
++
++    assert repr(Length(min=1, max=2)) == "Length(min=1, max=2)"
++
++    # Inside a schema
++    assert Schema({"name": Length(max=5)}).validate({"name": "José"}) == {
++        "name": "José"
++    }
++    with SE:
++        Schema({"name": Length(max=5)}).validate({"name": "Josée!"})
++    assert Schema(And(str, Length(min=1))).validate("a") == "a"
++
++
++def test_length_json_schema():
++    assert Schema(Length(min=8, max=20)).json_schema("id") == {
++        "$schema": "http://json-schema.org/draft-07/schema#",
++        "$id": "id",
++        "type": "string",
++        "minLength": 2,
++        "maxLength": 20,
++    }
++    assert Schema(Length(max=5)).json_schema("id")["maxLength"] == 5
++    assert "minLength" not in Schema(Length(max=5)).json_schema("id")
++    assert "maxLength" not in Schema(Length(min=1)).json_schema("id")
++
++
+ def test_regex():
+     # Simple case: validate string
+     assert Regex(r"foo").validate("afoot") == "afoot"

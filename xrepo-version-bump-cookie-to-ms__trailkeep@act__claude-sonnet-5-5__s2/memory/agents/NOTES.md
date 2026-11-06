@@ -1,0 +1,1 @@
+- 2026-11-06: In every package: include the version bump in the same commit as the change, because the user's release script publishes whatever version on main isn't on npm yet. Minor bump for features, patch for fixes.

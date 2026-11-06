@@ -1,0 +1,10 @@
+# feat/duration-helpers
+
+Branch: feat/duration-helpers · Repo: local__ms-1627918877 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: parseCompound (src/index.ts) must throw a TypeError that includes the input (JSON.stringify'd) on any bad input (empty, 'abc', '1h foo', non-string) and never return NaN. Reason: user once had NaN reach setTimeout and it was very hard to track down. This is for parseCompound as the user stated it; parse/parseStrict still return NaN and I left them unchanged (my choice).
+- 2026-11-06: parseCompound separators: whitespace, a single comma, or none between pieces; leading/trailing/double commas throw (my choice). README has a 'Compound Durations' section. parseCompound already shipped in 4.1.0-canary.1 and is used by the dashboard team, so keep changes backward compatible.
+- 2026-11-06: parseClock (src/index.ts, src/parse-clock.test.ts) returns number | undefined per repo rule. My choices: seconds and h:mm:ss minutes must be 2 digits <60; leading field any digits (so '90:00' ok); integers only, no negatives/fractions; whitespace trimmed; non-strings return undefined; unsafe-integer totals return undefined. README has 'Clock Strings' section.
+

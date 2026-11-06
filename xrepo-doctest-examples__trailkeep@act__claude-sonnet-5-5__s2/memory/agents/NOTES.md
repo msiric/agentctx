@@ -1,0 +1,2 @@
+- 2026-11-06: On every public function I add, in any repo, the docstring must include a short >>> example that passes as a doctest. Reason: user reviews most diffs on a phone and one example tells them more than prose. Verify it by running the doctest.
+- 2026-11-06: Public functions I add must have a docstring with a short >>> example that passes as a doctest; verify by running it (user reviews diffs on phone).

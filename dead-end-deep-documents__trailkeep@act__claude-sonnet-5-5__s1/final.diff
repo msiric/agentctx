@@ -1,0 +1,122 @@
+diff --git a/tests/test_drop_keys.py b/tests/test_drop_keys.py
+new file mode 100644
+index 0000000..51f92aa
+--- /dev/null
++++ b/tests/test_drop_keys.py
+@@ -0,0 +1,59 @@
++import copy
++
++from xmltodict import drop_keys, parse
++
++
++def test_removes_keys_at_any_depth_including_attributes():
++    doc = parse('<a id="1"><b id="2" k="x"><c id="3">t</c></b><b id="4"/></a>')
++    assert drop_keys(doc, ['@id']) == {
++        'a': {'b': [{'@k': 'x', 'c': {'#text': 't'}}, {}]}}
++
++
++def test_removes_element_keys_and_inside_lists():
++    doc = {'a': [{'x': 1, 'y': 2}, {'x': 3, 'z': {'x': 4, 'w': 5}}]}
++    assert drop_keys(doc, {'x'}) == {'a': [{'y': 2}, {'z': {'w': 5}}]}
++
++
++def test_does_not_mutate_input():
++    doc = parse('<a id="1"><b id="2"><c>t</c></b><b id="3"/></a>')
++    snapshot = copy.deepcopy(doc)
++    result = drop_keys(doc, ['@id', 'c'])
++    assert doc == snapshot
++    assert result is not doc
++    assert result['a']['b'] is not doc['a']['b']
++
++
++def test_empty_names_returns_equal_independent_copy():
++    doc = {'a': [{'b': 1}]}
++    result = drop_keys(doc, [])
++    assert result == doc
++    result['a'][0]['b'] = 2
++    assert doc['a'][0]['b'] == 1
++
++
++def test_single_string_name_is_one_key_not_characters():
++    assert drop_keys({'ab': 1, 'a': 2, 'b': 3}, 'ab') == {'a': 2, 'b': 3}
++
++
++def test_missing_names_and_scalars():
++    assert drop_keys({'a': 1}, ['nope']) == {'a': 1}
++    assert drop_keys('text', ['a']) == 'text'
++    assert drop_keys(None, ['a']) is None
++
++
++def test_tuples_become_lists_and_dropping_all_keys():
++    assert drop_keys({'a': ({'x': 1, 'y': 2},)}, ['x']) == {'a': [{'y': 2}]}
++    assert drop_keys({'a': 1}, ['a']) == {}
++
++
++def test_very_deep_nesting_does_not_recurse():
++    doc = leaf = {}
++    for _ in range(50000):
++        leaf['keep'] = {'drop': 1}
++        leaf = leaf['keep']
++    result = drop_keys(doc, ['drop'])
++    depth = 0
++    while result:
++        result = result['keep']
++        depth += 1
++    assert depth == 50000
+diff --git a/xmltodict.py b/xmltodict.py
+index dc394ca..ad4b9ca 100755
+--- a/xmltodict.py
++++ b/xmltodict.py
+@@ -632,6 +632,52 @@ def unparse(input_dict, output=None, encoding='utf-8', full_document=True,
+         return value
+ 
+ 
++def drop_keys(doc, names):
++    """Return a copy of a parsed document with every key in `names` removed.
++
++    Keys are removed at any depth, including attribute keys such as '@id'
++    (pass the key exactly as it appears in the dict). `doc` is never mutated.
++    Dicts are copied as plain dicts and lists/tuples as lists; other values
++    are shared with the input. `names` may be a single string or an iterable
++    of strings.
++
++    The walk is iterative, so very deeply nested documents do not hit the
++    interpreter's recursion limit.
++    """
++    if isinstance(names, str):
++        names = (names,)
++    names = frozenset(names)
++
++    def shell(value):
++        if isinstance(value, dict):
++            return {}
++        if isinstance(value, (list, tuple)):
++            return []
++        return None
++
++    root = shell(doc)
++    if root is None:
++        return doc
++    stack = [(doc, root)]
++    while stack:
++        src, dst = stack.pop()
++        if isinstance(src, dict):
++            for k, v in src.items():
++                if k in names:
++                    continue
++                child = shell(v)
++                dst[k] = v if child is None else child
++                if child is not None:
++                    stack.append((v, child))
++        else:
++            for v in src:
++                child = shell(v)
++                dst.append(v if child is None else child)
++                if child is not None:
++                    stack.append((v, child))
++    return root
++
++
+ if __name__ == '__main__':  # pragma: no cover
+     import marshal
+     import sys

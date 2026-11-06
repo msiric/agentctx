@@ -1,0 +1,1 @@
+- 2026-11-06: User rule (stated by user, applies to every project): write tests as one table-driven test.each per function, not a pile of separate it/test blocks. Reason: tables are easier to scan and to add cases to.

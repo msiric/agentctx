@@ -1,0 +1,9 @@
+# main
+
+Branch: main · Repo: local__tabulate-3763131309 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: Resume the tabulate CLI --wrap WIDTH option after the release freeze (ends Monday); it was backed out unmerged on the user's request, no CLI changes in this build. Approach to redo: pass int WIDTH as maxcolwidths with break_long_words=False and break_on_hyphens=False in _pprint_file, because default wrapping split ticket IDs (SUPPORT-2024-118233) and URLs that support copy-pastes into the tracker; trade-off is columns grow past WIDTH for long tokens (open question for user: hard limit instead?). Reject non-positive-int WIDTH with exit code 2. Tests: use -s '	' input, since whitespace-separated words become separate columns. Not yet done: README and CHANGELOG entries.
+- 2026-11-06: Implemented CLI --wrap WIDTH (cli.py, README, CHANGELOG 'Unreleased', tests). Open question resolved by me: kept no-split behavior (columns may exceed WIDTH) rather than a hard limit; user may still want a hard-limit flag.
+

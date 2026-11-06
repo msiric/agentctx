@@ -1,0 +1,86 @@
+diff --git a/schedule/__init__.py b/schedule/__init__.py
+index 8e12eeb..3e6d488 100644
+--- a/schedule/__init__.py
++++ b/schedule/__init__.py
+@@ -97,8 +97,15 @@ class Scheduler:
+         between but only once.
+         """
+         runnable_jobs = (job for job in self.jobs if job.should_run)
++        first_exc: Optional[BaseException] = None
+         for job in sorted(runnable_jobs):
+-            self._run_job(job)
++            try:
++                self._run_job(job)
++            except Exception as exc:
++                if first_exc is None:
++                    first_exc = exc
++        if first_exc is not None:
++            raise first_exc
+ 
+     def run_all(self, delay_seconds: int = 0) -> None:
+         """
+@@ -115,9 +122,11 @@ class Scheduler:
+             len(self.jobs),
+             delay_seconds,
+         )
+-        for job in self.jobs[:]:
++        jobs = self.jobs[:]
++        for i, job in enumerate(jobs):
+             self._run_job(job)
+-            time.sleep(delay_seconds)
++            if i < len(jobs) - 1:
++                time.sleep(delay_seconds)
+ 
+     def get_jobs(self, tag: Optional[Hashable] = None) -> List["Job"]:
+         """
+@@ -688,9 +697,13 @@ class Job:
+             return CancelJob
+ 
+         logger.debug("Running job %s", self)
+-        ret = self.job_func()
+-        self.last_run = datetime.datetime.now()
+-        self._schedule_next_run()
++        try:
++            ret = self.job_func()
++        finally:
++            # Reschedule even if the job raised, so a failing job doesn't
++            # re-run on every tick.
++            self.last_run = datetime.datetime.now()
++            self._schedule_next_run()
+ 
+         if self._is_overdue(self.next_run):
+             logger.debug("Cancelling job %s", self)
+diff --git a/test_schedule.py b/test_schedule.py
+index f497826..a628157 100644
+--- a/test_schedule.py
++++ b/test_schedule.py
+@@ -1278,6 +1278,29 @@ class SchedulerTests(TestCase):
+         schedule.run_all()
+         assert mock_job.call_count == 3
+ 
++    def test_run_pending_runs_all_then_raises_first_exception(self):
++        calls = []
++
++        def bad(name):
++            calls.append(name)
++            raise ValueError(name)
++
++        def good():
++            calls.append("good")
++
++        with mock_datetime(2024, 1, 1, 10, 0):
++            j1 = every().minute.do(bad, "a")
++            j2 = every().minute.do(good)
++            j3 = every().minute.do(bad, "b")
++        with mock_datetime(2024, 1, 1, 10, 5):
++            with self.assertRaises(ValueError) as cm:
++                schedule.run_pending()
++            assert str(cm.exception) == "a"
++            assert sorted(calls) == ["a", "b", "good"]
++            # failing jobs were rescheduled
++            assert j1.last_run is not None and j3.last_run is not None
++            assert not j1.should_run
++
+     def test_run_all_with_decorator(self):
+         mock_job = make_mock_job()
+ 

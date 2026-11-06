@@ -1,0 +1,3 @@
+2026-11-06: ISO duration work: user rule — days are the largest unit (no months/years, ambiguous); formatting first, parsing is a later step. My own choices in formatISO: zero -> PT0S, negatives get leading '-', sub-second as decimal seconds (PT0.5S), input rounded to whole ms.
+2026-11-06: Rule from user (security reviewer Leo, after the old ReDoS advisory against ms): no regular expressions in any new parsing code on this branch. The ISO duration parse side must be hand-written (manual char scanning).
+2026-11-06: parseISO (my choices): hand-scanned, no regex; throws on invalid input (like formatISO); rejects Y/M-in-date/W, accepts optional +/- sign, ',' or '.' decimal only on seconds; units must be in order, no repeats; '-PT0S' -> 0. Not committed yet.

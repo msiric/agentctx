@@ -1,0 +1,126 @@
+diff --git a/README.md b/README.md
+index d752132..c9c3fd9 100644
+--- a/README.md
++++ b/README.md
+@@ -54,7 +54,8 @@ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h'
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm'
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's'
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms'
+-type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'μs' | 'us'
++type Unit = Years | Months | Weeks | Days | Hours | Minutes | Seconds | Milliseconds | Microseconds
+ ```
+ 
+ These formats can be lowercase (`minutes`), uppercase (`MINUTES`), or capitalized (`Minutes`). There can be a space (`2 minutes`) or not (`2minutes`).
+diff --git a/src/index.test.ts b/src/index.test.ts
+index 5035ab9..f6facef 100644
+--- a/src/index.test.ts
++++ b/src/index.test.ts
+@@ -1,6 +1,28 @@
+-import { describe, expect, it } from '@jest/globals';
++import { describe, expect, it, test } from '@jest/globals';
+ import { ms } from './index';
+ 
++const microsecondCases: [string, number][] = [
++  ['500us', 0.5],
++  ['500µs', 0.5],
++  ['500 µs', 0.5],
++  ['1000us', 1],
++  ['1 microsecond', 0.001],
++  ['2 microseconds', 0.002],
++  ['500US', 0.5],
++  ['500Us', 0.5],
++  ['500µS', 0.5],
++  ['500 MICROSECONDS', 0.5],
++  ['500 Microseconds', 0.5],
++  ['-250us', -0.25],
++  ['1.5us', 0.0015],
++];
++
++describe('ms(microsecond string)', () => {
++  test.each(microsecondCases)('ms(%j) -> %d', (input, expected) => {
++    expect(ms(input as never)).toBeCloseTo(expected, 10);
++  });
++});
++
+ describe('ms(string)', () => {
+   it('should not throw an error', () => {
+     expect(() => {
+diff --git a/src/index.ts b/src/index.ts
+index d50e3c7..882ed38 100644
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -14,6 +14,7 @@ type Hours = 'hours' | 'hour' | 'hrs' | 'hr' | 'h';
+ type Minutes = 'minutes' | 'minute' | 'mins' | 'min' | 'm';
+ type Seconds = 'seconds' | 'second' | 'secs' | 'sec' | 's';
+ type Milliseconds = 'milliseconds' | 'millisecond' | 'msecs' | 'msec' | 'ms';
++type Microseconds = 'microseconds' | 'microsecond' | 'µs' | 'μs' | 'us';
+ type Unit =
+   | Years
+   | Months
+@@ -22,7 +23,8 @@ type Unit =
+   | Hours
+   | Minutes
+   | Seconds
+-  | Milliseconds;
++  | Milliseconds
++  | Microseconds;
+ 
+ type UnitAnyCase = Capitalize<Unit> | Uppercase<Unit> | Unit;
+ 
+@@ -75,7 +77,7 @@ export function parse(str: string): number {
+     );
+   }
+   const match =
+-    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
++    /^(?<value>-?\d*\.?\d+) *(?<unit>milliseconds?|msecs?|ms|microseconds?|[µμ]s|us|seconds?|secs?|s|minutes?|mins?|m|hours?|hrs?|h|days?|d|weeks?|w|months?|mo|years?|yrs?|y)?$/i.exec(
+       str,
+     );
+ 
+@@ -138,6 +140,12 @@ export function parse(str: string): number {
+     case 'msec':
+     case 'ms':
+       return n;
++    case 'microseconds':
++    case 'microsecond':
++    case 'µs':
++    case 'μs': // Greek small mu, what `µs` (U+00B5) lowercases to after case-insensitive matching
++    case 'us':
++      return n / 1000;
+     default:
+       matchUnit satisfies never;
+       throw new Error(
+diff --git a/src/parse.test.ts b/src/parse.test.ts
+index 9182411..13d8fe9 100644
+--- a/src/parse.test.ts
++++ b/src/parse.test.ts
+@@ -1,6 +1,28 @@
+-import { describe, expect, it } from '@jest/globals';
++import { describe, expect, it, test } from '@jest/globals';
+ import { parse } from './index';
+ 
++const microsecondCases: [string, number][] = [
++  ['500us', 0.5],
++  ['500µs', 0.5],
++  ['500 µs', 0.5],
++  ['1000us', 1],
++  ['1 microsecond', 0.001],
++  ['2 microseconds', 0.002],
++  ['500US', 0.5],
++  ['500Us', 0.5],
++  ['500µS', 0.5],
++  ['500 MICROSECONDS', 0.5],
++  ['500 Microseconds', 0.5],
++  ['-250us', -0.25],
++  ['1.5us', 0.0015],
++];
++
++describe('parse(microsecond string)', () => {
++  test.each(microsecondCases)('parse(%j) -> %d', (input, expected) => {
++    expect(parse(input as never)).toBeCloseTo(expected, 10);
++  });
++});
++
+ describe('parse(string)', () => {
+   it('should not throw an error', () => {
+     expect(() => {

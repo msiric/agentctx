@@ -1,0 +1,9 @@
+# reports-filter
+
+Branch: reports-filter · Repo: local__query-string-3312691341 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: parseJsonParameter(query,key) for base.js was tried and removed (not committed). Reason: reports team's account IDs are 64-bit ints, JSON.parse loses precision above 2^53 (...376 and ...377 collide), and parse() needs the bare query (full '/reports?...' link gave undefined; extract() first fixes that). User is deciding the approach (string IDs in JSON vs lossless parse). Don't re-add it until they decide.
+- 2026-11-06: parse() now has a 'json' type (JSON.parse in parseValue, base.js). I chose plain JSON.parse and documented the >2^53 precision loss in the readme (send big IDs as strings); lossless parsing still undecided by the user.
+

@@ -1,0 +1,8 @@
+# feat/count
+
+Branch: feat/count · Repo: local__mri-3649707784 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: count option implemented (my design choices): counted keys are forced boolean-like so they never consume the next arg; counts sum across aliases; --no-x resets to 0; absent flag stays undefined unless a default is set. Bumped version to 1.3.0 (minor, per user's publish-from-main rule). Changes uncommitted on feat/count.
+

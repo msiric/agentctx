@@ -1,0 +1,9 @@
+# globex-feed
+
+Branch: globex-feed · Repo: local__tabulate-1642822348 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: Added --columns KEY1,KEY2 to tabulate CLI (tabulate/cli.py), committed a781d61. My choices: jsonl-only (errors with exit 2 for other read formats); keys missing from a record give empty cells (not '.', that's an Acme-only request).
+- 2026-11-06: Pending on this branch (not started; user will do it after Globex signs off on the column list): Globex loads the feed with R, so missing values in jsonl/tsv output must come out as 'NA' (currently empty cells). Note acme-feed wants '.' for the same thing, so make the missing-value marker configurable rather than hardcoding one.
+

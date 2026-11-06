@@ -1,0 +1,9 @@
+# feat/compound
+
+Branch: feat/compound · Repo: local__ms-774394264 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: parseCompound (my choices): hand-scanned, no regex, since ms had a ReDoS advisory (the no-regex rule from feat/iso-duration was scoped to that branch, so I followed it by choice, not by rule). Every component needs a unit; a single leading '-' negates the total; non-string, empty or >100 chars returns NaN instead of throwing. Not committed yet.
+- 2026-11-06: parseCompound now uses one anchored regex (validate whole string) plus a global component regex to sum, input capped at 100 chars. User changed the earlier hand-scanned approach for this PR: reviewer Ana prefers an anchored, length-capped regex. The no-regex rule was only for feat/iso-duration.
+

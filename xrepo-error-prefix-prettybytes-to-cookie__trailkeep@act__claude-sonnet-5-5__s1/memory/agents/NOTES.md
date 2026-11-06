@@ -1,0 +1,1 @@
+- 2026-11-06: Start every error message thrown by any of the user's packages with '<package-name>: ' (e.g. 'pretty-bytes: '), so the prefix shows which dependency threw from deep inside an app. Reason given by the user.

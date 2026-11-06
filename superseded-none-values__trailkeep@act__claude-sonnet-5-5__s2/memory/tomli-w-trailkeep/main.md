@@ -1,0 +1,9 @@
+# main
+
+Branch: main · Repo: local__tomli-w-985511854 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: PurePath values are written as plain strings via str(obj) (user request). My choice, not the user's: Windows paths keep backslashes (escaped in TOML) rather than being converted to forward slashes. Implemented in format_literal with test_path in tests/test_types.py; uncommitted.
+- 2026-11-06: None now written as "" everywhere (tables, inline tables, arrays) per user's earlier decision; skip logic and 'array raises' removed, tests updated in tests/test_types.py. Uncommitted. README/CHANGELOG still not updated (not asked yet).
+

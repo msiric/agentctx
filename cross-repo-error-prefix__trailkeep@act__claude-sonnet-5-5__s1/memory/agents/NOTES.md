@@ -1,0 +1,2 @@
+- 2026-11-06: Start every error message with the package name, like 'pretty-ms: Expected ...', in all the user's packages. Reason: their log collector drops stack traces, so the prefix is the only way to tell which dependency threw.
+- 2026-11-06: Applied the 'pretty-ms: ' style package-name prefix to new error messages (parse-ms: ...). Existing unprefixed error in parse-ms index.js ('Expected a finite number or bigint') left as-is; ask/offer to prefix it.

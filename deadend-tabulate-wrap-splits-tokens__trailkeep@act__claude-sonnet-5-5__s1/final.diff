@@ -1,0 +1,124 @@
+diff --git a/CHANGELOG b/CHANGELOG
+index ce390bb..0ee831e 100644
+--- a/CHANGELOG
++++ b/CHANGELOG
+@@ -1,3 +1,5 @@
++- Unreleased:
++  Add `--wrap WIDTH` option to the CLI utility (long words are never split).
+ - 0.11.0:
+   Drop support of the legacy `youtrack` format.
+   Add support of the `Decimal` data type.
+diff --git a/README.md b/README.md
+index 0283a0c..2c0119e 100644
+--- a/README.md
++++ b/README.md
+@@ -1157,6 +1157,9 @@ FORMAT:
+ -F FPFMT, --float FPFMT   floating point number format (default: g)
+ -I INTFMT, --int INTFMT   integer point number format (default: "")
+ -f FMT, --format FMT      set output table format (default: simple)
++--wrap WIDTH              wrap long cell text at WIDTH characters (positive
++                          integer); long words, URLs and hyphenated IDs are
++                          never split, so columns may exceed WIDTH
+ 
+ Supported output formats: asciidoc, colon_grid, double_grid, double_outline,
+ fancy_grid, fancy_outline, github, grid, heavy_grid, heavy_outline, html, jira,
+diff --git a/tabulate/cli.py b/tabulate/cli.py
+index cfae6fe..cd8abd4 100644
+--- a/tabulate/cli.py
++++ b/tabulate/cli.py
+@@ -59,6 +59,9 @@ def _main():
+     -F FPFMT, --float FPFMT   floating point number format (default: g)
+     -I INTFMT, --int INTFMT   integer point number format (default: "")
+     -f FMT, --format FMT      set output table format (default: simple)
++    --wrap WIDTH              wrap long cell text at WIDTH characters (positive
++                              integer); long words, URLs and hyphenated IDs are
++                              never split, so columns may exceed WIDTH
+ 
+     Supported output formats: asciidoc, colon_grid, double_grid, double_outline,
+     fancy_grid, fancy_outline, github, grid, heavy_grid, heavy_outline, html, jira,
+@@ -88,6 +91,7 @@ def _main():
+                 "int=",
+                 "colalign=",
+                 "format=",
++                "wrap=",
+             ],
+         )
+     except getopt.GetoptError as e:
+@@ -102,6 +106,7 @@ def _main():
+     fileformat = "rsv"
+     sep = r"\s+"
+     outfile = "-"
++    wrap = None
+     special_headers_values = ["firstrow", "keys"]
+     for opt, value in opts:
+         if opt in ["-1", "--header"]:
+@@ -131,6 +136,15 @@ def _main():
+             tablefmt = value
+         elif opt in ["-s", "--sep"]:
+             sep = value
++        elif opt == "--wrap":
++            try:
++                wrap = int(value)
++                if wrap <= 0:
++                    raise ValueError(value)
++            except ValueError:
++                print(f"--wrap WIDTH must be a positive integer: {value}", file=sys.stderr)
++                print(usage)
++                sys.exit(2)
+         elif opt in ["-h", "--help"]:
+             print(usage)
+             sys.exit(0)
+@@ -175,6 +189,7 @@ def _main():
+                 intfmt=intfmt,
+                 file=out,
+                 colalign=colalign,
++                wrap=wrap,
+             )
+ 
+ 
+@@ -208,7 +223,9 @@ def _open_and_pprint_file(reader, f, *args, **kwargs):
+             _pprint_file(reader, fobj, *args, **kwargs)
+ 
+ 
+-def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign):
++def _pprint_file(
++    reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign, wrap=None
++):
+     table = reader(fobject)
+     print(
+         tabulate(
+@@ -218,6 +235,9 @@ def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, col
+             floatfmt=floatfmt,
+             intfmt=intfmt,
+             colalign=colalign,
++            maxcolwidths=wrap,
++            break_long_words=False,
++            break_on_hyphens=False,
+         ),
+         file=file,
+     )
+diff --git a/test/test_cli.py b/test/test_cli.py
+index 154f1a2..b8f1956 100644
+--- a/test/test_cli.py
++++ b/test/test_cli.py
+@@ -483,3 +483,20 @@ def test_inprocess_jsonl_malformed_headers():
+     )
+     # output should still be produced (graceful fallback), with raw keys as headers
+     assert out.strip() != ""
++
++
++def test_wrap_wraps_text_and_keeps_long_tokens():
++    text = "SUPPORT-2024-118233\tthe quick brown fox jumps\n"
++    out = run_main_in_process(["--wrap", "10", "-s", "\t", "-f", "plain"], text)
++    assert "SUPPORT-2024-118233" in out
++    assert "the quick" in out and "brown fox" in out
++    assert "the quick brown" not in out
++
++
++def test_wrap_rejects_invalid_width():
++    import pytest
++
++    for bad in ["0", "-3", "abc"]:
++        with pytest.raises(SystemExit) as e:
++            run_main_in_process(["--wrap", bad], "a b\n")
++        assert e.value.code == 2

@@ -1,0 +1,1 @@
+- 2026-11-06: Rule: any new optional parameter goes after a bare `*` (keyword-only), in every project. Reason: positional booleans at call sites are unreadable and reordering parameters becomes a breaking change.

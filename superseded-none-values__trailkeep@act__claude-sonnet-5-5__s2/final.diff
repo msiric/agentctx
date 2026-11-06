@@ -1,0 +1,99 @@
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index 0f318fc..1c488d9 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -98,6 +98,10 @@ def gen_table_chunks(
+ 
+ 
+ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
++    if obj is None:
++        # TOML has no null; write an explicit empty string so that a loader
++        # can tell "unset" apart from a missing key.
++        return '""'
+     if isinstance(obj, bool):
+         return "true" if obj else "false"
+     if isinstance(obj, (int, float, date, datetime)):
+@@ -115,9 +119,12 @@ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
+ 
+     # Lazy import to improve module import time
+     from decimal import Decimal
++    from pathlib import PurePath
+ 
+     if isinstance(obj, Decimal):
+         return format_decimal(obj)
++    if isinstance(obj, PurePath):
++        return format_string(str(obj), allow_multiline=False)
+     raise TypeError(
+         f"Object of type '{type(obj).__qualname__}' is not TOML serializable"
+     )
+diff --git a/tests/test_types.py b/tests/test_types.py
+index e4c9782..9dd59ba 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -1,4 +1,5 @@
+ from decimal import Decimal
++from pathlib import Path, PurePosixPath, PureWindowsPath
+ 
+ import tomli_w
+ 
+@@ -46,3 +47,60 @@ non-empty-tuple = [
+ ]
+ """
+     )
++
++
++def test_none_written_as_empty_string():
++    obj = {
++        "a": None,
++        "b": 1,
++        "tbl": {"x": None, "y": 2},
++        "empty": {"z": None},
++        "aot": [{"p": None, "q": 1}, {"p": 2}],
++        "inline": [{"m": None, "n": 3}],
++    }
++    out = tomli_w.dumps(obj)
++    assert "None" not in out
++    assert tomli_w.dumps({"k": None}) == 'k = ""\n'
++    assert tomli_w.dumps({"t": {"k": {"u": None, "v": 1}}}) == (
++        '[t.k]\nu = ""\nv = 1\n'
++    )
++    import tomllib
++
++    assert tomllib.loads(out) == {
++        "a": "",
++        "b": 1,
++        "tbl": {"x": "", "y": 2},
++        "empty": {"z": ""},
++        "aot": [{"p": "", "q": 1}, {"p": 2}],
++        "inline": [{"m": "", "n": 3}],
++    }
++
++
++def test_inline_table_none():
++    assert tomli_w.dumps({"l": [{"a": None}, {"a": 1, "b": None}]}) == (
++        'l = [\n    { a = "" },\n    { a = 1, b = "" },\n]\n'
++    )
++
++
++def test_none_in_array():
++    assert tomli_w.dumps({"a": [1, None]}) == 'a = [\n    1,\n    "",\n]\n'
++    assert tomli_w.dumps({"a": [[None], (None,)]}) == (
++        'a = [\n    [\n        "",\n    ],\n    [\n        "",\n    ],\n]\n'
++    )
++
++
++def test_path():
++    obj = {
++        "p": PurePosixPath("/usr/local/bin"),
++        "w": PureWindowsPath("C:/Users/x"),
++        "rel": Path("a/b"),
++        "list": [PurePosixPath("/x")],
++        "inline": [{"q": PurePosixPath("/y")}],
++    }
++    assert tomli_w.dumps(obj) == (
++        'p = "/usr/local/bin"\n'
++        'w = "C:\\\\Users\\\\x"\n'
++        'rel = "a/b"\n'
++        'list = [\n    "/x",\n]\n'
++        'inline = [\n    { q = "/y" },\n]\n'
++    )

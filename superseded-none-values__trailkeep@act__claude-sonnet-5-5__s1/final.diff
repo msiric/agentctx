@@ -1,0 +1,123 @@
+diff --git a/src/tomli_w/_writer.py b/src/tomli_w/_writer.py
+index 0f318fc..c443f6e 100644
+--- a/src/tomli_w/_writer.py
++++ b/src/tomli_w/_writer.py
+@@ -98,6 +98,10 @@ def gen_table_chunks(
+ 
+ 
+ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
++    if obj is None:
++        # None is written as an empty string: the downstream loader reads ""
++        # as explicitly unset, whereas a dropped key falls back to defaults.
++        return '""'
+     if isinstance(obj, bool):
+         return "true" if obj else "false"
+     if isinstance(obj, (int, float, date, datetime)):
+@@ -115,9 +119,12 @@ def format_literal(obj: object, ctx: Context, *, nest_level: int = 0) -> str:
+ 
+     # Lazy import to improve module import time
+     from decimal import Decimal
++    from pathlib import PurePath
+ 
+     if isinstance(obj, Decimal):
+         return format_decimal(obj)
++    if isinstance(obj, PurePath):
++        return format_string(str(obj), allow_multiline=ctx.allow_multiline)
+     raise TypeError(
+         f"Object of type '{type(obj).__qualname__}' is not TOML serializable"
+     )
+diff --git a/tests/test_invalid.py b/tests/test_invalid.py
+index 3d5e8e8..89b846e 100644
+--- a/tests/test_invalid.py
++++ b/tests/test_invalid.py
+@@ -38,3 +38,4 @@ def test_invalid_key__truthy():
+         str(exc_info.value)
+         == "Invalid mapping key '2' of type 'int'. A string is required."
+     )
++
+diff --git a/tests/test_types.py b/tests/test_types.py
+index e4c9782..99bfbfb 100644
+--- a/tests/test_types.py
++++ b/tests/test_types.py
+@@ -46,3 +46,81 @@ non-empty-tuple = [
+ ]
+ """
+     )
++
++
++def test_none_values_as_empty_string():
++    obj = {
++        "a": None,
++        "b": 1,
++        "tbl": {"x": None, "y": 2},
++        "inline": {"x": None},
++        "aot": [{"p": None, "q": 1}],
++        "nested": {"inner": {"z": None, "w": "v"}},
++    }
++    out = tomli_w.dumps(obj)
++    assert "None" not in out
++    assert out == (
++        'a = ""\n'
++        "b = 1\n"
++        'aot = [\n    { p = "", q = 1 },\n]\n'
++        "\n[tbl]\n"
++        'x = ""\n'
++        "y = 2\n"
++        "\n[inline]\n"
++        'x = ""\n'
++        "\n[nested.inner]\n"
++        'z = ""\n'
++        'w = "v"\n'
++    )
++
++
++def test_none_in_array():
++    assert tomli_w.dumps({"arr": [1, None]}) == 'arr = [\n    1,\n    "",\n]\n'
++    assert tomli_w.dumps({"arr": [[None], [None, "a"]]}) == (
++        'arr = [\n    [\n        "",\n    ],\n    [\n        "",\n        "a",\n    ],\n]\n'
++    )
++    assert tomli_w.dumps({"t": (None,)}) == 't = [\n    "",\n]\n'
++
++
++def test_none_in_inline_table():
++    assert (
++        tomli_w.dumps({"arr": [{"a": None, "b": 1}]})
++        == 'arr = [\n    { a = "", b = 1 },\n]\n'
++    )
++
++
++def test_none_roundtrip():
++    import sys
++
++    if sys.version_info >= (3, 11):
++        import tomllib
++
++        obj = {"a": None, "l": [None, 1], "t": {"x": None}}
++        assert tomllib.loads(tomli_w.dumps(obj)) == {
++            "a": "",
++            "l": ["", 1],
++            "t": {"x": ""},
++        }
++
++
++def test_none_in_dump():
++    import io
++
++    fp = io.BytesIO()
++    tomli_w.dump({"a": None, "b": 1}, fp)
++    assert fp.getvalue() == b'a = ""\nb = 1\n'
++
++
++def test_pathlib_paths():
++    import pathlib
++
++    p = pathlib.PurePosixPath("/usr/local/bin")
++    assert tomli_w.dumps({"p": p}) == 'p = "/usr/local/bin"\n'
++    assert tomli_w.dumps({"p": pathlib.PurePosixPath("a/b")}) == 'p = "a/b"\n'
++    assert tomli_w.dumps({"t": {"p": p}, "l": [p]}) == (
++        'l = [\n    "/usr/local/bin",\n]\n\n[t]\np = "/usr/local/bin"\n'
++    )
++    assert tomli_w.dumps({"p": pathlib.PureWindowsPath("C:/x/y")}) == (
++        'p = "C:\\\\x\\\\y"\n'
++    )
++    assert tomli_w.dumps({"p": pathlib.Path("rel")}) == 'p = "rel"\n'

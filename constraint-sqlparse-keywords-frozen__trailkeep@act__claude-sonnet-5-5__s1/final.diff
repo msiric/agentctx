@@ -1,0 +1,150 @@
+diff --git a/docs/source/ui.rst b/docs/source/ui.rst
+index 374c4ac..304f901 100644
+--- a/docs/source/ui.rst
++++ b/docs/source/ui.rst
+@@ -43,6 +43,8 @@ To customize formatting options, override the ``args`` parameter:
+ 
+ Common formatting options include:
+ 
++* ``--check``: Write nothing, print the files that would change and exit
++  with 1 if any would (use instead of ``--in-place`` to verify formatting)
+ * ``--in-place``: Required - modify files in-place (always include this)
+ * ``--reindent`` or ``-r``: Reindent statements
+ * ``--keywords upper`` or ``-k upper``: Convert keywords to uppercase
+diff --git a/sqlparse/__init__.py b/sqlparse/__init__.py
+index 8411f5a..f6f62fd 100644
+--- a/sqlparse/__init__.py
++++ b/sqlparse/__init__.py
+@@ -11,7 +11,15 @@
+ from collections.abc import Generator
+ from typing import IO, Any
+ 
+-from sqlparse import cli, engine, filters, formatter, sql, tokens
++from sqlparse import (  # noqa: F401
++    cli,
++    engine,
++    extra_keywords,
++    filters,
++    formatter,
++    sql,
++    tokens,
++)
+ 
+ __version__ = "0.6.1.dev0"
+ __all__ = ["cli", "engine", "filters", "formatter", "sql", "tokens"]
+diff --git a/sqlparse/cli.py b/sqlparse/cli.py
+index 491b352..5c4199a 100644
+--- a/sqlparse/cli.py
++++ b/sqlparse/cli.py
+@@ -55,6 +55,14 @@ def create_parser():
+         default=False,
+         help='format files in-place (overwrite existing files)')
+ 
++    parser.add_argument(
++        '--check',
++        dest='check',
++        action='store_true',
++        default=False,
++        help='do not write anything; print the name of each file whose '
++             'formatting would change and exit with 1 if there are any')
++
+     parser.add_argument(
+         '--version',
+         action='version',
+@@ -205,6 +213,12 @@ def _process_file(filename, args):
+     except SQLParseError as e:
+         return _error(f'Failed to format {filename}: {e}')
+ 
++    if args.check:
++        if s != data:
++            print(filename)
++            return 1
++        return 0
++
+     # Write output
+     if args.inplace:
+         outfile = filename
+@@ -228,7 +242,9 @@ def main(args=None):
+     args = parser.parse_args(args)
+ 
+     # Validate argument combinations
+-    if len(args.filename) > 1:
++    if args.check and (args.inplace or args.outfile):
++        return _error('Cannot use --check with --in-place or -o/--outfile')
++    if len(args.filename) > 1 and not args.check:
+         if args.outfile:
+             return _error('Cannot use -o/--outfile with multiple files')
+         if not args.inplace:
+diff --git a/sqlparse/extra_keywords.py b/sqlparse/extra_keywords.py
+new file mode 100644
+index 0000000..d5c139e
+--- /dev/null
++++ b/sqlparse/extra_keywords.py
+@@ -0,0 +1,21 @@
++"""Local keyword additions, kept out of keywords.py so that file stays
++identical to upstream. Registered on the default lexer at import time."""
++
++from sqlparse import tokens
++from sqlparse.lexer import Lexer
++
++KEYWORDS_LOCAL_SNOWFLAKE = {
++    'EXCLUDE': tokens.Keyword,
++    'MATCH_RECOGNIZE': tokens.Keyword,
++    'ASOF': tokens.Keyword,
++    'MATCH_CONDITION': tokens.Keyword,
++}
++
++
++def register(lexer=None):
++    """Add the local keywords to ``lexer`` (default: the shared instance)."""
++    (lexer or Lexer.get_default_instance()).add_keywords(
++        KEYWORDS_LOCAL_SNOWFLAKE)
++
++
++register()
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index f33b534..c70d774 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -235,3 +235,25 @@ def test_cli_outfile_keeps_file_on_format_error(tmpdir, capsys):
+     assert out_file.read() == "select 1"
+     _, err = capsys.readouterr()
+     assert err.startswith("[ERROR] Failed to format")
++
++
++def test_cli_check(tmpdir, capsys):
++    clean = tmpdir.join('clean.sql')
++    clean.write('select 1\n')
++    dirty = tmpdir.join('dirty.sql')
++    dirty.write('select a,b from t\n')
++    formatted = sqlparse.format('select 1\n', reindent=True)
++    clean.write(formatted)
++    assert sqlparse.cli.main([str(clean), '-r', '--check']) == 0
++    assert capsys.readouterr().out == ''
++    before = dirty.read()
++    assert sqlparse.cli.main([str(clean), str(dirty), '-r', '--check']) == 1
++    assert capsys.readouterr().out == f'{dirty}\n'
++    assert dirty.read() == before
++
++
++def test_cli_check_rejects_inplace_and_outfile(tmpdir, capsys):
++    f = tmpdir.join('a.sql')
++    f.write('select 1')
++    assert sqlparse.cli.main([str(f), '--check', '--in-place']) == 1
++    assert sqlparse.cli.main([str(f), '--check', '-o', str(tmpdir.join('o'))]) == 1
+diff --git a/tests/test_extra_keywords.py b/tests/test_extra_keywords.py
+new file mode 100644
+index 0000000..de77fef
+--- /dev/null
++++ b/tests/test_extra_keywords.py
+@@ -0,0 +1,10 @@
++import pytest
++
++import sqlparse
++
++
++@pytest.mark.parametrize('kw', [
++    'exclude', 'match_recognize', 'asof', 'match_condition'])
++def test_local_snowflake_keywords_uppercased(kw):
++    assert sqlparse.format(f'select {kw}', keyword_case='upper') == \
++        f'SELECT {kw.upper()}'

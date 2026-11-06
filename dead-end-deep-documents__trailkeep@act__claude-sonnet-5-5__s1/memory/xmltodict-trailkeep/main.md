@@ -1,0 +1,9 @@
+# main
+
+Branch: main · Repo: local__xmltodict-343079350 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: Supplier catalog eval (user only needs parse, not unparse): parse of a 3000-part feed worked (0.02s). The user's generator one-liner nests parts 3000 deep rather than making siblings (my observation), so recursive walks and unparse hit RecursionError at the default limit. Flat feeds round-trip fine. Scratch files already deleted; repo unchanged. If revisiting: use a flat generator and walk iteratively or stream with item_depth.
+- 2026-11-06: drop_keys(doc, names) added to xmltodict.py (iterative walk, per the RecursionError finding on deep feeds; returns plain dict/list copies, tuples->lists; str names treated as one key). Tests in tests/test_drop_keys.py.
+

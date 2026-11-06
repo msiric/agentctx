@@ -1,0 +1,103 @@
+diff --git a/tabulate/cli.py b/tabulate/cli.py
+index cfae6fe..ff82dc5 100644
+--- a/tabulate/cli.py
++++ b/tabulate/cli.py
+@@ -9,6 +9,7 @@ try:
+     from . import (
+         _DEFAULT_FLOATFMT,
+         _DEFAULT_INTFMT,
++        _DEFAULT_MISSINGVAL,
+         _is_file,
+         tabulate,
+         tabulate_formats,
+@@ -22,12 +23,17 @@ except ImportError:  # pragma: no cover
+     from tabulate import (
+         _DEFAULT_FLOATFMT,
+         _DEFAULT_INTFMT,
++        _DEFAULT_MISSINGVAL,
+         _is_file,
+         tabulate,
+         tabulate_formats,
+     )
+ 
+ 
++# marker the Acme SAS loader expects for missing values in jsonl input
++_JSONL_MISSINGVAL = "."
++
++
+ def _main():
+     """\
+     Usage: tabulate [options] [FILE ...]
+@@ -101,6 +107,7 @@ def _main():
+     tablefmt = "simple"
+     fileformat = "rsv"
+     sep = r"\s+"
++    missingval = _DEFAULT_MISSINGVAL
+     outfile = "-"
+     special_headers_values = ["firstrow", "keys"]
+     for opt, value in opts:
+@@ -147,6 +154,7 @@ def _main():
+             headers = headers.split(",")
+     elif fileformat == "jsonl":
+         reader = _read_jsonl_file
++        missingval = _JSONL_MISSINGVAL  # keys absent from a record
+         if not headers:
+             headers = "keys"  # reasonable default
+         if type(headers) is str and headers not in special_headers_values:
+@@ -175,6 +183,7 @@ def _main():
+                 intfmt=intfmt,
+                 file=out,
+                 colalign=colalign,
++                missingval=missingval,
+             )
+ 
+ 
+@@ -188,7 +197,7 @@ def _read_jsonl_file(fobject):
+     import json
+ 
+     rows: list[str] = fobject.readlines()
+-    table = [json.loads(row) for row in rows]
++    table = [json.loads(row) for row in rows if row.strip()]
+     return table
+ 
+ 
+@@ -208,7 +217,7 @@ def _open_and_pprint_file(reader, f, *args, **kwargs):
+             _pprint_file(reader, fobj, *args, **kwargs)
+ 
+ 
+-def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign):
++def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign, missingval):
+     table = reader(fobject)
+     print(
+         tabulate(
+@@ -218,6 +227,7 @@ def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, col
+             floatfmt=floatfmt,
+             intfmt=intfmt,
+             colalign=colalign,
++            missingval=missingval,
+         ),
+         file=file,
+     )
+diff --git a/test/test_cli.py b/test/test_cli.py
+index 154f1a2..a7df0f0 100644
+--- a/test/test_cli.py
++++ b/test/test_cli.py
+@@ -483,3 +483,18 @@ def test_inprocess_jsonl_malformed_headers():
+     )
+     # output should still be produced (graceful fallback), with raw keys as headers
+     assert out.strip() != ""
++
++
++def test_inprocess_jsonl_skips_blank_lines():
++    """In-process: JSONL input with trailing blank lines is accepted"""
++    out = run_main_in_process(["-r", "jsonl", "-f", "tsv"], input_text='{"a": 1}\n{"a": 2}\n\n\n')
++    assert "1" in out and "2" in out
++
++
++def test_inprocess_jsonl_missing_key_uses_loader_marker():
++    """In-process: a record lacking a key gets '.' without extra flags"""
++    out = run_main_in_process(
++        ["-r", "jsonl", "-f", "tsv"],
++        input_text='{"a": 1, "b": 2}\n{"a": 3}\n\n',
++    )
++    assert_equal([r.split() for r in out.splitlines()], [["a", "b"], ["1", "2"], ["3", "."]])

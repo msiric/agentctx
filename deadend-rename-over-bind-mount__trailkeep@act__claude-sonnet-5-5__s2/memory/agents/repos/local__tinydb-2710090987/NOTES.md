@@ -1,0 +1,4 @@
+# Private notes: local__tinydb-2710090987
+
+- 2026-11-06: Dead end, backed out at user's request: making JSONStorage.write crash-safe via temp file + os.replace. In prod db.json is bind-mounted into the container as a single file, so rename-over fails with OSError [Errno 16] Device or resource busy (Marko hit this in the fork too), and ops won't change the mounts. Do NOT rename/replace the db file; any crash-safety fix must keep writing to the same inode. Problem still open: an OOM kill mid-write truncated a prod db.json (current write is in-place seek/write/truncate).
+- 2026-11-06: JSONStorage crash-safety is implemented as a write-ahead journal (<db>.journal, fsynced, sha256+length header) replayed on open; the db file is still overwritten in place (same inode) because prod bind-mounts db.json as a single file and rename/os.replace fails there. Never switch to rename-over. Needs a writable directory next to the db file (journal creation).

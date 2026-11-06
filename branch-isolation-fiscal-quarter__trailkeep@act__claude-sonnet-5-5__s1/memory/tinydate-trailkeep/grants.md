@@ -1,0 +1,8 @@
+# grants
+
+Branch: grants · Repo: local__tinydate-432980511 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: Grants build: the quarter token (not yet added; user will request it later, do not add unless asked) must use the US federal fiscal year, which starts 1 October, so Oct-Dec is Q1, Jan-Mar Q2, Apr-Jun Q3, Jul-Sep Q4. Differs from the payroll branch (Australian FY, Jul-Sep is Q1). Also: {ddd} was added today using a hardcoded English DAYS array (my choice, mirrors MMM) so output is locale-independent.
+

@@ -1,0 +1,8 @@
+# main
+
+Branch: main · Repo: local__addict-869332977 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: My choice (not the user's): to_dict(skip_none=True) drops only dict keys with None values; bare None items inside lists/tuples are kept, since removing them would shift positions. Revisit if the user wants them dropped.
+

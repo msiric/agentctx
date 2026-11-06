@@ -1,0 +1,10 @@
+# feature/length-validator
+
+Branch: feature/length-validator · Repo: local__schema-2917132574 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: Length(min, max) validator for schema/__init__.py: user asked for a class sketch first and said not to write it into the code yet. Wait for their go-ahead on the sketch before implementing. Design choices in the sketch (error in errors slot like Use, not autos like Regex; minLength/maxLength in json_schema; any Sized accepted) are my proposals, not user decisions.
+- 2026-11-06: Length(min, max) validator: user decided min/max count UTF-8 bytes, not characters, because the values go into Oracle VARCHAR2(n BYTE) columns and inserts failed on accented names that passed a len() check. Messages must say bytes. Everything else in the sketch was approved; implement next session.
+- 2026-11-06: Length implemented (schema/__init__.py, tests test_length*). My own choices, not user decisions: accepts str and bytes/bytearray only (non-str rejected, since UTF-8 byte counting is meaningless for lists); json_schema emits sound bounds only: maxLength=max, minLength=ceil(min/4), because JSON Schema counts characters but Length counts bytes; ctor raises ValueError/TypeError for negative, non-int, or min>max. Not done: README section and CHANGELOG entry.
+

@@ -1,0 +1,9 @@
+# feature/range-limit
+
+Branch: feature/range-limit · Repo: local__range-parser-2110353400 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: Decision (user): for the rangeParser `limit` option, when a header has more ranges than `limit`, don't reject/truncate: return ONE range spanning lowest start to highest end. Reason: CDN can cache single-range responses but not multipart; video players tolerate the extra bytes. Not yet implemented, only discussed (no code written). Still open, my suggestions only, not user-decided: count valid parsed ranges (after combine if combine is on); unset limit = unlimited (non-breaking); result should keep ranges.type; document in README + add tests + HISTORY entry. Rejected options: return -1/-2, truncate to first N, throw, new -3 code.
+- 2026-11-06: Implemented rangeParser limit (index.js collapseRanges). My choices, not user-decided: counts valid ranges after combine; unset/non-number/<1 limit = unlimited; result keeps ranges.type; -1/-2 unchanged. README, HISTORY, tests done; lint+tests pass.
+
