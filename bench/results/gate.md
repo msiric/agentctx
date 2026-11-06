@@ -118,3 +118,27 @@ Note: cross-repo-error-prefix has the same kind of fact as the dev trap
 xrepo-error-prefix-prettybytes-to-cookie (prefix error messages with the
 package name). Its author was blind to the dev traps, so it stays as written.
 The report will also give set-3 results without it.
+
+# Headroom gate, held-out set 4 (2026-11-06)
+
+Same rule, same model, frozen versions, run 42144449767. Every set-4 trap is
+held-out (PREREGISTRATION.md, set 4 addendum).
+
+| Trap | none | oracle-note | Verdict |
+|---|---|---|---|
+| branch-isolation-camelcase-release-bump | 0/3 | 3/3 | keep |
+| branch-tabulate-missing-marker | 0/3 | 3/3 | keep |
+| constraint-pretry-generated-dts | 0/3 | 3/3 | keep |
+| constraint-sqlparse-keywords-frozen | 0/3 | 3/3 | keep |
+| dead-end-qs-json-bigint | 0/3 | 3/3 | keep |
+| deadend-tabulate-wrap-splits-tokens | 0/3 | 3/3 | keep |
+| decision-pretry-retry-after-additive | 0/3 | 3/3 | keep |
+| superseded-jmespath-rounding | 0/3 | 3/3 | keep |
+| superseded-qs-new-options-default-on | 0/3 | 3/3 | keep |
+| xrepo-doctest-examples | 0/3 | 3/3 | keep |
+| cross-repo-preference-tests-in-new-file | 2/3 | 3/3 | drop: no headroom |
+| decision-tenacity-hooks-never-raise | 2/3 | 3/3 | drop: no headroom |
+
+10 of 12 kept. The perfect note passed every trap 3/3. Two kept traps
+resemble set-2 facts (DEVIATIONS.md, 2026-11-06): xrepo-doctest-examples and
+superseded-jmespath-rounding.
