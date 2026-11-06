@@ -1,0 +1,64 @@
+diff --git a/CHANGELOG b/CHANGELOG
+index 399cd62..6425972 100644
+--- a/CHANGELOG
++++ b/CHANGELOG
+@@ -3,6 +3,8 @@ Development Version
+ 
+ Notable Changes
+ 
++* Add `sqlparse.statement_types()` returning the type of each statement
++  in a string, as reported by `Statement.get_type()`.
+ * IMPORTANT: Dollar signs are now escaped in the `php` output format. PHP
+   interpolates `$var`, `${expr}` and `{$expr}` inside double-quoted strings,
+   so SQL text containing them could inject PHP code into the generated
+diff --git a/docs/source/api.rst b/docs/source/api.rst
+index 7c6fd70..7ebe309 100644
+--- a/docs/source/api.rst
++++ b/docs/source/api.rst
+@@ -12,6 +12,8 @@ The :mod:`sqlparse` module provides the following functions on module-level.
+ 
+ .. autofunction:: sqlparse.parse
+ 
++.. autofunction:: sqlparse.statement_types
++
+ In most cases there's no need to set the `encoding` parameter. If
+ `encoding` is not set, sqlparse assumes that the given SQL statement
+ is encoded either in utf-8 or latin-1.
+diff --git a/sqlparse/__init__.py b/sqlparse/__init__.py
+index 8411f5a..e1709df 100644
+--- a/sqlparse/__init__.py
++++ b/sqlparse/__init__.py
+@@ -73,3 +73,17 @@ def split(
+     """
+     stack = engine.FilterStack(strip_semicolon=strip_semicolon)
+     return [str(stmt).strip() for stmt in stack.run(sql, encoding)]
++
++
++def statement_types(sql: str, encoding: str | None = None) -> list[str]:
++    """Return the statement type of each statement in *sql*.
++
++    The result contains, in order, the value of
++    :meth:`~sqlparse.sql.Statement.get_type` for every statement found
++    by :func:`parse`, e.g. ``['SELECT', 'INSERT']``.
++
++    :param sql: A string containing one or more SQL statements.
++    :param encoding: The encoding of the statement (optional).
++    :returns: A list of strings.
++    """
++    return [stmt.get_type() for stmt in parsestream(sql, encoding)]
+diff --git a/tests/test_parse.py b/tests/test_parse.py
+index 6716841..a47c1df 100644
+--- a/tests/test_parse.py
++++ b/tests/test_parse.py
+@@ -641,3 +641,11 @@ def test_json_operators(sql):
+     assert len(p) == 1
+     assert len(p[0].tokens) == 1
+     assert p[0].tokens[0].ttype == sqlparse.tokens.Operator
++
++
++def test_statement_types():
++    assert sqlparse.statement_types(
++        'select 1; insert into t values (1); -- c\n'
++        'with x as (select 1) delete from t; foo bar'
++    ) == ['SELECT', 'INSERT', 'DELETE', 'UNKNOWN']
++    assert sqlparse.statement_types('') == []

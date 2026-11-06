@@ -1,0 +1,195 @@
+diff --git a/index.d.ts b/index.d.ts
+index 1c6fbbc..5727069 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -21,12 +21,17 @@ export type RetryContext = {
+ 	/**
+ 	The delay in milliseconds before the next retry attempt.
+ 
+-	This is calculated based on `minTimeout`, `factor`, `maxTimeout`, and `randomize` options.
++	This is calculated based on `minTimeout`, `factor`, `maxTimeout`, and `randomize` options, plus the error's `retryAfter` (seconds) if it has a positive finite number.
+ 
+ 	Note: The actual delay may be shorter if it would exceed `maxRetryTime`.
+ 	This is `0` when no retry will occur based on the checks completed before the current callback runs. `shouldConsumeRetry` is the exception: it is shown the delay that would be used, since deciding whether to consume the retry is what it is being asked.
+ 	*/
+ 	readonly retryDelay: number;
++
++	/**
++	The time in milliseconds since `pRetry` was called, measured when the context was created.
++	*/
++	readonly elapsedTime: number;
+ };
+ 
+ export type Options = {
+diff --git a/index.js b/index.js
+index 8613e9e..afd8bfa 100644
+--- a/index.js
++++ b/index.js
+@@ -101,6 +101,15 @@ function calculateDelay(retriesConsumed, options) {
+ 	return Math.min(timeout, Math.ceil(options.maxTimeout), maximumDelay);
+ }
+ 
++// A server-provided `retryAfter` (seconds) on the error. Anything that is not a positive finite number is ignored.
++function getRetryAfterDelay(error) {
++	const {retryAfter} = error;
++
++	return typeof retryAfter === 'number' && Number.isFinite(retryAfter) && retryAfter > 0
++		? Math.ceil(retryAfter * 1000)
++		: 0;
++}
++
+ function calculateRemainingTime(start, max) {
+ 	return Number.isFinite(max) ? max - (performance.now() - start) : max;
+ }
+@@ -180,7 +189,10 @@ async function onAttemptFailure({error, attemptNumber, retriesConsumed, startTim
+ 
+ 	// Out of time already, out of retries, or a failure that is never retried, so the delay is 0 and the callbacks are told that no retry follows. Only computed when a retry can still follow, so a randomized delay does not draw from `Math.random` for a wait that is never taken.
+ 	const timeLeft = calculateRemainingTime(startTime, options.maxRetryTime);
+-	const delayTime = isRetriableError && timeLeft > 0 && retriesLeft > 0 ? calculateDelay(retriesConsumed, options) : 0;
++	// `retryAfter` is added to the backoff rather than replacing it, so that many callers released by the same rate window do not all come back at the same instant.
++	const delayTime = isRetriableError && timeLeft > 0 && retriesLeft > 0
++		? Math.min(calculateDelay(retriesConsumed, options) + getRetryAfterDelay(normalizedError), maximumDelay)
++		: 0;
+ 
+ 	const consumeRetryContext = Object.freeze({
+ 		error: normalizedError,
+@@ -188,6 +200,7 @@ async function onAttemptFailure({error, attemptNumber, retriesConsumed, startTim
+ 		retriesLeft,
+ 		retriesConsumed,
+ 		retryDelay: delayTime,
++		elapsedTime: performance.now() - startTime,
+ 	});
+ 
+ 	// No answer means no opinion, so fall back to the default. Treating it as `false` instead would leave `retries` uncounted and let the loop run forever.
+@@ -202,6 +215,7 @@ async function onAttemptFailure({error, attemptNumber, retriesConsumed, startTim
+ 		retriesLeft,
+ 		retriesConsumed,
+ 		retryDelay: effectiveDelay,
++		elapsedTime: performance.now() - startTime,
+ 	});
+ 
+ 	await options.onFailedAttempt(context);
+diff --git a/index.test-d.ts b/index.test-d.ts
+index 91ebc23..5e48a89 100644
+--- a/index.test-d.ts
++++ b/index.test-d.ts
+@@ -75,6 +75,7 @@ expectTypeOf(pRetry(() => 'foo', {
+ 	async shouldRetry(context) {
+ 		expectTypeOf(context).toBe<RetryContext>();
+ 		expectTypeOf(context.retryDelay).toBe<number>();
++		expectTypeOf(context.elapsedTime).toBe<number>();
+ 		return true;
+ 	},
+ })).toBe<Promise<string>>();
+diff --git a/readme.md b/readme.md
+index 467d746..c660ce8 100644
+--- a/readme.md
++++ b/readme.md
+@@ -90,7 +90,10 @@ The `context` object contains:
+ - `attemptNumber` - The attempt number (starts at 1)
+ - `retriesLeft` - Number of retries remaining
+ - `retriesConsumed` - Number of retries consumed so far
+-- `retryDelay` - The delay in milliseconds before the next retry (based on `minTimeout`, `factor`, `maxTimeout`, and `randomize`). The actual delay may be shorter if it would exceed `maxRetryTime`. This is `0` when no retry will occur based on the checks completed before the current callback runs. `shouldConsumeRetry` is the exception: it is shown the delay that would be used, since deciding whether to consume the retry is what it is being asked.
++- `retryDelay` - The delay in milliseconds before the next retry (based on `minTimeout`, `factor`, `maxTimeout`, and `randomize`, plus the error's `retryAfter` if it has one). The actual delay may be shorter if it would exceed `maxRetryTime`. This is `0` when no retry will occur based on the checks completed before the current callback runs. `shouldConsumeRetry` is the exception: it is shown the delay that would be used, since deciding whether to consume the retry is what it is being asked.
++- `elapsedTime` - The time in milliseconds since `pRetry` was called, measured when the context was created. Useful for metrics.
++
++If the error has a numeric `retryAfter` (in seconds), it is added to the computed backoff, so the wait is `retryAfter` plus the backoff. It is added rather than replacing the backoff so that many callers released by the same rate limit window do not all retry at the same instant. `maxTimeout` caps the backoff only, and `maxRetryTime` still applies to the total. Values that are not positive finite numbers are ignored.
+ 
+ The `onFailedAttempt` function can return a promise. For example, to add a [delay](https://github.com/sindresorhus/delay):
+ 
+diff --git a/test.js b/test.js
+index 20c9a47..671fc1e 100644
+--- a/test.js
++++ b/test.js
+@@ -1284,3 +1284,91 @@ try {
+ 		await removeTemporaryScript(temporaryFile);
+ 	}
+ });
++
++test('the context carries elapsedTime since pRetry was called', async t => {
++	await withFakeTime(t);
++
++	const seen = {consume: [], failed: [], retry: []};
++
++	await assert.rejects(pRetry(async () => {
++		throw new Error('fail');
++	}, {
++		retries: 2,
++		minTimeout: 100,
++		factor: 2,
++		shouldConsumeRetry({elapsedTime}) {
++			seen.consume.push(elapsedTime);
++		},
++		onFailedAttempt({elapsedTime}) {
++			seen.failed.push(elapsedTime);
++		},
++		shouldRetry({elapsedTime}) {
++			seen.retry.push(elapsedTime);
++			return true;
++		},
++	}), {message: 'fail'});
++
++	// Waits of 100ms and 200ms happen between the three attempts.
++	assert.deepEqual(seen.consume, [0, 100, 300]);
++	assert.deepEqual(seen.failed, [0, 100, 300]);
++	assert.deepEqual(seen.retry, [0, 100]);
++});
++
++test('retryAfter on the error is added to the backoff', async t => {
++	await withFakeTime(t);
++
++	const delays = [];
++	const times = [];
++	const start = performance.now();
++
++	await assert.rejects(pRetry(async () => {
++		times.push(performance.now() - start);
++		throw Object.assign(new Error('rate limited'), {retryAfter: 2});
++	}, {
++		retries: 2,
++		minTimeout: 100,
++		factor: 2,
++		onFailedAttempt({retryDelay}) {
++			delays.push(retryDelay);
++		},
++	}), {message: 'rate limited'});
++
++	assert.deepEqual(delays, [2100, 2200, 0]);
++	assert.deepEqual(times, [0, 2100, 4300]);
++});
++
++test('invalid retryAfter values are ignored', async t => {
++	await withFakeTime(t);
++
++	for (const retryAfter of ['5', -1, 0, NaN, Infinity, null]) {
++		const delays = [];
++
++		await assert.rejects(pRetry(async () => {
++			throw Object.assign(new Error('fail'), {retryAfter});
++		}, {
++			retries: 1,
++			minTimeout: 100,
++			onFailedAttempt({retryDelay}) {
++				delays.push(retryDelay);
++			},
++		}), {message: 'fail'});
++
++		assert.deepEqual(delays, [100, 0], String(retryAfter));
++	}
++});
++
++test('retryAfter is still bounded by maxRetryTime', async t => {
++	await withFakeTime(t);
++
++	const start = performance.now();
++
++	await assert.rejects(pRetry(async () => {
++		throw Object.assign(new Error('fail'), {retryAfter: 60});
++	}, {
++		retries: 5,
++		minTimeout: 100,
++		maxRetryTime: 1000,
++	}), {message: 'fail'});
++
++	assert.ok(performance.now() - start <= 1000);
++});

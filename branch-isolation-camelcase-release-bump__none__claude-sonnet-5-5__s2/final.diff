@@ -1,0 +1,133 @@
+diff --git a/index.d.ts b/index.d.ts
+index 8eeacc0..8c057bd 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -38,15 +38,15 @@ export type Options = {
+ 	/**
+ 	Controls whether letters immediately following digits are treated as word boundaries.
+ 
+-	When `true` (default):
++	When `true`:
+ 	Capitalize the first letter immediately following a numeric sequence, unless that letter is itself immediately followed by a separator. This is similar to Lodash, which also capitalizes after a number, but without the separator condition.
+ 
+ 	The extra condition keeps a token like `b2b` intact, so `b2b_registration` becomes `b2bRegistration` rather than `b2BRegistration`. It also means a trailing separator can stop the capitalization, as in `1a` → `1A` but `1a.` → `1a`.
+ 
+-	When `false`:
++	When `false` (default):
+ 	Do not treat digits as word boundaries. Preserve the original case of letters immediately following digits. Separators still create word boundaries. This follows the Google Java Style Guide which treats numbers as non-boundary characters.
+ 
+-	@default true
++	@default false
+ 
+ 	@example
+ 	```
+@@ -113,7 +113,7 @@ export type Options = {
+ };
+ 
+ /**
+-Convert a dash/dot/underscore/space separated string to camelCase or PascalCase: `foo-bar` → `fooBar`.
++Convert a dash/dot/underscore/slash/space separated string to camelCase or PascalCase: `foo-bar` → `fooBar`.
+ 
+ Correctly handles Unicode strings.
+ 
+diff --git a/index.js b/index.js
+index 18bd32b..9b98579 100644
+--- a/index.js
++++ b/index.js
+@@ -4,7 +4,7 @@ const ALPHABETIC = /\p{Alphabetic}/v;
+ // A decimal digit in any script, not only ASCII like `\d`. Other \p{Number} characters, such as superscripts and Roman numerals, are not digit runs.
+ const DIGIT = /\p{Decimal_Number}/v;
+ const LEADING_CAPITAL = /^\p{Uppercase_Letter}(?!\p{Uppercase_Letter})/v;
+-const SEPARATORS = /[ \-._]+/v;
++const SEPARATORS = /[ \-.\/_]+/v;
+ const LEADING_PREFIX = /^[$_]*/v;
+ 
+ // The |$ alternative allows matching at end-of-string, capturing empty string
+@@ -158,7 +158,7 @@ export default function camelCase(input, options) {
+ 	options = {
+ 		pascalCase: false,
+ 		preserveConsecutiveUppercase: false,
+-		capitalizeAfterNumber: true,
++		capitalizeAfterNumber: false,
+ 		...options,
+ 	};
+ 
+diff --git a/readme.md b/readme.md
+index 20fb3d2..42e91ed 100644
+--- a/readme.md
++++ b/readme.md
+@@ -1,6 +1,6 @@
+ # camelcase
+ 
+-> Convert a dash/dot/underscore/space separated string to camelCase or PascalCase: `foo-bar` → `fooBar`
++> Convert a dash/dot/underscore/slash/space separated string to camelCase or PascalCase: `foo-bar` → `fooBar`
+ 
+ Correctly handles Unicode strings.
+ 
+@@ -100,16 +100,16 @@ camelCase('foo-BAR', {preserveConsecutiveUppercase: false});
+ ##### capitalizeAfterNumber
+ 
+ Type: `boolean`\
+-Default: `true`
++Default: `false`
+ 
+ Controls whether letters immediately following digits are treated as word boundaries.
+ 
+-When `true` (default):
++When `true`:
+ Capitalize the first letter immediately following a numeric sequence, unless that letter is itself immediately followed by a separator. This is similar to Lodash, which also capitalizes after a number, but without the separator condition.
+ 
+ The extra condition keeps a token like `b2b` intact, so `b2b_registration` becomes `b2bRegistration` rather than `b2BRegistration`. It also means a trailing separator can stop the capitalization, as in `1a` → `1A` but `1a.` → `1a`.
+ 
+-When `false`:
++When `false` (default):
+ Do not treat digits as word boundaries. Preserve the original case of letters immediately following digits. Separators still create word boundaries. This follows the Google Java Style Guide which treats numbers as non-boundary characters.
+ 
+ ```js
+diff --git a/test.js b/test.js
+index bf7de19..2e0d070 100644
+--- a/test.js
++++ b/test.js
+@@ -1,8 +1,11 @@
+ import {test} from 'node:test';
+ import assert from 'node:assert/strict';
+-import camelCase from './index.js';
++import camelCaseWithLibraryDefaults from './index.js';
+ 
+-const SEPARATORS = /[ \-._]+/v;
++// `capitalizeAfterNumber` defaults to false, but most tests below were written for, and still cover, the `true` behavior. This wrapper opts them into it explicitly, so a test that passes `capitalizeAfterNumber: false` still overrides it. The actual default is pinned separately by the 'capitalizeAfterNumber defaults to false' test, which calls the unwrapped function.
++const camelCase = (input, options) => camelCaseWithLibraryDefaults(input, {capitalizeAfterNumber: true, ...options});
++
++const SEPARATORS = /[ \-.\/_]+/v;
+ const DIGIT = /\p{Decimal_Number}/v;
+ const ALPHABETIC = /\p{Alphabetic}/v;
+ 
+@@ -331,6 +334,16 @@ test('camelCase with capitalizeAfterNumber option', () => {
+ 	assert.equal(camelCase('turn_on_2sv', {pascalCase: true, capitalizeAfterNumber: false}), 'TurnOn2sv');
+ });
+ 
++test('capitalizeAfterNumber defaults to false', () => {
++	assert.equal(camelCaseWithLibraryDefaults('foo2bar'), 'foo2bar');
++	assert.equal(camelCaseWithLibraryDefaults('foo2bar', {pascalCase: true}), 'Foo2bar');
++	assert.equal(camelCaseWithLibraryDefaults('turn_on_2sv'), 'turnOn2sv');
++	assert.equal(camelCaseWithLibraryDefaults('b2b_registration'), 'b2bRegistration');
++	assert.equal(camelCaseWithLibraryDefaults('foo_2_bar'), 'foo2Bar');
++	assert.equal(camelCaseWithLibraryDefaults('foo2bar', {capitalizeAfterNumber: undefined}), 'foo2bar');
++	assert.equal(camelCaseWithLibraryDefaults('foo2bar', {capitalizeAfterNumber: true}), 'foo2Bar');
++});
++
+ test('capitalizeAfterNumber edge cases', () => {
+ 	assert.equal(camelCase('foo-2bar'), 'foo2Bar');
+ 	assert.equal(camelCase('foo-2bar', {capitalizeAfterNumber: false}), 'foo2bar');
+@@ -1117,3 +1130,11 @@ test('invalid input', () => {
+ 		message: /Expected the input to be/v,
+ 	});
+ });
++
++test('slash is a separator', () => {
++	assert.equal(camelCase('aws/region'), 'awsRegion');
++	assert.equal(camelCase('aws/region', {pascalCase: true}), 'AwsRegion');
++	assert.equal(camelCase('foo//bar/baz'), 'fooBarBaz');
++	assert.equal(camelCase('/foo/bar'), 'fooBar');
++	assert.equal(camelCase('/'), '');
++});

@@ -1,0 +1,164 @@
+diff --git a/index.d.ts b/index.d.ts
+index 915dd1b..7c76bf5 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -55,3 +55,22 @@ decamelize('unicornRainbow', {separator: '-'});
+ ```
+ */
+ export default function decamelize(string: string, options?: Options): string;
++
++/**
++Decamelize each own key of a plain object. The operation is shallow and values are left untouched.
++
++@param object - The plain object whose keys to decamelize.
++@param options - Options passed through to `decamelize`.
++
++@example
++```
++import {decamelizeKeys} from 'decamelize';
++
++decamelizeKeys({unicornRainbow: 1, fooBar: {bazQux: 2}});
++//=> {unicorn_rainbow: 1, foo_bar: {bazQux: 2}}
++
++decamelizeKeys({unicornRainbow: 1}, {separator: '-'});
++//=> {'unicorn-rainbow': 1}
++```
++*/
++export function decamelizeKeys<Value>(object: Record<string, Value>, options?: Options): Record<string, Value>;
+diff --git a/index.js b/index.js
+index 2305a0d..c97089d 100644
+--- a/index.js
++++ b/index.js
+@@ -65,3 +65,18 @@ export default function decamelize(
+ 	words.push(text.slice(wordStart).toLowerCase());
+ 	return words.join(separator);
+ }
++
++export function decamelizeKeys(object, options) {
++	if (typeof object !== 'object' || object === null) {
++		throw new TypeError('Expected `object` to be a plain object');
++	}
++
++	const prototype = Object.getPrototypeOf(object);
++	if (prototype !== null && prototype !== Object.prototype) {
++		throw new TypeError('Expected `object` to be a plain object');
++	}
++
++	return Object.fromEntries(
++		Object.entries(object).map(([key, value]) => [decamelize(key, options), value]),
++	);
++}
+diff --git a/index.test-d.ts b/index.test-d.ts
+index f43e707..67936c5 100644
+--- a/index.test-d.ts
++++ b/index.test-d.ts
+@@ -1,5 +1,5 @@
+ import {expectError, expectTypeOf} from 'nz';
+-import decamelize, {type Options} from './index.js';
++import decamelize, {decamelizeKeys, type Options} from './index.js';
+ 
+ expectTypeOf(decamelize('unicornRainbow')).toBe<string>();
+ expectTypeOf(decamelize('unicornRainbow', {separator: '-'})).toBe<string>();
+@@ -16,3 +16,6 @@ expectError(decamelize(42));
+ expectError(decamelize('fooBar', {separator: 42}));
+ expectError(decamelize('fooBar', {preserveConsecutiveUppercase: 'true'}));
+ expectError(decamelize('fooBar', {unknownOption: true}));
++
++expectTypeOf(decamelizeKeys({fooBar: 1})).toBe<Record<string, number>>();
++expectTypeOf(decamelizeKeys({fooBar: 1}, {separator: '-'})).toBe<Record<string, number>>();
+diff --git a/keys.test.js b/keys.test.js
+new file mode 100644
+index 0000000..eba6733
+--- /dev/null
++++ b/keys.test.js
+@@ -0,0 +1,46 @@
++/* eslint-disable camelcase -- Expected decamelized keys. */
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import {decamelizeKeys} from './index.js';
++
++test('decamelizeKeys', () => {
++	assert.deepEqual(decamelizeKeys({}), {});
++	assert.deepEqual(decamelizeKeys({fooBar: 1, bazQux: 'a'}), {foo_bar: 1, baz_qux: 'a'});
++});
++
++test('decamelizeKeys is shallow and leaves values untouched', () => {
++	const nested = {innerKey: 1};
++	const result = decamelizeKeys({outerKey: nested});
++	assert.deepEqual(result, {outer_key: nested});
++	assert.equal(result.outer_key, nested);
++});
++
++test('decamelizeKeys passes options through', () => {
++	assert.deepEqual(decamelizeKeys({fooBar: 1}, {separator: '-'}), {'foo-bar': 1});
++	assert.deepEqual(decamelizeKeys({testGUILabel: 1}, {preserveConsecutiveUppercase: true}), {test_GUI_label: 1});
++});
++
++test('decamelizeKeys returns a new object and ignores symbol keys', () => {
++	const symbol = Symbol('x');
++	const input = {ownKey: 2, [symbol]: 3};
++	const result = decamelizeKeys(input);
++	assert.deepEqual(result, {own_key: 2});
++	assert.notEqual(result, input);
++	assert.equal(input.ownKey, 2);
++});
++
++test('decamelizeKeys handles null-prototype objects and `__proto__` keys', () => {
++	const input = Object.create(null);
++	input.fooBar = 1;
++	assert.deepEqual(decamelizeKeys(input), {foo_bar: 1});
++
++	const result = decamelizeKeys(JSON.parse('{"__proto__": {"polluted": true}}'));
++	assert.equal(Object.getPrototypeOf(result), Object.prototype);
++	assert.equal(result.polluted, undefined);
++});
++
++test('decamelizeKeys throws for non-plain objects', () => {
++	for (const value of [null, undefined, 'a', 1, [], new Map(), new Date(), Object.create({inheritedKey: 1})]) {
++		assert.throws(() => decamelizeKeys(value), {name: 'TypeError'});
++	}
++});
+diff --git a/package.json b/package.json
+index 6389d25..7877992 100644
+--- a/package.json
++++ b/package.json
+@@ -16,7 +16,7 @@
+ 		"node": ">=22"
+ 	},
+ 	"scripts": {
+-		"test": "xo && node --test test.js && nz"
++		"test": "xo && node --test test.js keys.test.js && nz"
+ 	},
+ 	"files": [
+ 		"index.js",
+@@ -40,7 +40,7 @@
+ 	},
+ 	"xo": [
+ 		{
+-			"files": "test.js",
++			"files": ["test.js", "keys.test.js"],
+ 			"rules": {
+ 				"node-test/no-conditional-assertion": "off"
+ 			}
+diff --git a/readme.md b/readme.md
+index 3bb49d4..c9a65f0 100644
+--- a/readme.md
++++ b/readme.md
+@@ -77,6 +77,17 @@ decamelize('testGUILabel', {preserveConsecutiveUppercase: true});
+ //=> 'test_GUI_label'
+ ```
+ 
++### decamelizeKeys(object, options?)
++
++Returns a new object with each own key of a plain object decamelized. Shallow: nested objects and values are left untouched. The `options` are passed to `decamelize`. Throws a `TypeError` for non-plain objects.
++
++```js
++import {decamelizeKeys} from 'decamelize';
++
++decamelizeKeys({unicornRainbow: 1, fooBar: {bazQux: 2}});
++//=> {unicorn_rainbow: 1, foo_bar: {bazQux: 2}}
++```
++
+ ## Related
+ 
+ - [camelcase](https://github.com/sindresorhus/camelcase) - The inverse of this package

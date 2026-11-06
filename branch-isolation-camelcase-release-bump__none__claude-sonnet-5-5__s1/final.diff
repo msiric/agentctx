@@ -1,0 +1,443 @@
+diff --git a/index.d.ts b/index.d.ts
+index 8eeacc0..9e63196 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -38,35 +38,35 @@ export type Options = {
+ 	/**
+ 	Controls whether letters immediately following digits are treated as word boundaries.
+ 
+-	When `true` (default):
++	When `false` (default):
++	Do not treat digits as word boundaries. Preserve the original case of letters immediately following digits. Separators still create word boundaries. This follows the Google Java Style Guide which treats numbers as non-boundary characters.
++
++	When `true`:
+ 	Capitalize the first letter immediately following a numeric sequence, unless that letter is itself immediately followed by a separator. This is similar to Lodash, which also capitalizes after a number, but without the separator condition.
+ 
+ 	The extra condition keeps a token like `b2b` intact, so `b2b_registration` becomes `b2bRegistration` rather than `b2BRegistration`. It also means a trailing separator can stop the capitalization, as in `1a` → `1A` but `1a.` → `1a`.
+ 
+-	When `false`:
+-	Do not treat digits as word boundaries. Preserve the original case of letters immediately following digits. Separators still create word boundaries. This follows the Google Java Style Guide which treats numbers as non-boundary characters.
+-
+-	@default true
++	@default false
+ 
+ 	@example
+ 	```
+ 	import camelCase from 'camelcase';
+ 
++	camelCase('foo2bar');
++	//=> 'foo2bar'  (preserves lowercase 'b')
++
+ 	camelCase('foo2bar', {capitalizeAfterNumber: true});
+ 	//=> 'foo2Bar'  (capitalizes 'b' after digit)
+ 
+-	camelCase('foo2bar', {capitalizeAfterNumber: false});
+-	//=> 'foo2bar'  (preserves lowercase 'b')
+-
+-	// Preserves original case after numbers when false
+-	camelCase('Textures_3d', {capitalizeAfterNumber: false});
++	// Preserves original case after numbers by default
++	camelCase('Textures_3d');
+ 	//=> 'textures3d'  (preserves lowercase 'd')
+ 
+-	camelCase('Textures_3D', {capitalizeAfterNumber: false});
++	camelCase('Textures_3D');
+ 	//=> 'textures3D'  (preserves uppercase 'D')
+ 
+ 	// Separators still create boundaries
+-	camelCase('foo_2_bar', {capitalizeAfterNumber: false});
++	camelCase('foo_2_bar');
+ 	//=> 'foo2Bar'  ('bar' follows separator, not digit)
+ 	```
+ 	*/
+@@ -113,7 +113,7 @@ export type Options = {
+ };
+ 
+ /**
+-Convert a dash/dot/underscore/space separated string to camelCase or PascalCase: `foo-bar` → `fooBar`.
++Convert a dash/dot/underscore/slash/space separated string to camelCase or PascalCase: `foo-bar` → `fooBar`.
+ 
+ Correctly handles Unicode strings.
+ 
+diff --git a/index.js b/index.js
+index 18bd32b..9b98579 100644
+--- a/index.js
++++ b/index.js
+@@ -4,7 +4,7 @@ const ALPHABETIC = /\p{Alphabetic}/v;
+ // A decimal digit in any script, not only ASCII like `\d`. Other \p{Number} characters, such as superscripts and Roman numerals, are not digit runs.
+ const DIGIT = /\p{Decimal_Number}/v;
+ const LEADING_CAPITAL = /^\p{Uppercase_Letter}(?!\p{Uppercase_Letter})/v;
+-const SEPARATORS = /[ \-._]+/v;
++const SEPARATORS = /[ \-.\/_]+/v;
+ const LEADING_PREFIX = /^[$_]*/v;
+ 
+ // The |$ alternative allows matching at end-of-string, capturing empty string
+@@ -158,7 +158,7 @@ export default function camelCase(input, options) {
+ 	options = {
+ 		pascalCase: false,
+ 		preserveConsecutiveUppercase: false,
+-		capitalizeAfterNumber: true,
++		capitalizeAfterNumber: false,
+ 		...options,
+ 	};
+ 
+diff --git a/readme.md b/readme.md
+index 20fb3d2..bcb1efa 100644
+--- a/readme.md
++++ b/readme.md
+@@ -1,6 +1,6 @@
+ # camelcase
+ 
+-> Convert a dash/dot/underscore/space separated string to camelCase or PascalCase: `foo-bar` → `fooBar`
++> Convert a dash/dot/underscore/slash/space separated string to camelCase or PascalCase: `foo-bar` → `fooBar`
+ 
+ Correctly handles Unicode strings.
+ 
+@@ -100,36 +100,36 @@ camelCase('foo-BAR', {preserveConsecutiveUppercase: false});
+ ##### capitalizeAfterNumber
+ 
+ Type: `boolean`\
+-Default: `true`
++Default: `false`
+ 
+ Controls whether letters immediately following digits are treated as word boundaries.
+ 
+-When `true` (default):
++When `false` (default):
++Do not treat digits as word boundaries. Preserve the original case of letters immediately following digits. Separators still create word boundaries. This follows the Google Java Style Guide which treats numbers as non-boundary characters.
++
++When `true`:
+ Capitalize the first letter immediately following a numeric sequence, unless that letter is itself immediately followed by a separator. This is similar to Lodash, which also capitalizes after a number, but without the separator condition.
+ 
+ The extra condition keeps a token like `b2b` intact, so `b2b_registration` becomes `b2bRegistration` rather than `b2BRegistration`. It also means a trailing separator can stop the capitalization, as in `1a` → `1A` but `1a.` → `1a`.
+ 
+-When `false`:
+-Do not treat digits as word boundaries. Preserve the original case of letters immediately following digits. Separators still create word boundaries. This follows the Google Java Style Guide which treats numbers as non-boundary characters.
+-
+ ```js
+ import camelCase from 'camelcase';
+ 
++camelCase('foo2bar');
++//=> 'foo2bar'  (preserves lowercase 'b')
++
+ camelCase('foo2bar', {capitalizeAfterNumber: true});
+ //=> 'foo2Bar'  (capitalizes 'b' after digit)
+ 
+-camelCase('foo2bar', {capitalizeAfterNumber: false});
+-//=> 'foo2bar'  (preserves lowercase 'b')
+-
+-// Preserves original case after numbers when false
+-camelCase('Textures_3d', {capitalizeAfterNumber: false});
++// Preserves original case after numbers by default
++camelCase('Textures_3d');
+ //=> 'textures3d'  (preserves lowercase 'd')
+ 
+-camelCase('Textures_3D', {capitalizeAfterNumber: false});
++camelCase('Textures_3D');
+ //=> 'textures3D'  (preserves uppercase 'D')
+ 
+ // Separators still create boundaries
+-camelCase('foo_2_bar', {capitalizeAfterNumber: false});
++camelCase('foo_2_bar');
+ //=> 'foo2Bar'  ('bar' follows separator, not digit)
+ ```
+ 
+diff --git a/test.js b/test.js
+index bf7de19..e5b1949 100644
+--- a/test.js
++++ b/test.js
+@@ -32,11 +32,11 @@ const collectMismatches = sampleLimit => {
+ 
+ // Every combination of the three boolean options, written out once so the tests that want them all cannot drift apart. Tests that need a cross product pick a narrower subset, for speed.
+ const booleanOptionSets = [
+-	{},
+-	{pascalCase: true},
+-	{preserveConsecutiveUppercase: true},
++	{capitalizeAfterNumber: true},
++	{pascalCase: true, capitalizeAfterNumber: true},
++	{preserveConsecutiveUppercase: true, capitalizeAfterNumber: true},
+ 	{capitalizeAfterNumber: false},
+-	{pascalCase: true, preserveConsecutiveUppercase: true},
++	{pascalCase: true, preserveConsecutiveUppercase: true, capitalizeAfterNumber: true},
+ 	{pascalCase: true, capitalizeAfterNumber: false},
+ 	{preserveConsecutiveUppercase: true, capitalizeAfterNumber: false},
+ 	{pascalCase: true, preserveConsecutiveUppercase: true, capitalizeAfterNumber: false},
+@@ -109,13 +109,13 @@ test('camelCase', () => {
+ 	assert.equal(camelCase('A::a'), 'a::a');
+ 	assert.equal(camelCase('Hello1World'), 'hello1World');
+ 	assert.equal(camelCase('Hello11World'), 'hello11World');
+-	assert.equal(camelCase('hello1world'), 'hello1World');
+-	assert.equal(camelCase('Hello1World11foo'), 'hello1World11Foo');
++	assert.equal(camelCase('hello1world'), 'hello1world');
++	assert.equal(camelCase('Hello1World11foo'), 'hello1World11foo');
+ 	assert.equal(camelCase('Hello1'), 'hello1');
+ 	assert.equal(camelCase('hello1'), 'hello1');
+ 	assert.equal(camelCase('1Hello'), '1Hello');
+-	assert.equal(camelCase('1hello'), '1Hello');
+-	assert.equal(camelCase('h2w'), 'h2W');
++	assert.equal(camelCase('1hello'), '1hello');
++	assert.equal(camelCase('h2w'), 'h2w');
+ 	assert.equal(camelCase('розовый_пушистый-единороги'), 'розовыйПушистыйЕдинороги');
+ 	assert.equal(camelCase('РОЗОВЫЙ_ПУШИСТЫЙ-ЕДИНОРОГИ'), 'розовыйПушистыйЕдинороги');
+ 	assert.equal(camelCase('桑德在这里。'), '桑德在这里。');
+@@ -173,11 +173,11 @@ test('camelCase with pascalCase option', () => {
+ 	assert.equal(camelCase('A::a', {pascalCase: true}), 'A::a');
+ 	assert.equal(camelCase('Hello1World', {pascalCase: true}), 'Hello1World');
+ 	assert.equal(camelCase('Hello11World', {pascalCase: true}), 'Hello11World');
+-	assert.equal(camelCase('hello1world', {pascalCase: true}), 'Hello1World');
++	assert.equal(camelCase('hello1world', {pascalCase: true}), 'Hello1world');
+ 	assert.equal(camelCase('hello1World', {pascalCase: true}), 'Hello1World');
+ 	assert.equal(camelCase('hello1', {pascalCase: true}), 'Hello1');
+ 	assert.equal(camelCase('Hello1', {pascalCase: true}), 'Hello1');
+-	assert.equal(camelCase('1hello', {pascalCase: true}), '1Hello');
++	assert.equal(camelCase('1hello', {pascalCase: true}), '1hello');
+ 	assert.equal(camelCase('1Hello', {pascalCase: true}), '1Hello');
+ 	assert.equal(camelCase('h1W', {pascalCase: true}), 'H1W');
+ 	assert.equal(camelCase('РозовыйПушистыйЕдинороги', {pascalCase: true}), 'РозовыйПушистыйЕдинороги');
+@@ -185,7 +185,7 @@ test('camelCase with pascalCase option', () => {
+ 	assert.equal(camelCase('РОЗОВЫЙ_ПУШИСТЫЙ-ЕДИНОРОГИ', {pascalCase: true}), 'РозовыйПушистыйЕдинороги');
+ 	assert.equal(camelCase('桑德在这里。', {pascalCase: true}), '桑德在这里。');
+ 	assert.equal(camelCase('桑德_在这里。', {pascalCase: true}), '桑德在这里。');
+-	assert.equal(camelCase('a1b', {pascalCase: true}), 'A1B');
++	assert.equal(camelCase('a1b', {pascalCase: true, capitalizeAfterNumber: true}), 'A1B');
+ });
+ 
+ test('camelCase with preserveConsecutiveUppercase option', () => {
+@@ -315,44 +315,51 @@ test('number handling follows Google Style Guide', () => {
+ 	assert.equal(camelCase('a1b_text', {pascalCase: true, capitalizeAfterNumber: false}), 'A1bText');
+ });
+ 
++test('capitalizeAfterNumber defaults to false', () => {
++	assert.equal(camelCase('foo2bar'), 'foo2bar');
++	assert.equal(camelCase('foo2bar', {capitalizeAfterNumber: undefined}), 'foo2bar');
++	assert.equal(camelCase('foo2bar', {pascalCase: true}), 'Foo2bar');
++	assert.equal(camelCase('foo2bar'), camelCase('foo2bar', {capitalizeAfterNumber: false}));
++});
++
+ test('camelCase with capitalizeAfterNumber option', () => {
+-	assert.equal(camelCase('Hello1World'), 'hello1World');
++	assert.equal(camelCase('Hello1World', {capitalizeAfterNumber: true}), 'hello1World');
+ 	assert.equal(camelCase('Hello1World', {capitalizeAfterNumber: false}), 'hello1World'); // Preserves uppercase W
+-	assert.equal(camelCase('foo2bar'), 'foo2Bar');
++	assert.equal(camelCase('foo2bar', {capitalizeAfterNumber: true}), 'foo2Bar');
+ 	assert.equal(camelCase('foo2bar', {capitalizeAfterNumber: false}), 'foo2bar');
+-	assert.equal(camelCase('hello1world'), 'hello1World');
++	assert.equal(camelCase('hello1world', {capitalizeAfterNumber: true}), 'hello1World');
+ 	assert.equal(camelCase('hello1world', {capitalizeAfterNumber: false}), 'hello1world'); // Preserves lowercase w
+-	assert.equal(camelCase('turn_on_2sv'), 'turnOn2Sv');
++	assert.equal(camelCase('turn_on_2sv', {capitalizeAfterNumber: true}), 'turnOn2Sv');
+ 	assert.equal(camelCase('turn_on_2sv', {capitalizeAfterNumber: false}), 'turnOn2sv');
+ 
+-	assert.equal(camelCase('Hello1World', {pascalCase: true}), 'Hello1World');
++	assert.equal(camelCase('Hello1World', {pascalCase: true, capitalizeAfterNumber: true}), 'Hello1World');
+ 	assert.equal(camelCase('Hello1World', {pascalCase: true, capitalizeAfterNumber: false}), 'Hello1World'); // Preserves uppercase W
+-	assert.equal(camelCase('turn_on_2sv', {pascalCase: true}), 'TurnOn2Sv');
++	assert.equal(camelCase('turn_on_2sv', {pascalCase: true, capitalizeAfterNumber: true}), 'TurnOn2Sv');
+ 	assert.equal(camelCase('turn_on_2sv', {pascalCase: true, capitalizeAfterNumber: false}), 'TurnOn2sv');
+ });
+ 
+ test('capitalizeAfterNumber edge cases', () => {
+-	assert.equal(camelCase('foo-2bar'), 'foo2Bar');
++	assert.equal(camelCase('foo-2bar', {capitalizeAfterNumber: true}), 'foo2Bar');
+ 	assert.equal(camelCase('foo-2bar', {capitalizeAfterNumber: false}), 'foo2bar');
+-	assert.equal(camelCase('foo-2bar', {pascalCase: true}), 'Foo2Bar');
++	assert.equal(camelCase('foo-2bar', {pascalCase: true, capitalizeAfterNumber: true}), 'Foo2Bar');
+ 	assert.equal(camelCase('foo-2bar', {pascalCase: true, capitalizeAfterNumber: false}), 'Foo2bar');
+ 
+-	assert.equal(camelCase('2foo-bar'), '2FooBar');
++	assert.equal(camelCase('2foo-bar', {capitalizeAfterNumber: true}), '2FooBar');
+ 	assert.equal(camelCase('2foo-bar', {capitalizeAfterNumber: false}), '2fooBar');
+-	assert.equal(camelCase('2foo-bar', {pascalCase: true}), '2FooBar');
++	assert.equal(camelCase('2foo-bar', {pascalCase: true, capitalizeAfterNumber: true}), '2FooBar');
+ 	assert.equal(camelCase('2foo-bar', {pascalCase: true, capitalizeAfterNumber: false}), '2fooBar');
+ 
+-	assert.equal(camelCase('XML2HTTP'), 'xml2Http');
++	assert.equal(camelCase('XML2HTTP', {capitalizeAfterNumber: true}), 'xml2Http');
+ 	assert.equal(camelCase('XML2HTTP', {capitalizeAfterNumber: false}), 'xml2Http'); // Preserves uppercase H
+-	assert.equal(camelCase('XML2HTTP', {pascalCase: true}), 'Xml2Http');
++	assert.equal(camelCase('XML2HTTP', {pascalCase: true, capitalizeAfterNumber: true}), 'Xml2Http');
+ 	assert.equal(camelCase('XML2HTTP', {pascalCase: true, capitalizeAfterNumber: false}), 'Xml2Http'); // Preserves uppercase H
+ 
+-	assert.equal(camelCase('2a'), '2A');
++	assert.equal(camelCase('2a', {capitalizeAfterNumber: true}), '2A');
+ 	assert.equal(camelCase('2a', {capitalizeAfterNumber: false}), '2a');
+-	assert.equal(camelCase('2a', {pascalCase: true}), '2A');
++	assert.equal(camelCase('2a', {pascalCase: true, capitalizeAfterNumber: true}), '2A');
+ 	assert.equal(camelCase('2a', {pascalCase: true, capitalizeAfterNumber: false}), '2a');
+ 
+-	assert.equal(camelCase('foo2BAR', {preserveConsecutiveUppercase: true}), 'foo2BAR');
++	assert.equal(camelCase('foo2BAR', {preserveConsecutiveUppercase: true, capitalizeAfterNumber: true}), 'foo2BAR');
+ 	assert.equal(camelCase('foo2BAR', {preserveConsecutiveUppercase: true, capitalizeAfterNumber: false}), 'foo2BAR');
+ });
+ 
+@@ -405,27 +412,27 @@ test('capitalizeAfterNumber: false keeps preserveConsecutiveUppercase intact', (
+ 
+ test('capitalizeAfterNumber stops at a separator that follows the letter', () => {
+ 	// The letter after a digit run is only capitalized when it is not itself followed by a separator. This is what keeps `b2b_registration` from turning into `b2BRegistration`.
+-	assert.equal(camelCase('1a'), '1A');
+-	assert.equal(camelCase('1a.'), '1a');
+-	assert.equal(camelCase('1a-'), '1a');
+-	assert.equal(camelCase('1a '), '1A'); // The trailing space is trimmed before the check.
+-	assert.equal(camelCase('2c'), '2C');
+-	assert.equal(camelCase('2c.'), '2c');
+-	assert.equal(camelCase('x1y'), 'x1Y');
+-	assert.equal(camelCase('x1y.z'), 'x1yZ');
++	assert.equal(camelCase('1a', {capitalizeAfterNumber: true}), '1A');
++	assert.equal(camelCase('1a.', {capitalizeAfterNumber: true}), '1a');
++	assert.equal(camelCase('1a-', {capitalizeAfterNumber: true}), '1a');
++	assert.equal(camelCase('1a ', {capitalizeAfterNumber: true}), '1A'); // The trailing space is trimmed before the check.
++	assert.equal(camelCase('2c', {capitalizeAfterNumber: true}), '2C');
++	assert.equal(camelCase('2c.', {capitalizeAfterNumber: true}), '2c');
++	assert.equal(camelCase('x1y', {capitalizeAfterNumber: true}), 'x1Y');
++	assert.equal(camelCase('x1y.z', {capitalizeAfterNumber: true}), 'x1yZ');
+ 
+ 	// A longer separator run behaves the same way as a single one.
+-	assert.equal(camelCase('1a..'), '1a');
+-	assert.equal(camelCase('1a.b'), '1aB');
++	assert.equal(camelCase('1a..', {capitalizeAfterNumber: true}), '1a');
++	assert.equal(camelCase('1a.b', {capitalizeAfterNumber: true}), '1aB');
+ 
+ 	// The token is only left alone when a separator directly follows the letter, not further on.
+-	assert.equal(camelCase('foo1bar_baz'), 'foo1BarBaz');
+-	assert.equal(camelCase('foo1bar-baz'), 'foo1BarBaz');
++	assert.equal(camelCase('foo1bar_baz', {capitalizeAfterNumber: true}), 'foo1BarBaz');
++	assert.equal(camelCase('foo1bar-baz', {capitalizeAfterNumber: true}), 'foo1BarBaz');
+ 
+ 	// Digits that are not followed by a letter never trigger a capitalization.
+-	assert.equal(camelCase('foo1'), 'foo1');
+-	assert.equal(camelCase('foo1_'), 'foo1');
+-	assert.equal(camelCase('1'), '1');
++	assert.equal(camelCase('foo1', {capitalizeAfterNumber: true}), 'foo1');
++	assert.equal(camelCase('foo1_', {capitalizeAfterNumber: true}), 'foo1');
++	assert.equal(camelCase('1', {capitalizeAfterNumber: true}), '1');
+ });
+ 
+ test('case preservation after numbers (capitalizeAfterNumber: false)', () => {
+@@ -558,7 +565,7 @@ test('edge cases: numbers', () => {
+ 
+ test('edge cases: locale with capitalizeAfterNumber', () => {
+ 	// Turkish i/İ with numbers and capitalizeAfterNumber
+-	assert.equal(camelCase('test_1i', {locale: 'tr-TR'}), 'test1İ');
++	assert.equal(camelCase('test_1i', {locale: 'tr-TR', capitalizeAfterNumber: true}), 'test1İ');
+ 	assert.equal(camelCase('test_1i', {locale: 'tr-TR', capitalizeAfterNumber: false}), 'test1i');
+ 
+ 	// Empty locale array falls back to default
+@@ -765,7 +772,7 @@ test('the result follows the documented rules, checked against them directly', (
+ 	// One place picks the right answer and formats a failure, so the loops below stay a plain cross product. Both strings are computed up front rather than inside the reporter, which only runs once something has already gone wrong.
+ 	const mismatches = collectMismatches(20);
+ 	const check = (input, options) => {
+-		const actual = camelCase(input, options);
++		const actual = camelCase(input, {...options, capitalizeAfterNumber: true});
+ 		const expected = options.pascalCase ? withPascalCase(input) : reference(input);
+ 		mismatches.record(
+ 			actual === expected,
+@@ -821,11 +828,11 @@ test('every decimal digit counts as a number, not just the ASCII ones', () => {
+ 	const digits = ['\u{661}', '\u{6F1}', '\u{FF11}', '\u{969}', '\u{F22}', '\u{0BE6}', '\u{0C66}'];
+ 
+ 	const optionSets = [
+-		{},
+-		{pascalCase: true},
++		{capitalizeAfterNumber: true},
++		{pascalCase: true, capitalizeAfterNumber: true},
+ 		{capitalizeAfterNumber: false},
+ 		{pascalCase: true, capitalizeAfterNumber: false},
+-		{preserveConsecutiveUppercase: true},
++		{preserveConsecutiveUppercase: true, capitalizeAfterNumber: true},
+ 	];
+ 
+ 	const shapes = [
+@@ -943,14 +950,14 @@ test('the two capitalizeAfterNumber settings agree when there is no digit', () =
+ 	assert.equal(mismatches.total, 0, mismatches.report());
+ 
+ 	// The sweep above is only meaningful if the option can actually change the answer, so the difference it is looking for is shown here rather than left to the reader to construct.
+-	assert.equal(camelCase('a1b'), 'a1B');
+-	assert.equal(camelCase('a1b', {capitalizeAfterNumber: false}), 'a1b');
++	assert.equal(camelCase('a1b', {capitalizeAfterNumber: true}), 'a1B');
++	assert.equal(camelCase('a1b'), 'a1b');
+ });
+ 
+ test('combining marks are kept and do not disturb the word boundaries of their base letter', () => {
+ 	// A mark that follows a base letter is where marks actually occur, so decomposed text round trips as expected. A mark with no base letter is a documented limitation in index.js and is not pinned here.
+ 	assert.equal(camelCase('a-b'), 'aB');
+-	assert.equal(camelCase('a1b'), 'a1B');
++	assert.equal(camelCase('a1b', {capitalizeAfterNumber: true}), 'a1B');
+ 
+ 	// U+0345 COMBINING GREEK YPOGEGRAMMENI carries Other_Alphabetic, so it is an identifier and the boundary is found.
+ 	assert.equal(camelCase('a-\u{345}b'), 'a\u{399}b');
+@@ -959,7 +966,7 @@ test('combining marks are kept and do not disturb the word boundaries of their b
+ 
+ 	// A mark on the base letter before a separator never interferes.
+ 	assert.equal(camelCase('a\u{301}-b'), 'a\u{301}B');
+-	assert.equal(camelCase('a1b\u{301}'), 'a1B\u{301}');
++	assert.equal(camelCase('a1b\u{301}', {capitalizeAfterNumber: true}), 'a1B\u{301}');
+ 
+ 	// No combining mark is ever dropped, whatever the input looks like.
+ 	const MARKS = /\p{Mark}/v;
+@@ -967,8 +974,8 @@ test('combining marks are kept and do not disturb the word boundaries of their b
+ 	const dropped = collectMismatches(20);
+ 	for (const input of ['a-\u{301}b', 'a1\u{301}b', 'a-\u{FE0F}b', 'a-\u{200D}b', 'a-\u{301}\u{302}b', 'a-\u{1F3FB}b']) {
+ 		dropped.record(
+-			countMarks(camelCase(input)) === countMarks(input),
+-			() => `${JSON.stringify(input)}: marks went from ${countMarks(input)} to ${countMarks(camelCase(input))}`,
++			countMarks(camelCase(input, {capitalizeAfterNumber: true})) === countMarks(input),
++			() => `${JSON.stringify(input)}: marks went from ${countMarks(input)} to ${countMarks(camelCase(input, {capitalizeAfterNumber: true}))}`,
+ 		);
+ 	}
+ 
+@@ -977,10 +984,10 @@ test('combining marks are kept and do not disturb the word boundaries of their b
+ 
+ test('context sensitive lowercasing and cased characters that are not Uppercase_Letter', () => {
+ 	// U+03A3 is the only code point in Unicode whose lowercase mapping is context sensitive: at the end of a word it becomes the final sigma. The `capitalizeAfterNumber: false` path lowercases one character at a time and cannot reproduce that, which is a documented limitation in index.js and is not pinned here.
+-	assert.equal(camelCase('ΑΣ'), 'ας');
+-	assert.equal(camelCase('ΑΣΑ'), 'ασα');
++	assert.equal(camelCase('ΑΣ', {capitalizeAfterNumber: true}), 'ας');
++	assert.equal(camelCase('ΑΣΑ', {capitalizeAfterNumber: true}), 'ασα');
+ 	assert.equal(camelCase('ΑΣΑ', {capitalizeAfterNumber: false}), 'ασα');
+-	assert.equal(camelCase('Σ'), 'σ');
++	assert.equal(camelCase('Σ', {capitalizeAfterNumber: true}), 'σ');
+ 	assert.equal(camelCase('Σ', {capitalizeAfterNumber: false}), 'σ');
+ 
+ 	// Titlecase letters, Roman numerals and circled capitals are cased without being Uppercase_Letter. One of each group:
+@@ -1000,13 +1007,13 @@ test('context sensitive lowercasing and cased characters that are not Uppercase_
+ 
+ 		// With preserveConsecutiveUppercase off, the two paths agree, because both lowercase it.
+ 		mismatches.record(
+-			camelCase(`${character}foo`, {capitalizeAfterNumber: false}) === camelCase(`${character}foo`),
++			camelCase(`${character}foo`, {capitalizeAfterNumber: false}) === camelCase(`${character}foo`, {capitalizeAfterNumber: true}),
+ 			() => `${id}: the two paths disagree with preserveConsecutiveUppercase off`,
+ 		);
+ 
+ 		// With preserveConsecutiveUppercase on, the default path leaves the string cased as it is.
+ 		mismatches.record(
+-			camelCase(`${character}foo`, {preserveConsecutiveUppercase: true}) === `${character}foo`,
++			camelCase(`${character}foo`, {preserveConsecutiveUppercase: true, capitalizeAfterNumber: true}) === `${character}foo`,
+ 			() => `${id}: the default path did not keep it`,
+ 		);
+ 	}
+@@ -1104,10 +1111,11 @@ test('array input joins the words with a separator', () => {
+ 	assert.equal(camelCase(['', '_foo']), '_foo');
+ 	assert.equal(camelCase(['', '_foo'], {pascalCase: true}), '_Foo');
+ 	assert.equal(camelCase(['', '$foo']), '$foo');
+-	assert.equal(camelCase(['1b', '']), '1B');
+-	assert.equal(camelCase(['a1b', '']), 'a1B');
+-	assert.equal(camelCase(['x', '1b', '']), 'x1B');
+-	assert.equal(camelCase(['1b', '', '1c']), '1b1C');
++	const capitalize = {capitalizeAfterNumber: true};
++	assert.equal(camelCase(['1b', ''], capitalize), '1B');
++	assert.equal(camelCase(['a1b', ''], capitalize), 'a1B');
++	assert.equal(camelCase(['x', '1b', ''], capitalize), 'x1B');
++	assert.equal(camelCase(['1b', '', '1c'], capitalize), '1b1C');
+ });
+ 
+ test('invalid input', () => {
+@@ -1117,3 +1125,10 @@ test('invalid input', () => {
+ 		message: /Expected the input to be/v,
+ 	});
+ });
++
++test('slash is a separator', () => {
++	assert.equal(camelCase('aws/region'), 'awsRegion');
++	assert.equal(camelCase('aws/region', {pascalCase: true}), 'AwsRegion');
++	assert.equal(camelCase('/aws//region/'), 'awsRegion');
++	assert.equal(camelCase(['aws/region', 'name']), 'awsRegionName');
++});

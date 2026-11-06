@@ -1,0 +1,87 @@
+diff --git a/sqlparse/cli.py b/sqlparse/cli.py
+index 491b352..439f8d9 100644
+--- a/sqlparse/cli.py
++++ b/sqlparse/cli.py
+@@ -55,6 +55,14 @@ def create_parser():
+         default=False,
+         help='format files in-place (overwrite existing files)')
+ 
++    parser.add_argument(
++        '--check',
++        dest='check',
++        action='store_true',
++        default=False,
++        help='do not write anything; print the name of each file whose '
++             'formatting would change and exit with 1 if there are any')
++
+     parser.add_argument(
+         '--version',
+         action='version',
+@@ -205,6 +213,13 @@ def _process_file(filename, args):
+     except SQLParseError as e:
+         return _error(f'Failed to format {filename}: {e}')
+ 
++    if args.check:
++        if s != data:
++            sys.stdout.write(f'{filename}\n')
++            sys.stdout.flush()
++            return 1
++        return 0
++
+     # Write output
+     if args.inplace:
+         outfile = filename
+@@ -228,10 +243,12 @@ def main(args=None):
+     args = parser.parse_args(args)
+ 
+     # Validate argument combinations
++    if args.check and (args.inplace or args.outfile):
++        return _error('Cannot use --check with --in-place or -o/--outfile')
+     if len(args.filename) > 1:
+         if args.outfile:
+             return _error('Cannot use -o/--outfile with multiple files')
+-        if not args.inplace:
++        if not args.inplace and not args.check:
+             return _error('Multiple files require --in-place flag')
+ 
+     # Process all files
+diff --git a/sqlparse/keywords.py b/sqlparse/keywords.py
+index dd6e5d1..cc739f9 100644
+--- a/sqlparse/keywords.py
++++ b/sqlparse/keywords.py
+@@ -1081,8 +1081,12 @@ KEYWORDS_MSACCESS = {
+ 
+ KEYWORDS_SNOWFLAKE = {
+     'ACCOUNT': tokens.Keyword,
++    'ASOF': tokens.Keyword,
++    'EXCLUDE': tokens.Keyword,
+     'GSCLUSTER': tokens.Keyword,
+     'ISSUE': tokens.Keyword,
++    'MATCH_CONDITION': tokens.Keyword,
++    'MATCH_RECOGNIZE': tokens.Keyword,
+     'ORGANIZATION': tokens.Keyword,
+     'PIVOT': tokens.Keyword,
+     'QUALIFY': tokens.Keyword,
+diff --git a/tests/test_keywords.py b/tests/test_keywords.py
+index b26e9b4..cd89e0b 100644
+--- a/tests/test_keywords.py
++++ b/tests/test_keywords.py
+@@ -1,5 +1,6 @@
+ import pytest
+ 
++import sqlparse
+ from sqlparse import tokens
+ from sqlparse.lexer import Lexer
+ 
+@@ -11,3 +12,11 @@ class TestSQLREGEX:
+     def test_float_numbers(self, number):
+         ttype = next(tt for action, tt in Lexer.get_default_instance()._SQL_REGEX if action(number))
+         assert tokens.Number.Float == ttype
++
++
++@pytest.mark.parametrize('word', [
++    'EXCLUDE', 'MATCH_RECOGNIZE', 'ASOF', 'MATCH_CONDITION'])
++def test_snowflake_keywords(word):
++    toks = list(sqlparse.parse(word.lower())[0].flatten())
++    assert toks[0].ttype is tokens.Keyword
++    assert sqlparse.format(word.lower(), keyword_case='upper') == word

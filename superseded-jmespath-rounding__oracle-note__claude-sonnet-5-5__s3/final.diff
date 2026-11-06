@@ -1,0 +1,115 @@
+diff --git a/jmespath/dashboard.py b/jmespath/dashboard.py
+new file mode 100644
+index 0000000..1eefb6d
+--- /dev/null
++++ b/jmespath/dashboard.py
+@@ -0,0 +1,47 @@
++"""Custom JMESPath functions for the dashboards."""
++from decimal import Decimal, ROUND_HALF_UP
++
++from jmespath import parser
++from jmespath import functions
++from jmespath import exceptions
++from jmespath.visitor import Options
++
++
++class DashboardFunctions(functions.Functions):
++    @functions.signature({'types': ['number']}, {'types': ['number']})
++    def _func_round_to(self, number, digits):
++        return round(number, int(digits))
++
++    @functions.signature({'types': ['number']}, {'types': ['number']},
++                         {'types': ['number']})
++    def _func_clamp(self, value, lo, hi):
++        if lo > hi:
++            raise exceptions.JMESPathError(
++                'clamp() requires lo <= hi, got lo=%r, hi=%r' % (lo, hi))
++        return max(lo, min(value, hi))
++
++    @functions.signature({'types': ['number']}, {'types': ['number']},
++                         {'types': ['number']})
++    def _func_percent(self, part, whole, digits):
++        if whole == 0:
++            raise exceptions.JMESPathError('percent() whole must not be 0')
++        return _round_half_away(part / float(whole) * 100, int(digits))
++
++
++def _round_half_away(number, digits):
++    """Round like Excel's ROUND: halves go away from zero.
++
++    Works on the shortest decimal repr so 2.675 -> 2.68, as in Excel.
++    """
++    quantum = Decimal(1).scaleb(-digits)
++    result = Decimal(repr(number)).quantize(quantum, rounding=ROUND_HALF_UP)
++    return float(result) if digits > 0 else int(result)
++
++
++def search(expression, data, options=None):
++    """Like ``jmespath.search`` but with ``DashboardFunctions`` available."""
++    if options is None:
++        options = Options(custom_functions=DashboardFunctions())
++    elif options.custom_functions is None:
++        options.custom_functions = DashboardFunctions()
++    return parser.Parser().parse(expression).search(data, options=options)
+diff --git a/tests/test_dashboard.py b/tests/test_dashboard.py
+new file mode 100644
+index 0000000..495bd9b
+--- /dev/null
++++ b/tests/test_dashboard.py
+@@ -0,0 +1,56 @@
++from tests import unittest
++
++from jmespath import dashboard
++from jmespath import exceptions
++
++
++class TestRoundTo(unittest.TestCase):
++    def test_rounds_half_to_even(self):
++        # Matches Python's round() and pandas, not round-half-up.
++        cases = [
++            (0.5, 0, 0), (1.5, 0, 2), (2.5, 0, 2), (3.5, 0, 4),
++            (-0.5, 0, 0), (-1.5, 0, -2), (-2.5, 0, -2),
++            (0.125, 2, 0.12), (0.375, 2, 0.38),
++        ]
++        for number, digits, expected in cases:
++            result = dashboard.search(
++                'round_to(@.n, @.d)', {'n': number, 'd': digits})
++            self.assertEqual(result, expected, (number, digits))
++
++    def test_literal_arguments(self):
++        self.assertEqual(dashboard.search('round_to(`2.5`, `0`)', {}), 2)
++
++    def test_rounds_to_digits(self):
++        self.assertEqual(dashboard.search('round_to(`3.14159`, `2`)', {}), 3.14)
++
++
++class TestClamp(unittest.TestCase):
++    def test_clamps_values(self):
++        cases = [(5, 0, 10, 5), (-1, 0, 10, 0), (11, 0, 10, 10),
++                 (0, 0, 10, 0), (10, 0, 10, 10), (2.5, 0, 1, 1)]
++        for value, lo, hi, expected in cases:
++            result = dashboard.search(
++                'clamp(@.v, @.lo, @.hi)', {'v': value, 'lo': lo, 'hi': hi})
++            self.assertEqual(result, expected, (value, lo, hi))
++
++    def test_does_not_round(self):
++        self.assertEqual(dashboard.search('clamp(`2.5`, `0`, `10`)', {}), 2.5)
++
++    def test_lo_greater_than_hi_is_an_error(self):
++        with self.assertRaises(exceptions.JMESPathError):
++            dashboard.search('clamp(`5`, `10`, `0`)', {})
++
++
++class TestPercent(unittest.TestCase):
++    def test_rounds_half_away_from_zero(self):
++        cases = [(1, 8, 0, 13), (-1, 8, 0, -13), (1, 8, 1, 12.5),
++                 (1, 16, 1, 6.3), (-1, 16, 1, -6.3), (1, 3, 2, 33.33),
++                 (1, 200, 0, 1), (3, 200, 0, 2)]
++        for part, whole, digits, expected in cases:
++            result = dashboard.search(
++                'percent(@.p, @.w, @.d)', {'p': part, 'w': whole, 'd': digits})
++            self.assertEqual(result, expected, (part, whole, digits))
++
++    def test_zero_whole_is_an_error(self):
++        with self.assertRaises(exceptions.JMESPathError):
++            dashboard.search('percent(`1`, `0`, `1`)', {})

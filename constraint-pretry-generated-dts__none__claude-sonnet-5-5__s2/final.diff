@@ -1,0 +1,333 @@
+diff --git a/index.d.ts b/index.d.ts
+index 1c6fbbc..92fcca1 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -152,6 +152,15 @@ export type Options = {
+ 	*/
+ 	readonly retries?: number | undefined;
+ 
++	/**
++	The number of milliseconds to wait before the first attempt.
++
++	Does not count towards `maxRetryTime`, which starts after the wait. If `signal` aborts during the wait, the promise rejects with the abort reason. Capped at 2147483647ms like other delays.
++
++	@default 0
++	*/
++	readonly initialDelay?: number | undefined;
++
+ 	/**
+ 	The exponential factor to use.
+ 
+diff --git a/index.js b/index.js
+index 8613e9e..3bdf677 100644
+--- a/index.js
++++ b/index.js
+@@ -233,6 +233,11 @@ async function onAttemptFailure({error, attemptNumber, retriesConsumed, startTim
+ 		throw normalizedError;
+ 	}
+ 
++	// Every check that can end the run has passed, so another attempt is certain. Runs before the `consumeRetry` branch because an unconsumed retry is still an attempt, just without a wait.
++	await options.onRetry(context);
++
++	abortIfNeeded();
++
+ 	if (!consumeRetry) {
+ 		return false;
+ 	}
+@@ -254,22 +259,26 @@ export default async function pRetry(input, options = {}) {
+ 		throw new Error('The `forever` option is no longer supported. For many use-cases, you can set `retries: Infinity` instead.');
+ 	}
+ 
++	options.initialDelay ??= 0;
+ 	options.factor ??= 2;
+ 	options.minTimeout ??= 1000;
+ 	options.maxTimeout ??= Infinity;
+ 	options.maxRetryTime ??= Infinity;
+ 	options.randomize ??= false;
+ 	options.onFailedAttempt ??= () => {};
++	options.onRetry ??= () => {};
+ 	options.shouldRetry ??= () => true;
+ 	options.shouldConsumeRetry ??= () => true;
+ 
+ 	// Validate the options that have a runtime type to check.
+ 	validateOption('onFailedAttempt', options.onFailedAttempt, 'function');
++	validateOption('onRetry', options.onRetry, 'function');
+ 	validateOption('shouldRetry', options.shouldRetry, 'function');
+ 	validateOption('shouldConsumeRetry', options.shouldConsumeRetry, 'function');
+ 	validateOption('randomize', options.randomize, 'boolean');
+ 	validateOption('unref', options.unref, 'boolean');
+ 	validateSignal(options.signal);
++	validateNumberOption('initialDelay', options.initialDelay);
+ 	validateNumberOption('factor', options.factor);
+ 	validateNumberOption('minTimeout', options.minTimeout);
+ 	validateNumberOption('maxTimeout', options.maxTimeout, {allowInfinity: true});
+@@ -282,6 +291,12 @@ export default async function pRetry(input, options = {}) {
+ 
+ 	options.signal?.throwIfAborted();
+ 
++	// Waited before the clock starts, so it does not use up `maxRetryTime`. Capped like every other delay. A signal that aborts during the wait rejects with its reason.
++	// Skipped entirely when unset, because even an `await` of nothing would delay the first attempt by a tick.
++	if (options.initialDelay > 0) {
++		await delayForRetry(Math.min(Math.round(options.initialDelay), maximumDelay), options);
++	}
++
+ 	let attemptNumber = 0;
+ 	let retriesConsumed = 0;
+ 	const startTime = performance.now();
+diff --git a/readme.md b/readme.md
+index 467d746..56568c1 100644
+--- a/readme.md
++++ b/readme.md
+@@ -108,6 +108,32 @@ const result = await pRetry(run, {
+ });
+ ```
+ 
++##### onRetry(context)
++
++Type: `Function`
++
++Called only when another attempt is going to happen, right before the wait. It receives the same context as `onFailedAttempt`.
++
++Unlike `onFailedAttempt`, it is _not_ called for the final failure, so it suits counting retries for metrics.
++
++The function is called _after_ `onFailedAttempt`, `shouldConsumeRetry`, and `shouldRetry`, and can return a promise, which is awaited before the wait starts.
++
++The function is _not_ called when the error is not retried (`AbortError`, an abort through `signal`, a non-network `TypeError`, `shouldRetry` returning `false`, or `retries` or `maxRetryTime` exhausted).
++
++If the function throws, all retries will be aborted and the original promise will reject with the thrown error.
++
++```js
++import pRetry from 'p-retry';
++
++const run = async () => { … };
++
++const result = await pRetry(run, {
++	onRetry: ({error, attemptNumber}) => {
++		metrics.increment('retries');
++	}
++});
++```
++
+ ##### shouldRetry(context)
+ 
+ Type: `Function`
+@@ -172,6 +198,15 @@ Default: `10`
+ 
+ The maximum amount of times to retry the operation. Must be a non-negative integer or `Infinity`.
+ 
++##### initialDelay
++
++Type: `number`\
++Default: `0`
++
++The number of milliseconds to wait before the first attempt.
++
++Does not count towards `maxRetryTime`, which starts after the wait. If `signal` aborts during the wait, the promise rejects with the abort reason. Capped at 2147483647ms like other delays.
++
+ ##### factor
+ 
+ Type: `number`\
+diff --git a/test.js b/test.js
+index 20c9a47..18dcbe7 100644
+--- a/test.js
++++ b/test.js
+@@ -326,6 +326,137 @@ test('shouldConsumeRetry then onFailedAttempt then shouldRetry order', async ()
+ 	assert.deepEqual(order, ['shouldConsumeRetry', 'onFailedAttempt', 'shouldRetry']);
+ });
+ 
++test('onRetry runs only when another attempt follows', async () => {
++	const calls = [];
++	let index = 0;
++
++	await assert.rejects(pRetry(async () => {
++		index++;
++		throw new Error(`fail ${index}`);
++	}, {
++		retries: 2,
++		minTimeout: 0,
++		onFailedAttempt({attemptNumber}) {
++			calls.push(`failed ${attemptNumber}`);
++		},
++		onRetry({attemptNumber, retriesLeft}) {
++			calls.push(`retry ${attemptNumber} ${retriesLeft}`);
++		},
++	}), {message: 'fail 3'});
++
++	assert.deepEqual(calls, ['failed 1', 'retry 1 2', 'failed 2', 'retry 2 1', 'failed 3']);
++});
++
++test('onRetry runs after shouldRetry and is awaited before the next attempt', async () => {
++	const order = [];
++
++	await pRetry(async attemptNumber => {
++		order.push(`attempt ${attemptNumber}`);
++		if (attemptNumber === 1) {
++			throw new Error('once');
++		}
++	}, {
++		minTimeout: 0,
++		shouldRetry() {
++			order.push('shouldRetry');
++			return true;
++		},
++		async onRetry() {
++			await delay(10);
++			order.push('onRetry');
++		},
++	});
++
++	assert.deepEqual(order, ['attempt 1', 'shouldRetry', 'onRetry', 'attempt 2']);
++});
++
++test('onRetry gets the same context as onFailedAttempt', async () => {
++	let failedContext;
++	let retryContext;
++
++	await pRetry(async attemptNumber => {
++		if (attemptNumber === 1) {
++			throw new Error('once');
++		}
++	}, {
++		minTimeout: 0,
++		onFailedAttempt(context) {
++			failedContext = context;
++		},
++		onRetry(context) {
++			retryContext = context;
++		},
++	});
++
++	assert.equal(retryContext, failedContext);
++	assert.ok(Object.isFrozen(retryContext));
++});
++
++test('onRetry is not called when shouldRetry returns false, for AbortError, or non-network TypeError', async () => {
++	let count = 0;
++	const onRetry = () => {
++		count++;
++	};
++
++	await assert.rejects(pRetry(async () => {
++		throw new Error('no');
++	}, {shouldRetry: () => false, onRetry}), {message: 'no'});
++	await assert.rejects(pRetry(async () => {
++		throw new AbortError('stop');
++	}, {onRetry}), {message: 'stop'});
++	await assert.rejects(pRetry(async () => {
++		throw new TypeError('nope');
++	}, {onRetry}), {message: 'nope'});
++	await assert.rejects(pRetry(async () => {
++		throw new Error('no');
++	}, {retries: 0, onRetry}), {message: 'no'});
++
++	assert.equal(count, 0);
++});
++
++test('onRetry is called for an unconsumed retry', async () => {
++	let count = 0;
++
++	await pRetry(async attemptNumber => {
++		if (attemptNumber === 1) {
++			throw new Error('once');
++		}
++	}, {
++		retries: 1,
++		shouldConsumeRetry: () => false,
++		onRetry() {
++			count++;
++		},
++	});
++
++	assert.equal(count, 1);
++});
++
++test('onRetry can throw to abort retries', async () => {
++	const error = new Error('from onRetry');
++	let attempts = 0;
++
++	await assert.rejects(pRetry(async () => {
++		attempts++;
++		throw new Error('fail');
++	}, {
++		minTimeout: 0,
++		onRetry() {
++			throw error;
++		},
++	}), rejectsWith(error));
++
++	assert.equal(attempts, 1);
++});
++
++test('onRetry validation', async () => {
++	await assert.rejects(pRetry(async () => {}, {onRetry: 1}), {
++		name: 'TypeError',
++		message: 'Expected `onRetry` to be a function.',
++	});
++	await pRetry(async () => 1, {onRetry: null});
++});
++
+ test('onFailedAttempt provides correct error details', {timeout: 60_000}, async t => {
+ 	await withFakeTime(t);
+ 	const retries = 5;
+@@ -900,6 +1031,61 @@ test('an invalid option is reported before the signal is checked', async () => {
+ 	});
+ });
+ 
++test('initialDelay waits before the first attempt only', async t => {
++	const {delays} = await withFakeTime(t);
++	const attempts = [];
++
++	await pRetry(async attemptNumber => {
++		attempts.push(attemptNumber);
++		if (attemptNumber === 1) {
++			throw new Error('once');
++		}
++	}, {initialDelay: 500, minTimeout: 10});
++
++	assert.deepEqual(attempts, [1, 2]);
++	assert.deepEqual(delays, [500, 10]);
++});
++
++test('initialDelay defaults to no wait', async t => {
++	const {delays} = await withFakeTime(t);
++	await pRetry(async () => fixture);
++	assert.deepEqual(delays, []);
++});
++
++test('initialDelay does not count towards maxRetryTime', async t => {
++	await withFakeTime(t);
++	let calls = 0;
++
++	await pRetry(async () => {
++		calls++;
++		if (calls === 1) {
++			throw new Error('once');
++		}
++	}, {initialDelay: 1000, minTimeout: 10, maxRetryTime: 100});
++
++	assert.equal(calls, 2);
++});
++
++test('initialDelay rejects with the abort reason when aborted during the wait', async () => {
++	const controller = new AbortController();
++	let didRun = false;
++	setTimeout(() => {
++		controller.abort(fixtureError);
++	}, 10);
++
++	await assert.rejects(pRetry(async () => {
++		didRun = true;
++	}, {initialDelay: 10_000, signal: controller.signal}), error => error === fixtureError);
++
++	assert.equal(didRun, false);
++});
++
++test('initialDelay must be a non-negative finite number', async () => {
++	for (const initialDelay of [-1, NaN, Infinity, '5']) {
++		await assert.rejects(pRetry(async () => fixture, {initialDelay}), {name: 'TypeError', message: /initialDelay/v});
++	}
++});
++
+ // Callback contract
+ 
+ test('callbacks are skipped or not based on the error type', async () => {

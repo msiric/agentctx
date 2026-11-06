@@ -1,0 +1,142 @@
+diff --git a/jmespath/dashboard.py b/jmespath/dashboard.py
+new file mode 100644
+index 0000000..5fe8205
+--- /dev/null
++++ b/jmespath/dashboard.py
+@@ -0,0 +1,42 @@
++"""Custom JMESPath functions for the dashboards."""
++from jmespath import exceptions, parser
++from jmespath.functions import Functions, signature
++from jmespath.visitor import Options
++
++
++class DashboardFunctions(Functions):
++
++    @staticmethod
++    def _as_digits(name, digits):
++        if isinstance(digits, float):
++            if not digits.is_integer():
++                raise exceptions.JMESPathTypeError(
++                    name, digits, 'number', ['integer'])
++            digits = int(digits)
++        return digits
++
++    @signature({'types': ['number']}, {'types': ['number']})
++    def _func_round_to(self, number, digits):
++        return round(number, self._as_digits('round_to', digits))
++
++    @signature({'types': ['number']}, {'types': ['number']},
++               {'types': ['number']})
++    def _func_percent(self, part, whole, digits):
++        digits = self._as_digits('percent', digits)
++        if whole == 0:
++            raise ValueError('percent: whole must not be zero')
++        return round(part / whole * 100, digits)
++
++    @signature({'types': ['number']}, {'types': ['number']},
++               {'types': ['number']})
++    def _func_clamp(self, value, lo, hi):
++        if lo > hi:
++            raise ValueError(
++                'clamp: lo (%s) must not be greater than hi (%s)' % (lo, hi))
++        return max(lo, min(value, hi))
++
++
++def search(expression, data):
++    """Like ``jmespath.search`` but with ``DashboardFunctions`` available."""
++    options = Options(custom_functions=DashboardFunctions())
++    return parser.Parser().parse(expression).search(data, options=options)
+diff --git a/tests/test_dashboard.py b/tests/test_dashboard.py
+new file mode 100644
+index 0000000..c1246ca
+--- /dev/null
++++ b/tests/test_dashboard.py
+@@ -0,0 +1,88 @@
++import unittest
++
++from jmespath import exceptions
++from jmespath.dashboard import search
++
++
++class TestRoundTo(unittest.TestCase):
++    def test_rounds_half_to_even(self):
++        # Matches Python's round() and pandas, not round-half-up.
++        cases = [
++            (0.5, 0, 0), (1.5, 0, 2), (2.5, 0, 2), (3.5, 0, 4),
++            (-0.5, 0, 0), (-1.5, 0, -2), (-2.5, 0, -2),
++            (0.125, 2, 0.12), (0.375, 2, 0.38),
++        ]
++        for number, digits, expected in cases:
++            result = search('round_to(@, `%s`)' % digits, number)
++            self.assertEqual(result, expected, (number, digits))
++
++    def test_literal_arguments(self):
++        self.assertEqual(search('round_to(`2.5`, `0`)', None), 2)
++        self.assertEqual(search('round_to(`3.5`, `0`)', None), 4)
++
++    def test_digits(self):
++        self.assertEqual(search('round_to(a, `1`)', {'a': 3.14159}), 3.1)
++        self.assertEqual(search('round_to(a, `1.0`)', {'a': 3.14159}), 3.1)
++        self.assertEqual(search('round_to(a, `-1`)', {'a': 15}), 20)
++
++    def test_fractional_digits_rejected(self):
++        with self.assertRaises(exceptions.JMESPathTypeError):
++            search('round_to(`1`, `1.5`)', None)
++
++    def test_builtins_still_available(self):
++        self.assertEqual(search('abs(@)', -1), 1)
++
++
++class TestClamp(unittest.TestCase):
++    def test_within_range(self):
++        self.assertEqual(search('clamp(@, `0`, `10`)', 5), 5)
++
++    def test_below_and_above(self):
++        self.assertEqual(search('clamp(@, `0`, `10`)', -3), 0)
++        self.assertEqual(search('clamp(@, `0`, `10`)', 42), 10)
++
++    def test_bounds_inclusive(self):
++        self.assertEqual(search('clamp(@, `0`, `10`)', 0), 0)
++        self.assertEqual(search('clamp(@, `0`, `10`)', 10), 10)
++
++    def test_floats_and_negatives(self):
++        self.assertEqual(search('clamp(@, `-1.5`, `1.5`)', -2.5), -1.5)
++        self.assertEqual(search('clamp(@, `-1.5`, `1.5`)', 0.25), 0.25)
++
++    def test_lo_greater_than_hi_rejected(self):
++        with self.assertRaises(ValueError):
++            search('clamp(`1`, `10`, `0`)', None)
++
++    def test_non_number_rejected(self):
++        with self.assertRaises(exceptions.JMESPathTypeError):
++            search('clamp(`"a"`, `0`, `1`)', None)
++
++
++class TestPercent(unittest.TestCase):
++    def test_basic(self):
++        self.assertEqual(search('percent(`1`, `4`, `0`)', None), 25)
++        self.assertEqual(search('percent(`1`, `3`, `2`)', None), 33.33)
++        self.assertEqual(search('percent(a, b, `1`)', {'a': 2, 'b': 3}), 66.7)
++
++    def test_over_100_and_negative(self):
++        self.assertEqual(search('percent(`3`, `2`, `0`)', None), 150)
++        self.assertEqual(search('percent(`-1`, `4`, `0`)', None), -25)
++
++    def test_float_digits(self):
++        self.assertEqual(search('percent(`1`, `3`, `2.0`)', None), 33.33)
++
++    def test_fractional_digits_rejected(self):
++        with self.assertRaises(exceptions.JMESPathTypeError):
++            search('percent(`1`, `3`, `1.5`)', None)
++
++    def test_zero_whole_rejected(self):
++        with self.assertRaises(ValueError):
++            search('percent(`1`, `0`, `0`)', None)
++
++    def test_non_number_rejected(self):
++        with self.assertRaises(exceptions.JMESPathTypeError):
++            search('percent(`"a"`, `1`, `0`)', None)
++
++
++if __name__ == '__main__':
++    unittest.main()

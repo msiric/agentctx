@@ -1,0 +1,32 @@
+diff --git a/tabulate/cli.py b/tabulate/cli.py
+index cfae6fe..cd7e990 100644
+--- a/tabulate/cli.py
++++ b/tabulate/cli.py
+@@ -188,7 +188,7 @@ def _read_jsonl_file(fobject):
+     import json
+ 
+     rows: list[str] = fobject.readlines()
+-    table = [json.loads(row) for row in rows]
++    table = [json.loads(row) for row in rows if row.strip()]
+     return table
+ 
+ 
+diff --git a/test/test_cli.py b/test/test_cli.py
+index 154f1a2..3afc472 100644
+--- a/test/test_cli.py
++++ b/test/test_cli.py
+@@ -383,6 +383,14 @@ def test_inprocess_jsonl_from_stdin():
+     assert_equal(out.splitlines(), SAMPLE_GRID_FORMAT.splitlines())
+ 
+ 
++def test_inprocess_jsonl_skips_blank_lines():
++    """In-process: JSONL input with blank lines (e.g. trailing) is accepted"""
++    out = run_main_in_process(
++        ["-r", "jsonl", "-f", "grid"], input_text=SAMPLE_INPUT_JSONL + "\n\n\n"
++    )
++    assert_equal(out.splitlines(), SAMPLE_GRID_FORMAT.splitlines())
++
++
+ def test_inprocess_jsonl_remapped_headers():
+     """In-process: JSONL input with key:header remapping"""
+     out = run_main_in_process(

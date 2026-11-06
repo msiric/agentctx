@@ -1,0 +1,138 @@
+diff --git a/index-keys.test-d.ts b/index-keys.test-d.ts
+new file mode 100644
+index 0000000..f869efc
+--- /dev/null
++++ b/index-keys.test-d.ts
+@@ -0,0 +1,7 @@
++import {expectError, expectTypeOf} from 'nz';
++import {decamelizeKeys} from './index.js';
++
++expectTypeOf(decamelizeKeys({fooBar: 1})).toBe<Record<string, unknown>>();
++expectTypeOf(decamelizeKeys({fooBar: 1}, {separator: '-'})).toBe<Record<string, unknown>>();
++expectError(decamelizeKeys('fooBar'));
++expectError(decamelizeKeys({fooBar: 1}, {separator: 42}));
+diff --git a/index.d.ts b/index.d.ts
+index 915dd1b..a9ab39e 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -55,3 +55,23 @@ decamelize('unicornRainbow', {separator: '-'});
+ ```
+ */
+ export default function decamelize(string: string, options?: Options): string;
++
++/**
++Decamelize each own key of a plain object. The operation is shallow: values are left untouched.
++
++@param object - The plain object whose keys should be decamelized.
++@param options - Options passed through to `decamelize`.
++@returns A new object.
++
++@example
++```
++import {decamelizeKeys} from 'decamelize';
++
++decamelizeKeys({fooBar: 1, bazQux: {innerKey: 2}});
++//=> {foo_bar: 1, baz_qux: {innerKey: 2}}
++
++decamelizeKeys({fooBar: 1}, {separator: '-'});
++//=> {'foo-bar': 1}
++```
++*/
++export function decamelizeKeys(object: Record<string, unknown>, options?: Options): Record<string, unknown>;
+diff --git a/index.js b/index.js
+index 2305a0d..a35d8d0 100644
+--- a/index.js
++++ b/index.js
+@@ -65,3 +65,14 @@ export default function decamelize(
+ 	words.push(text.slice(wordStart).toLowerCase());
+ 	return words.join(separator);
+ }
++
++export function decamelizeKeys(object, options) {
++	const prototype = typeof object === 'object' && object !== null ? Object.getPrototypeOf(object) : undefined;
++	if (prototype !== null && prototype !== Object.prototype) {
++		throw new TypeError('The `object` argument should be a plain object');
++	}
++
++	return Object.fromEntries(
++		Object.entries(object).map(([key, value]) => [decamelize(key, options), value]),
++	);
++}
+diff --git a/package.json b/package.json
+index 6389d25..6f54fd8 100644
+--- a/package.json
++++ b/package.json
+@@ -16,7 +16,7 @@
+ 		"node": ">=22"
+ 	},
+ 	"scripts": {
+-		"test": "xo && node --test test.js && nz"
++		"test": "xo && node --test test.js test-keys.js && nz"
+ 	},
+ 	"files": [
+ 		"index.js",
+@@ -40,7 +40,7 @@
+ 	},
+ 	"xo": [
+ 		{
+-			"files": "test.js",
++			"files": ["test.js", "test-keys.js"],
+ 			"rules": {
+ 				"node-test/no-conditional-assertion": "off"
+ 			}
+diff --git a/test-keys.js b/test-keys.js
+new file mode 100644
+index 0000000..21792dc
+--- /dev/null
++++ b/test-keys.js
+@@ -0,0 +1,50 @@
++/* eslint-disable camelcase -- Expected output keys are snake_case. */
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import {decamelizeKeys} from './index.js';
++
++test('decamelizeKeys', () => {
++	assert.deepEqual(decamelizeKeys({}), {});
++	assert.deepEqual(decamelizeKeys({fooBar: 1, bazQux: 2}), {foo_bar: 1, baz_qux: 2});
++});
++
++test('decamelizeKeys is shallow and leaves values untouched', () => {
++	const inner = {innerKey: 1};
++	const result = decamelizeKeys({outerKey: inner});
++	assert.deepEqual(result, {outer_key: inner});
++	assert.equal(result.outer_key, inner);
++});
++
++test('decamelizeKeys passes options through', () => {
++	assert.deepEqual(decamelizeKeys({fooBar: 1}, {separator: '-'}), {'foo-bar': 1});
++	assert.deepEqual(decamelizeKeys({getURLValue: 1}, {preserveConsecutiveUppercase: true}), {get_URL_value: 1});
++});
++
++test('decamelizeKeys returns a new object and does not mutate the input', () => {
++	const input = {fooBar: 1};
++	const result = decamelizeKeys(input);
++	assert.notEqual(result, input);
++	assert.deepEqual(input, {fooBar: 1});
++});
++
++test('decamelizeKeys skips non-enumerable keys', () => {
++	const input = {ownKey: 2};
++	Object.defineProperty(input, 'hiddenKey', {value: 1, enumerable: false});
++	assert.deepEqual(decamelizeKeys(input), {own_key: 2});
++});
++
++test('decamelizeKeys handles null-prototype objects and `__proto__` keys', () => {
++	const input = Object.create(null);
++	input.fooBar = 1;
++	assert.deepEqual(decamelizeKeys(input), {foo_bar: 1});
++
++	const result = decamelizeKeys(JSON.parse('{"__proto__": 1}'));
++	assert.equal(Object.getPrototypeOf(result), Object.prototype);
++	assert.equal(Object.keys(result)[0], '__proto__');
++});
++
++test('decamelizeKeys rejects non-plain objects', () => {
++	for (const value of [null, undefined, 'foo', 1, [], new Map(), new Date(), () => {}]) {
++		assert.throws(() => decamelizeKeys(value), TypeError);
++	}
++});

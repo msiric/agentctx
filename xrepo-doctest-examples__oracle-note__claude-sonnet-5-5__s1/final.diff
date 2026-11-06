@@ -1,0 +1,51 @@
+diff --git a/docs/source/api.rst b/docs/source/api.rst
+index 7c6fd70..81f4db2 100644
+--- a/docs/source/api.rst
++++ b/docs/source/api.rst
+@@ -8,6 +8,8 @@ The :mod:`sqlparse` module provides the following functions on module-level.
+ 
+ .. autofunction:: sqlparse.split
+ 
++.. autofunction:: sqlparse.statement_types
++
+ .. autofunction:: sqlparse.format
+ 
+ .. autofunction:: sqlparse.parse
+diff --git a/sqlparse/__init__.py b/sqlparse/__init__.py
+index 8411f5a..74d071b 100644
+--- a/sqlparse/__init__.py
++++ b/sqlparse/__init__.py
+@@ -73,3 +73,19 @@ def split(
+     """
+     stack = engine.FilterStack(strip_semicolon=strip_semicolon)
+     return [str(stmt).strip() for stmt in stack.run(sql, encoding)]
++
++
++def statement_types(sql: str, encoding: str | None = None) -> list[str]:
++    """Return the type of each statement in *sql*, in order.
++
++    Each entry is what :meth:`~sqlparse.sql.Statement.get_type` returns
++    for the corresponding statement from :func:`parse`.
++
++    >>> statement_types("select 1; insert into t values (1)")
++    ['SELECT', 'INSERT']
++
++    :param sql: A string containing one or more SQL statements.
++    :param encoding: The encoding of the statement (optional).
++    :returns: A list of strings.
++    """
++    return [stmt.get_type() for stmt in parse(sql, encoding)]
+diff --git a/tests/test_parse.py b/tests/test_parse.py
+index 6716841..924f50d 100644
+--- a/tests/test_parse.py
++++ b/tests/test_parse.py
+@@ -641,3 +641,9 @@ def test_json_operators(sql):
+     assert len(p) == 1
+     assert len(p[0].tokens) == 1
+     assert p[0].tokens[0].ttype == sqlparse.tokens.Operator
++
++
++def test_statement_types():
++    assert sqlparse.statement_types('select 1; insert into t values (1)') \
++        == ['SELECT', 'INSERT']
++    assert sqlparse.statement_types('') == []

@@ -1,0 +1,67 @@
+diff --git a/CHANGELOG b/CHANGELOG
+index 399cd62..aaf5e3b 100644
+--- a/CHANGELOG
++++ b/CHANGELOG
+@@ -19,6 +19,11 @@ Notable Changes
+   The vulnerability was discovered by @LinFeng-1219 and @president-xd.
+   Thanks for reporting!
+ 
++Enhancements
++
++* Add `sqlparse.statement_types()`, returning the `get_type()` of each
++  statement found by `parse()`, e.g. `["SELECT", "INSERT"]`.
++
+ Bug Fixes
+ 
+ * Fix `IndexError` and `ValueError` in `format()` on some malformed
+diff --git a/docs/source/api.rst b/docs/source/api.rst
+index 7c6fd70..81f4db2 100644
+--- a/docs/source/api.rst
++++ b/docs/source/api.rst
+@@ -8,6 +8,8 @@ The :mod:`sqlparse` module provides the following functions on module-level.
+ 
+ .. autofunction:: sqlparse.split
+ 
++.. autofunction:: sqlparse.statement_types
++
+ .. autofunction:: sqlparse.format
+ 
+ .. autofunction:: sqlparse.parse
+diff --git a/sqlparse/__init__.py b/sqlparse/__init__.py
+index 8411f5a..a05843a 100644
+--- a/sqlparse/__init__.py
++++ b/sqlparse/__init__.py
+@@ -73,3 +73,17 @@ def split(
+     """
+     stack = engine.FilterStack(strip_semicolon=strip_semicolon)
+     return [str(stmt).strip() for stmt in stack.run(sql, encoding)]
++
++
++def statement_types(sql: str, encoding: str | None = None) -> list[str]:
++    """Return the type of each statement in *sql*, in order.
++
++    Each entry is the result of :meth:`sqlparse.sql.Statement.get_type`
++    for the corresponding statement found by :func:`parse`, e.g.
++    ``['SELECT', 'INSERT']``.
++
++    :param sql: A string containing one or more SQL statements.
++    :param encoding: The encoding of the statement (optional).
++    :returns: A list of strings.
++    """
++    return [stmt.get_type() for stmt in parsestream(sql, encoding)]
+diff --git a/tests/test_parse.py b/tests/test_parse.py
+index 6716841..d9fa799 100644
+--- a/tests/test_parse.py
++++ b/tests/test_parse.py
+@@ -641,3 +641,11 @@ def test_json_operators(sql):
+     assert len(p) == 1
+     assert len(p[0].tokens) == 1
+     assert p[0].tokens[0].ttype == sqlparse.tokens.Operator
++
++
++def test_statement_types():
++    assert sqlparse.statement_types('select 1; insert into t values (1);') \
++        == ['SELECT', 'INSERT']
++    assert sqlparse.statement_types('') == []
++    assert sqlparse.statement_types('-- c\nwith x as (select 1) delete from t') \
++        == ['DELETE']

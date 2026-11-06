@@ -1,0 +1,100 @@
+diff --git a/tabulate/cli.py b/tabulate/cli.py
+index cfae6fe..08bb020 100644
+--- a/tabulate/cli.py
++++ b/tabulate/cli.py
+@@ -66,6 +66,9 @@ def _main():
+     moinmoin, orgtbl, outline, pipe, plain, presto, pretty, psql, rounded_grid,
+     rounded_outline, rst, simple, simple_grid, simple_outline, textile, tsv, unsafehtml.
+ 
++    --wrap WIDTH              wrap cell text at WIDTH characters; breaks only at
++                              whitespace, longer tokens (IDs, URLs) stay whole
++
+     OUTPUT:
+     -o FILE, --output FILE    print table to FILE (default: stdout)
+ 
+@@ -87,6 +90,7 @@ def _main():
+                 "float=",
+                 "int=",
+                 "colalign=",
++                "wrap=",
+                 "format=",
+             ],
+         )
+@@ -98,6 +102,7 @@ def _main():
+     floatfmt = _DEFAULT_FLOATFMT
+     intfmt = _DEFAULT_INTFMT
+     colalign = None
++    wrap = None
+     tablefmt = "simple"
+     fileformat = "rsv"
+     sep = r"\s+"
+@@ -121,6 +126,14 @@ def _main():
+             intfmt = value
+         elif opt in ["-C", "--colalign"]:
+             colalign = value.split()
++        elif opt == "--wrap":
++            try:
++                wrap = int(value)
++                if wrap < 1:
++                    raise ValueError
++            except ValueError:
++                print(f"--wrap requires a positive integer, got: {value}", file=sys.stderr)
++                sys.exit(2)
+         elif opt in ["-r", "--read"]:
+             fileformat = value.lower()
+         elif opt in ["-f", "--format"]:
+@@ -175,6 +188,7 @@ def _main():
+                 intfmt=intfmt,
+                 file=out,
+                 colalign=colalign,
++                wrap=wrap,
+             )
+ 
+ 
+@@ -208,8 +222,14 @@ def _open_and_pprint_file(reader, f, *args, **kwargs):
+             _pprint_file(reader, fobj, *args, **kwargs)
+ 
+ 
+-def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign):
++def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign, wrap=None):
+     table = reader(fobject)
++    wrap_kwargs = {}
++    if wrap:
++        # break only at whitespace: keep long tokens and hyphenated words whole
++        wrap_kwargs = dict(
++            maxcolwidths=wrap, break_long_words=False, break_on_hyphens=False
++        )
+     print(
+         tabulate(
+             table,
+@@ -218,6 +238,7 @@ def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, col
+             floatfmt=floatfmt,
+             intfmt=intfmt,
+             colalign=colalign,
++            **wrap_kwargs,
+         ),
+         file=file,
+     )
+diff --git a/test/test_cli.py b/test/test_cli.py
+index 154f1a2..4986986 100644
+--- a/test/test_cli.py
++++ b/test/test_cli.py
+@@ -483,3 +483,18 @@ def test_inprocess_jsonl_malformed_headers():
+     )
+     # output should still be produced (graceful fallback), with raw keys as headers
+     assert out.strip() != ""
++
++
++def test_script_wrap_breaks_only_at_whitespace():
++    """--wrap WIDTH keeps long tokens and hyphenated words whole"""
++    data = "id,note\nTCK-12345-ABCDEFGHIJ,hello there-friend this is a long note\n"
++    cmd = [sys.executable, "tabulate/cli.py", "-r", "csv", "-1", "--wrap", "12"]
++    out = run_and_capture_stdout(cmd, input=data)
++    lines = out.splitlines()
++    assert "TCK-12345-ABCDEFGHIJ" in lines[2]
++    assert [ln.split("  ")[-1].strip() for ln in lines[2:]] == [
++        "hello",
++        "there-friend",
++        "this is a",
++        "long note",
++    ]

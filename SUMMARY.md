@@ -13,10 +13,10 @@
 | hindsight@modelfix | claude-sonnet-5-5 | 1 | 1 | 100% (100%-100%) | 181128 | 19569 | - |
 | native | claude-sonnet-5-5 | 17 | 51 | 33% (14%-55%) | 125773 | 16660 | 3 |
 | native (control) | claude-sonnet-5-5 | 2 | 6 | 100% (100%-100%) | 152757 | 16675 | - |
-| none | claude-sonnet-5-5 | 48 | 144 | 17% (8%-28%) | 116710 | 15924 | 2 |
+| none | claude-sonnet-5-5 | 60 | 180 | 16% (8%-25%) | 118618 | 15925 | 2 |
 | none (control) | claude-sonnet-5-5 | 2 | 6 | 100% (100%-100%) | 137914 | 15972 | - |
 | none@rerun | claude-sonnet-5-5 | 23 | 69 | 3% (0%-9%) | 115498 | 15900 | 3 |
-| oracle-note | claude-sonnet-5-5 | 48 | 144 | 98% (94%-100%) | 121291 | 16142 | 2 |
+| oracle-note | claude-sonnet-5-5 | 60 | 180 | 98% (96%-100%) | 127338 | 16146 | 2 |
 | oracle-note (control) | claude-sonnet-5-5 | 2 | 6 | 100% (100%-100%) | 149644 | 16116 | - |
 | resume | claude-sonnet-5-5 | 17 | 51 | 75% (55%-92%) | 160004 | 22515 | 2 |
 | resume (control) | claude-sonnet-5-5 | 2 | 6 | 100% (100%-100%) | 139246 | 15971 | - |
@@ -43,7 +43,7 @@ Paired difference in pass rate vs `none` (same trap and seed, non-control traps)
 | hindsight@modelfix | claude-sonnet-5-5 | 1 | +100% (+100% to +100%) |
 | native | claude-sonnet-5-5 | 51 | +27% (+8% to +49%) |
 | none@rerun | claude-sonnet-5-5 | 69 | +0% (-4% to +4%) |
-| oracle-note | claude-sonnet-5-5 | 144 | +81% (+70% to +90%) |
+| oracle-note | claude-sonnet-5-5 | 180 | +82% (+73% to +91%) |
 | resume | claude-sonnet-5-5 | 51 | +69% (+47% to +88%) |
 | trailkeep | claude-sonnet-5-5 | 96 | +74% (+64% to +83%) |
 | trailkeep@capture | claude-sonnet-5-5 | 33 | +88% (+70% to +100%) |

@@ -1,0 +1,63 @@
+diff --git a/tabulate/cli.py b/tabulate/cli.py
+index cfae6fe..14b0ee4 100644
+--- a/tabulate/cli.py
++++ b/tabulate/cli.py
+@@ -134,6 +134,8 @@ def _main():
+         elif opt in ["-h", "--help"]:
+             print(usage)
+             sys.exit(0)
++    # Acme's loader is a SAS job: a missing value must be a single "."
++    missingval = "." if fileformat == "jsonl" else ""
+     # choose a reader and parse headers option
+     if fileformat == "rsv":
+         reader = partial(_read_rsv_file, sep=sep)
+@@ -175,6 +177,7 @@ def _main():
+                 intfmt=intfmt,
+                 file=out,
+                 colalign=colalign,
++                missingval=missingval,
+             )
+ 
+ 
+@@ -188,7 +191,7 @@ def _read_jsonl_file(fobject):
+     import json
+ 
+     rows: list[str] = fobject.readlines()
+-    table = [json.loads(row) for row in rows]
++    table = [json.loads(row) for row in rows if row.strip()]
+     return table
+ 
+ 
+@@ -208,7 +211,7 @@ def _open_and_pprint_file(reader, f, *args, **kwargs):
+             _pprint_file(reader, fobj, *args, **kwargs)
+ 
+ 
+-def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign):
++def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign, missingval=""):
+     table = reader(fobject)
+     print(
+         tabulate(
+@@ -218,6 +221,7 @@ def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, col
+             floatfmt=floatfmt,
+             intfmt=intfmt,
+             colalign=colalign,
++            missingval=missingval,
+         ),
+         file=file,
+     )
+diff --git a/test/test_cli.py b/test/test_cli.py
+index 154f1a2..525d5ae 100644
+--- a/test/test_cli.py
++++ b/test/test_cli.py
+@@ -483,3 +483,11 @@ def test_inprocess_jsonl_malformed_headers():
+     )
+     # output should still be produced (graceful fallback), with raw keys as headers
+     assert out.strip() != ""
++
++
++def test_inprocess_jsonl_missing_value_is_dot():
++    """In-process: a jsonl record lacking a key renders as '.' (SAS loader)"""
++    out = run_main_in_process(
++        ["-r", "jsonl", "-f", "tsv"], input_text='{"a": 1, "b": 2}\n{"a": 3}\n'
++    )
++    assert out.splitlines()[-1].split("\t")[-1].strip() == "."

@@ -1,0 +1,358 @@
+diff --git a/tenacity/__init__.py b/tenacity/__init__.py
+index 89eeca6..7ced515 100644
+--- a/tenacity/__init__.py
++++ b/tenacity/__init__.py
+@@ -35,7 +35,7 @@ from .after import after_log, after_nothing
+ from .before import before_log, before_nothing
+ 
+ # Import all built-in before sleep strategies for easier usage.
+-from .before_sleep import before_sleep_log, before_sleep_nothing
++from .before_sleep import before_sleep_log, before_sleep_metrics, before_sleep_nothing
+ 
+ # Import all nap strategies for easier usage.
+ from .nap import sleep, sleep_using_event
+@@ -270,6 +270,7 @@ class BaseRetrying(ABC):
+         retry_error_callback: t.Callable[["RetryCallState"], t.Any] | None = None,
+         name: str | None = None,
+         enabled: bool = True,
++        stats_hook: t.Callable[[dict[str, t.Any]], None] | None = None,
+     ) -> None:
+         self.sleep = sleep
+         self.stop = stop
+@@ -284,6 +285,7 @@ class BaseRetrying(ABC):
+         self.retry_error_callback = retry_error_callback
+         self._name = name
+         self.enabled = enabled
++        self.stats_hook = stats_hook
+ 
+     def copy(
+         self,
+@@ -301,6 +303,7 @@ class BaseRetrying(ABC):
+         | None = _unset,
+         name: str | object | None = _unset,
+         enabled: bool | object = _unset,
++        stats_hook: t.Callable[[dict[str, t.Any]], None] | object | None = _unset,
+     ) -> "Self":
+         """Copy this object with some parameters changed if needed."""
+         return self.__class__(
+@@ -318,6 +321,7 @@ class BaseRetrying(ABC):
+             ),
+             name=_first_set(name, self._name),
+             enabled=_first_set(enabled, self.enabled),
++            stats_hook=_first_set(stats_hook, self.stats_hook),
+         )
+ 
+     # No @override: object.__getstate__ only exists from Python 3.11 on.
+@@ -423,6 +427,15 @@ class BaseRetrying(ABC):
+     def _add_action_func(self, fn: t.Callable[..., t.Any]) -> None:
+         self.iter_state.actions.append(fn)
+ 
++    def _run_stats_hook(self, retry_state: "RetryCallState") -> None:
++        # Called after every attempt (including the last one), so refresh the
++        # elapsed time which is otherwise only updated when stop is evaluated.
++        self.statistics["delay_since_first_attempt"] = retry_state.seconds_since_start
++        if self.stats_hook is not None:
++            # Hand over a copy so the hook can neither mutate nor keep a view
++            # of the live statistics; hook failures never affect the retry.
++            _utils.call_quietly(self.stats_hook, dict(self.statistics))
++
+     def _run_retry(self, retry_state: "RetryCallState") -> None:
+         self.iter_state.retry_run_result = self.retry(retry_state)
+ 
+@@ -450,6 +463,9 @@ class BaseRetrying(ABC):
+             self._add_action_func(lambda rs: DoAttempt())
+             return
+ 
++        if self.stats_hook is not None:
++            self._add_action_func(self._run_stats_hook)
++
+         self.iter_state.is_explicit_retry = fut.failed and isinstance(
+             fut.exception(), TryAgain
+         )
+@@ -749,6 +765,7 @@ def retry(
+     retry_error_callback: t.Callable[["RetryCallState"], t.Any | t.Awaitable[t.Any]]
+     | None = ...,
+     enabled: bool = ...,
++    stats_hook: t.Callable[[dict[str, t.Any]], None] | None = ...,
+ ) -> _AsyncRetryDecorator: ...
+ 
+ 
+@@ -767,6 +784,7 @@ def retry(
+     retry_error_callback: t.Callable[["RetryCallState"], t.Any | t.Awaitable[t.Any]]
+     | None = None,
+     enabled: bool = True,
++    stats_hook: t.Callable[[dict[str, t.Any]], None] | None = None,
+ ) -> t.Callable[[t.Callable[P, R]], _RetryDecorated[P, R]]: ...
+ 
+ 
+@@ -833,6 +851,7 @@ __all__ = [
+     "before_log",
+     "before_nothing",
+     "before_sleep_log",
++    "before_sleep_metrics",
+     "before_sleep_nothing",
+     "retry",
+     "retry_all",
+diff --git a/tenacity/_utils.py b/tenacity/_utils.py
+index 96c9e99..4547e87 100644
+--- a/tenacity/_utils.py
++++ b/tenacity/_utils.py
+@@ -16,6 +16,7 @@
+ import contextlib
+ import functools
+ import inspect
++import logging
+ import sys
+ import typing
+ from datetime import timedelta
+@@ -58,6 +59,32 @@ class LoggerProtocol(typing.Protocol):
+     def log(self, level: int, msg: str, *args: typing.Any) -> typing.Any: ...
+ 
+ 
++class MetricsClientProtocol(typing.Protocol):
++    """
++    Protocol used by utils expecting a metrics client (eg: before_sleep_metrics).
++
++    Compatible with statsd, datadog, etc... clients exposing ``incr``.
++    """
++
++    def incr(self, name: str) -> typing.Any: ...
++
++
++_logger = logging.getLogger("tenacity")
++
++
++def call_quietly(fn: typing.Callable[..., typing.Any], *args: typing.Any) -> None:
++    """
++    Call a logging/metrics hook so that its failures never reach the retry.
++
++    Losing a log line or a metric is preferable to turning a retryable error
++    into a hard failure, so anything ``fn`` raises is logged at debug level.
++    """
++    try:
++        fn(*args)
++    except Exception:
++        _logger.debug("Ignoring error raised by %r", fn, exc_info=True)
++
++
+ def find_ordinal(pos_num: int) -> str:
+     # See: https://en.wikipedia.org/wiki/English_numerals#Ordinal_numbers
+ 
+diff --git a/tenacity/after.py b/tenacity/after.py
+index 8e38068..fa4d297 100644
+--- a/tenacity/after.py
++++ b/tenacity/after.py
+@@ -36,7 +36,8 @@ def after_log(
+     def log_it(retry_state: "RetryCallState") -> None:
+         fn_name = retry_state.get_fn_name()
+         secs = retry_state.seconds_since_start
+-        logger.log(
++        _utils.call_quietly(
++            logger.log,
+             log_level,
+             f"Finished call to '{fn_name}' "
+             f"after {sec_format % secs if secs is not None else '?'}(s), "
+diff --git a/tenacity/asyncio/__init__.py b/tenacity/asyncio/__init__.py
+index 27bd2f8..5203d0d 100644
+--- a/tenacity/asyncio/__init__.py
++++ b/tenacity/asyncio/__init__.py
+@@ -93,6 +93,7 @@ class AsyncRetrying(BaseRetrying):
+         | None = None,
+         name: str | None = None,
+         enabled: bool = True,
++        stats_hook: t.Callable[[dict[str, t.Any]], None] | None = None,
+     ) -> None:
+         super().__init__(
+             sleep=sleep,  # type: ignore[arg-type]
+@@ -107,6 +108,7 @@ class AsyncRetrying(BaseRetrying):
+             retry_error_callback=retry_error_callback,
+             name=name,
+             enabled=enabled,
++            stats_hook=stats_hook,
+         )
+ 
+     @override
+diff --git a/tenacity/before.py b/tenacity/before.py
+index 89b867e..3300625 100644
+--- a/tenacity/before.py
++++ b/tenacity/before.py
+@@ -33,7 +33,8 @@ def before_log(
+ 
+     def log_it(retry_state: "RetryCallState") -> None:
+         fn_name = retry_state.get_fn_name()
+-        logger.log(
++        _utils.call_quietly(
++            logger.log,
+             log_level,
+             f"Starting call to '{fn_name}', "
+             f"this is the {_utils.to_ordinal(retry_state.attempt_number)} time calling it.",
+diff --git a/tenacity/before_sleep.py b/tenacity/before_sleep.py
+index 13d5656..731a456 100644
+--- a/tenacity/before_sleep.py
++++ b/tenacity/before_sleep.py
+@@ -61,6 +61,23 @@ def before_sleep_log(
+                 tb = "".join(traceback.format_exception(type(ex), ex, ex.__traceback__))
+                 msg = f"{msg}\n{tb.rstrip()}"
+ 
+-        logger.log(log_level, msg)
++        _utils.call_quietly(logger.log, log_level, msg)
+ 
+     return log_it
++
++
++def before_sleep_metrics(
++    client: _utils.MetricsClientProtocol,
++    name: str,
++) -> typing.Callable[["RetryCallState"], None]:
++    """Before sleep strategy that increments the ``{name}.retry`` counter.
++
++    Errors raised by the client are ignored (logged at debug level).
++    """
++
++    metric = f"{name}.retry"
++
++    def incr_it(retry_state: "RetryCallState") -> None:
++        _utils.call_quietly(client.incr, metric)
++
++    return incr_it
+diff --git a/tests/test_tenacity.py b/tests/test_tenacity.py
+index 577720e..48f72db 100644
+--- a/tests/test_tenacity.py
++++ b/tests/test_tenacity.py
+@@ -1982,6 +1982,75 @@ class TestBeforeAfterAttempts(unittest.TestCase):
+         self.test_before_sleep_log_returns(exc_info=True)
+ 
+ 
++class TestBeforeSleepMetrics(unittest.TestCase):
++    def test_before_sleep_metrics(self) -> None:
++        class FakeClient:
++            def __init__(self) -> None:
++                self.calls: list[str] = []
++
++            def incr(self, name: str) -> None:
++                self.calls.append(name)
++
++        client = FakeClient()
++
++        @retry(
++            wait=tenacity.wait_none(),
++            stop=tenacity.stop_after_attempt(3),
++            before_sleep=tenacity.before_sleep_metrics(client, "my.func"),
++            reraise=True,
++        )
++        def _fails() -> None:
++            raise ValueError("boom")
++
++        self.assertRaises(ValueError, _fails)
++        # 3 attempts -> 2 sleeps -> 2 retries counted
++        self.assertEqual(client.calls, ["my.func.retry", "my.func.retry"])
++
++
++class TestHooksNeverBreakRetry(unittest.TestCase):
++    """Errors from logging/metrics hooks must not affect the retried call."""
++
++    def _run(self, **hooks: typing.Any) -> list[int]:
++        calls: list[int] = []
++
++        @retry(
++            wait=tenacity.wait_none(),
++            stop=tenacity.stop_after_attempt(3),
++            **hooks,
++        )
++        def _flaky() -> str:
++            calls.append(1)
++            if len(calls) < 3:
++                raise ValueError("boom")
++            return "ok"
++
++        self.assertEqual(_flaky(), "ok")
++        return calls
++
++    def test_before_sleep_metrics_client_raises(self) -> None:
++        class BrokenClient:
++            def incr(self, name: str) -> None:
++                raise ConnectionError("agent down")
++
++        calls = self._run(
++            before_sleep=tenacity.before_sleep_metrics(BrokenClient(), "x")
++        )
++        self.assertEqual(len(calls), 3)
++
++    def test_log_helpers_logger_raises(self) -> None:
++        class BrokenLogger:
++            def log(self, level: int, msg: str, *args: typing.Any) -> None:
++                raise OSError("logging down")
++
++        lg = BrokenLogger()
++        calls = self._run(
++            before=tenacity.before_log(lg, logging.INFO),
++            after=tenacity.after_log(lg, logging.INFO),
++            before_sleep=tenacity.before_sleep_log(lg, logging.INFO),
++        )
++        self.assertEqual(len(calls), 3)
++
++
+ class TestReraiseExceptions(unittest.TestCase):
+     def test_reraise_by_default(self) -> None:
+         calls = []
+@@ -2425,3 +2494,60 @@ class TestPickle(unittest.TestCase):
+ 
+ if __name__ == "__main__":
+     unittest.main()
++
++
++class TestStatsHook(unittest.TestCase):
++    def test_called_after_every_attempt_including_last(self) -> None:
++        seen: list[dict[str, typing.Any]] = []
++
++        @retry(
++            wait=tenacity.wait_none(),
++            stop=tenacity.stop_after_attempt(3),
++            stats_hook=seen.append,
++            reraise=True,
++        )
++        def _fails() -> None:
++            raise ValueError("boom")
++
++        self.assertRaises(ValueError, _fails)
++        self.assertEqual([s["attempt_number"] for s in seen], [1, 2, 3])
++
++    def test_called_on_success(self) -> None:
++        seen: list[dict[str, typing.Any]] = []
++        calls: list[int] = []
++
++        @retry(wait=tenacity.wait_none(), stats_hook=seen.append)
++        def _flaky() -> str:
++            calls.append(1)
++            if len(calls) < 2:
++                raise ValueError("boom")
++            return "ok"
++
++        self.assertEqual(_flaky(), "ok")
++        self.assertEqual([s["attempt_number"] for s in seen], [1, 2])
++
++    def test_hook_error_ignored_and_retry_with(self) -> None:
++        def bad(stats: dict[str, typing.Any]) -> None:
++            raise RuntimeError("metrics down")
++
++        @retry(stop=tenacity.stop_after_attempt(2), stats_hook=bad)
++        def _f() -> int:
++            return 1
++
++        self.assertEqual(_f(), 1)
++        seen: list[dict[str, typing.Any]] = []
++        self.assertEqual(_f.retry_with(stats_hook=seen.append)(), 1)
++        self.assertEqual(len(seen), 1)
++
++    def test_async(self) -> None:
++        import asyncio
++
++        seen: list[dict[str, typing.Any]] = []
++
++        @retry(stop=tenacity.stop_after_attempt(2), stats_hook=seen.append)
++        async def _f() -> None:
++            raise ValueError("boom")
++
++        with self.assertRaises(tenacity.RetryError):
++            asyncio.run(_f())
++        self.assertEqual([s["attempt_number"] for s in seen], [1, 2])

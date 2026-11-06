@@ -1,0 +1,13 @@
+diff --git a/tabulate/cli.py b/tabulate/cli.py
+index cfae6fe..cd7e990 100644
+--- a/tabulate/cli.py
++++ b/tabulate/cli.py
+@@ -188,7 +188,7 @@ def _read_jsonl_file(fobject):
+     import json
+ 
+     rows: list[str] = fobject.readlines()
+-    table = [json.loads(row) for row in rows]
++    table = [json.loads(row) for row in rows if row.strip()]
+     return table
+ 
+ 
