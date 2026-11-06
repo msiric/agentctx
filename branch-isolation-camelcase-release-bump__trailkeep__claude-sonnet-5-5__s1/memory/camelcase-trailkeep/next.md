@@ -1,0 +1,8 @@
+# next
+
+Branch: next · Repo: local__camelcase-1843857472 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: On branch next, never edit the version in package.json by hand. The release job derives it from the changesets and fails if anyone bumps it manually (user's rule, stated 2026-11-06). This differs from release/10.x, where a patch bump is required.
+

@@ -1,0 +1,113 @@
+diff --git a/sqlparse/cli.py b/sqlparse/cli.py
+index 491b352..76babef 100644
+--- a/sqlparse/cli.py
++++ b/sqlparse/cli.py
+@@ -55,6 +55,14 @@ def create_parser():
+         default=False,
+         help='format files in-place (overwrite existing files)')
+ 
++    parser.add_argument(
++        '--check',
++        dest='check',
++        action='store_true',
++        default=False,
++        help='do not write anything; print the name of each file whose '
++             'formatting would change and exit with 1 if there are any')
++
+     parser.add_argument(
+         '--version',
+         action='version',
+@@ -205,6 +213,12 @@ def _process_file(filename, args):
+     except SQLParseError as e:
+         return _error(f'Failed to format {filename}: {e}')
+ 
++    if args.check:
++        if s != data:
++            print(filename)
++            return 1
++        return 0
++
+     # Write output
+     if args.inplace:
+         outfile = filename
+@@ -228,11 +242,13 @@ def main(args=None):
+     args = parser.parse_args(args)
+ 
+     # Validate argument combinations
++    if args.check and (args.inplace or args.outfile):
++        return _error('Cannot use --check with --in-place or -o/--outfile')
+     if len(args.filename) > 1:
+         if args.outfile:
+             return _error('Cannot use -o/--outfile with multiple files')
+-        if not args.inplace:
+-            return _error('Multiple files require --in-place flag')
++        if not args.inplace and not args.check:
++            return _error('Multiple files require --in-place or --check flag')
+ 
+     # Process all files
+     exit_code = 0
+diff --git a/sqlparse/keywords.py b/sqlparse/keywords.py
+index dd6e5d1..cc739f9 100644
+--- a/sqlparse/keywords.py
++++ b/sqlparse/keywords.py
+@@ -1081,8 +1081,12 @@ KEYWORDS_MSACCESS = {
+ 
+ KEYWORDS_SNOWFLAKE = {
+     'ACCOUNT': tokens.Keyword,
++    'ASOF': tokens.Keyword,
++    'EXCLUDE': tokens.Keyword,
+     'GSCLUSTER': tokens.Keyword,
+     'ISSUE': tokens.Keyword,
++    'MATCH_CONDITION': tokens.Keyword,
++    'MATCH_RECOGNIZE': tokens.Keyword,
+     'ORGANIZATION': tokens.Keyword,
+     'PIVOT': tokens.Keyword,
+     'QUALIFY': tokens.Keyword,
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index f33b534..b2e20f4 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -150,7 +150,7 @@ def test_cli_multiple_files_without_inplace_fails(tmpdir, capsys):
+ 
+     assert result != 0  # Should fail
+     _, err = capsys.readouterr()
+-    assert "Multiple files require --in-place flag" in err
++    assert "Multiple files require --in-place or --check flag" in err
+ 
+ 
+ def test_cli_inplace_with_stdin_fails(capsys):
+@@ -235,3 +235,34 @@ def test_cli_outfile_keeps_file_on_format_error(tmpdir, capsys):
+     assert out_file.read() == "select 1"
+     _, err = capsys.readouterr()
+     assert err.startswith("[ERROR] Failed to format")
++
++
++def test_cli_check_reports_files_that_would_change(tmpdir, capsys):
++    changed = tmpdir.join("changed.sql")
++    changed.write("select * from foo")
++    clean = tmpdir.join("clean.sql")
++    clean.write("SELECT * FROM foo")
++
++    result = sqlparse.cli.main(
++        ['--check', '-k', 'upper', str(changed), str(clean)])
++
++    out, _ = capsys.readouterr()
++    assert result == 1
++    assert out.splitlines() == [str(changed)]
++    assert changed.read() == "select * from foo"  # nothing written
++
++
++def test_cli_check_clean_exits_zero(tmpdir, capsys):
++    clean = tmpdir.join("clean.sql")
++    clean.write("SELECT * FROM foo")
++    assert sqlparse.cli.main(['--check', '-k', 'upper', str(clean)]) == 0
++    out, _ = capsys.readouterr()
++    assert out == ""
++
++
++def test_cli_check_incompatible_with_inplace_and_outfile(tmpdir, capsys):
++    f = tmpdir.join("a.sql")
++    f.write("select 1")
++    assert sqlparse.cli.main(['--check', '--in-place', str(f)]) != 0
++    assert sqlparse.cli.main(
++        ['--check', '-o', str(tmpdir.join("o.sql")), str(f)]) != 0

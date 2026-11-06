@@ -1,0 +1,143 @@
+diff --git a/jmespath/dashboard.py b/jmespath/dashboard.py
+new file mode 100644
+index 0000000..4589828
+--- /dev/null
++++ b/jmespath/dashboard.py
+@@ -0,0 +1,58 @@
++"""JMESPath functions for the dashboards."""
++import decimal
++from decimal import Decimal
++
++from jmespath import parser
++from jmespath import exceptions
++from jmespath.functions import Functions, signature
++from jmespath.visitor import Options
++
++
++class DashboardFunctions(Functions):
++
++    @signature({'types': ['number']}, {'types': ['number']})
++    def _func_round_to(self, number, digits):
++        if digits != int(digits):
++            raise exceptions.JMESPathError(
++                'round_to() digits must be a whole number, got %r' % digits)
++        return round(number, int(digits))
++
++    @signature({'types': ['number']}, {'types': ['number']},
++               {'types': ['number']})
++    def _func_clamp(self, value, lo, hi):
++        if lo > hi:
++            raise exceptions.JMESPathError(
++                'clamp() lo must not be greater than hi, got lo=%r hi=%r'
++                % (lo, hi))
++        return max(lo, min(value, hi))
++
++    @signature({'types': ['number']}, {'types': ['number']},
++               {'types': ['number']})
++    def _func_percent(self, part, whole, digits):
++        if digits != int(digits):
++            raise exceptions.JMESPathError(
++                'percent() digits must be a whole number, got %r' % digits)
++        if whole == 0:
++            raise exceptions.JMESPathError('percent() whole must not be zero')
++        digits = int(digits)
++        # Round half away from zero (Excel behavior) on the decimal value,
++        # not the binary float. Deliberately not round_to(), which is
++        # half-to-even.
++        with decimal.localcontext() as ctx:
++            ctx.prec = 50
++            result = Decimal(str(part)) / Decimal(str(whole)) * 100
++            result = result.quantize(Decimal(1).scaleb(-digits),
++                                     rounding=decimal.ROUND_HALF_UP)
++        if digits <= 0:
++            return int(result)
++        return float(result)
++
++
++def search(expression, data, options=None):
++    """Like ``jmespath.search`` but with ``DashboardFunctions`` available."""
++    if options is None:
++        options = Options(custom_functions=DashboardFunctions())
++    elif options.custom_functions is None:
++        options = Options(dict_cls=options.dict_cls,
++                          custom_functions=DashboardFunctions())
++    return parser.Parser().parse(expression).search(data, options=options)
+diff --git a/tests/test_dashboard.py b/tests/test_dashboard.py
+new file mode 100644
+index 0000000..7ba6d71
+--- /dev/null
++++ b/tests/test_dashboard.py
+@@ -0,0 +1,73 @@
++import unittest
++
++from jmespath import exceptions
++from jmespath import dashboard
++
++
++class TestRoundTo(unittest.TestCase):
++    def test_rounds_half_to_even(self):
++        # Matches Python's round() and pandas, which the dashboards are
++        # checked against. Halves go to the nearest even digit.
++        self.assertEqual(dashboard.search('round_to(`0.5`, `0`)', {}), 0)
++        self.assertEqual(dashboard.search('round_to(`1.5`, `0`)', {}), 2)
++        self.assertEqual(dashboard.search('round_to(`2.5`, `0`)', {}), 2)
++        self.assertEqual(dashboard.search('round_to(`3.5`, `0`)', {}), 4)
++        self.assertEqual(dashboard.search('round_to(`-2.5`, `0`)', {}), -2)
++        self.assertEqual(dashboard.search('round_to(`25`, `-1`)', {}), 20)
++        self.assertEqual(dashboard.search('round_to(`35`, `-1`)', {}), 40)
++
++    def test_digits(self):
++        self.assertEqual(
++            dashboard.search('round_to(a, `2`)', {'a': 3.14159}), 3.14)
++        self.assertEqual(dashboard.search('round_to(a, `-1`)', {'a': 1234}),
++                         1230)
++
++    def test_fractional_digits_rejected(self):
++        with self.assertRaises(exceptions.JMESPathError):
++            dashboard.search('round_to(`1`, `1.5`)', {})
++
++    def test_builtins_still_available(self):
++        self.assertEqual(dashboard.search('abs(a)', {'a': -1}), 1)
++
++
++class TestClamp(unittest.TestCase):
++    def test_within_range(self):
++        self.assertEqual(dashboard.search('clamp(`5`, `0`, `10`)', {}), 5)
++
++    def test_below_and_above(self):
++        self.assertEqual(dashboard.search('clamp(`-5`, `0`, `10`)', {}), 0)
++        self.assertEqual(dashboard.search('clamp(`15`, `0`, `10`)', {}), 10)
++
++    def test_bounds_inclusive_and_floats(self):
++        self.assertEqual(dashboard.search('clamp(`0`, `0`, `10`)', {}), 0)
++        self.assertEqual(dashboard.search('clamp(a, `0`, `1`)', {'a': 0.25}),
++                         0.25)
++
++    def test_lo_greater_than_hi_rejected(self):
++        with self.assertRaises(exceptions.JMESPathError):
++            dashboard.search('clamp(`5`, `10`, `0`)', {})
++
++
++class TestPercent(unittest.TestCase):
++    def test_basic(self):
++        self.assertEqual(dashboard.search('percent(`1`, `4`, `0`)', {}), 25)
++        self.assertEqual(dashboard.search('percent(`1`, `3`, `2`)', {}), 33.33)
++
++    def test_rounds_half_away_from_zero(self):
++        # Matches Excel, not Python's round(); differs from round_to().
++        s = dashboard.search
++        self.assertEqual(s('percent(`1`, `200`, `0`)', {}), 1)    # 0.5
++        self.assertEqual(s('percent(`3`, `200`, `0`)', {}), 2)    # 1.5
++        self.assertEqual(s('percent(`5`, `200`, `0`)', {}), 3)    # 2.5
++        self.assertEqual(s('percent(`-5`, `200`, `0`)', {}), -3)  # -2.5
++        self.assertEqual(s('percent(`1`, `8`, `1`)', {}), 12.5)
++        self.assertEqual(s('percent(`1`, `16`, `1`)', {}), 6.3)   # 6.25
++        self.assertEqual(s('percent(`1`, `8`, `-1`)', {}), 10)
++
++    def test_zero_whole_rejected(self):
++        with self.assertRaises(exceptions.JMESPathError):
++            dashboard.search('percent(`1`, `0`, `1`)', {})
++
++    def test_fractional_digits_rejected(self):
++        with self.assertRaises(exceptions.JMESPathError):
++            dashboard.search('percent(`1`, `2`, `1.5`)', {})

@@ -1,0 +1,85 @@
+diff --git a/base.d.ts b/base.d.ts
+index 17ddbbd..8e4a516 100644
+--- a/base.d.ts
++++ b/base.d.ts
+@@ -338,7 +338,7 @@ export type ParseOptions = {
+ 	*/
+ 	readonly types?: Record<
+ 		string,
+-	'boolean' | 'number' | 'string' | 'string[]' | 'number[]' | ((value: string) => unknown)
++	'boolean' | 'number' | 'json' | 'string' | 'string[]' | 'number[]' | ((value: string) => unknown)
+ 	>;
+ };
+ 
+diff --git a/base.js b/base.js
+index bb2a093..dd82f09 100644
+--- a/base.js
++++ b/base.js
+@@ -485,8 +485,17 @@ function parseValue(value, options, type) {
+ 		return Number(value);
+ 	}
+ 
++	if (type === 'json' && typeof value === 'string') {
++		try {
++			return JSON.parse(value);
++		} catch {
++			// Not valid JSON, so the value stays a string.
++			return value;
++		}
++	}
++
+ 	// An explicit type takes precedence over `parseNumbers` and `parseBooleans`. A value that does not match its type stays a string. With `arrayFormat: 'none'`, a single value with an array type is not an array and stays a string too.
+-	if (['boolean', 'number', 'string[]', 'number[]'].includes(type)) {
++	if (['boolean', 'number', 'json', 'string[]', 'number[]'].includes(type)) {
+ 		return value;
+ 	}
+ 
+diff --git a/readme.md b/readme.md
+index 3e2992b..59ae40a 100644
+--- a/readme.md
++++ b/readme.md
+@@ -338,6 +338,22 @@ queryString.parse('?scores=10,20,30', {
+ //=> {scores: [20, 40, 60]}
+ ```
+ 
++- `'json'`: Parse the value as JSON. A value that is not valid JSON, and a valueless key, stays as it is:
++
++```js
++import queryString from 'query-string';
++
++queryString.parse('filter=%7B%22a%22%3A1%7D&bad=%7Boops', {
++	types: {
++		filter: 'json',
++		bad: 'json',
++	},
++});
++//=> {bad: '{oops', filter: {a: 1}}
++```
++
++Note: With an array format like `comma`, the value is split before it is parsed, so JSON that contains the separator is better percent-encoded or used with `arrayFormat: 'none'`. The items of a repeated key are parsed individually.
++
+ NOTE: With `arrayFormat: 'none'`, array types (`string[]`, `number[]`) do not turn a single value into an array. The value stays a string, and `parseNumbers` and `parseBooleans` do not apply to it. A repeated key is still an array, and its items are parsed with the element type.
+ 
+ ```js
+diff --git a/test/parse.js b/test/parse.js
+index 00a1abf..d915a01 100644
+--- a/test/parse.js
++++ b/test/parse.js
+@@ -1492,3 +1492,17 @@ test('rejects an invalid `arrayFormatSeparator`', () => {
+ 
+ 	assert.deepEqual(structuredClone(queryString.parse('foo=a·b', {arrayFormat: 'separator', arrayFormatSeparator: '·'})), {foo: ['a', 'b']});
+ });
++
++test('the `json` type decodes a JSON value and leaves anything else as a string', () => {
++	const types = {filter: 'json'};
++	assert.deepEqual(structuredClone(queryString.parse('filter=%7B%22a%22%3A%5B1%2C2%5D%7D', {types})), {filter: {a: [1, 2]}});
++	assert.deepEqual(structuredClone(queryString.parse('filter=%5B1%2C2%5D', {types})), {filter: [1, 2]});
++	assert.deepEqual(structuredClone(queryString.parse('filter=true', {types})), {filter: true});
++	assert.deepEqual(structuredClone(queryString.parse('filter=null', {types})), {filter: null});
++	assert.deepEqual(structuredClone(queryString.parse('filter=12', {types})), {filter: 12});
++	assert.deepEqual(structuredClone(queryString.parse('filter=%7Boops', {types})), {filter: '{oops'});
++	assert.deepEqual(structuredClone(queryString.parse('filter=abc', {types})), {filter: 'abc'});
++	assert.deepEqual(structuredClone(queryString.parse('filter=', {types})), {filter: ''});
++	assert.deepEqual(structuredClone(queryString.parse('filter', {types})), {filter: null});
++	assert.deepEqual(structuredClone(queryString.parse('filter=%7B%22a%22%3A1%7D&filter=oops', {types})), {filter: [{a: 1}, 'oops']});
++});

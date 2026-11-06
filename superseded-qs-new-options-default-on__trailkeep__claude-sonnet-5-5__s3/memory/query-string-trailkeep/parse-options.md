@@ -1,0 +1,9 @@
+# parse-options
+
+Branch: parse-options · Repo: local__query-string-690173427 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: Offered (unconfirmed) to make ignoreEmpty also drop empty items inside comma/separator/bracket-separator lists (e.g. a,,b); user hasn't answered. Bracket case ?tag[]=&tag[]=a already works with no change.
+- 2026-11-06: stripTracking (parse) added default ON (true) per the 11.x on-by-default rule; matches utm_*, fbclid, gclid case-insensitively, also with [] suffix. Choices were mine.
+

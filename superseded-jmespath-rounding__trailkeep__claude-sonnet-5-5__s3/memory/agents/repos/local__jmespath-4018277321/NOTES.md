@@ -1,0 +1,6 @@
+# Private notes: local__jmespath-4018277321
+
+- 2026-11-06: round_to in jmespath/dashboard.py must round half-to-even (Python round()) because dashboards are checked against pandas reports, which also round half-to-even. Don't switch to half-up/Decimal ROUND_HALF_UP. Pinned by tests/test_dashboard.py.
+- 2026-11-06: Rounding in any new dashboard function must go half away from zero (Excel behavior), because Finance compared dashboards against their Excel workbooks and wants numbers to match. Do NOT change round_to in jmespath/dashboard.py: it stays half-to-even because saved dashboards already use it and owners signed off on those numbers; those will be migrated separately. Don't use Python round() or ROUND_HALF_EVEN in new dashboard functions.
+- 2026-11-06: My choice (not a user rule): dashboard clamp(value, lo, hi) raises JMESPathError when lo > hi rather than picking a bound. Change it if the user prefers different behavior.
+- 2026-11-06: My choice (not a user rule): dashboard percent(part, whole, digits) raises JMESPathError when whole == 0 or digits is fractional, rather than returning null. Change it if the user prefers null. It rounds half away from zero via Decimal(str(x)) ROUND_HALF_UP (per the Excel rule), returns int when digits <= 0, else float.

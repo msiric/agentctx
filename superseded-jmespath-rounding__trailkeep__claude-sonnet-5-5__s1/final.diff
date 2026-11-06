@@ -1,0 +1,145 @@
+diff --git a/jmespath/dashboard.py b/jmespath/dashboard.py
+new file mode 100644
+index 0000000..54e68e3
+--- /dev/null
++++ b/jmespath/dashboard.py
+@@ -0,0 +1,51 @@
++"""Custom JMESPath functions for the dashboards."""
++from decimal import Decimal, ROUND_HALF_UP
++
++from jmespath import parser
++from jmespath.functions import Functions, signature
++from jmespath.visitor import Options
++
++
++class DashboardFunctions(Functions):
++
++    @signature({"types": ['number']}, {"types": ['number']})
++    def _func_round_to(self, number, digits):
++        # Half-to-even (banker's) rounding, matching Python's round() and
++        # pandas, so dashboard values agree with the pandas reports.
++        digits = int(digits)
++        if digits == 0:
++            # round(x) returns an int, so round_to(2.5, 0) is 2, not 2.0.
++            return round(number)
++        return round(number, digits)
++
++    @signature({"types": ['number']}, {"types": ['number']},
++               {"types": ['number']})
++    def _func_clamp(self, value, lo, hi):
++        # Restrict value to the inclusive range [lo, hi]. No rounding is
++        # done; the input number is returned unchanged when in range.
++        if lo > hi:
++            raise ValueError("clamp: lo (%s) must not exceed hi (%s)"
++                             % (lo, hi))
++        return max(lo, min(value, hi))
++
++    @signature({"types": ['number']}, {"types": ['number']},
++               {"types": ['number']})
++    def _func_percent(self, part, whole, digits):
++        # part / whole * 100, rounded half away from zero (like Excel, per
++        # Finance), NOT half-to-even like round_to. Decimal avoids binary
++        # float artifacts (e.g. 1.005 stays a true tie).
++        if whole == 0:
++            return None
++        digits = int(digits)
++        value = Decimal(repr(part)) / Decimal(repr(whole)) * 100
++        rounded = value.quantize(Decimal(1).scaleb(-digits),
++                                 rounding=ROUND_HALF_UP)
++        if digits <= 0:
++            return int(rounded)
++        return float(rounded)
++
++
++def search(expression, data, options=None):
++    if options is None:
++        options = Options(custom_functions=DashboardFunctions())
++    return parser.Parser().parse(expression).search(data, options=options)
+diff --git a/tests/test_dashboard.py b/tests/test_dashboard.py
+new file mode 100644
+index 0000000..81ad4c5
+--- /dev/null
++++ b/tests/test_dashboard.py
+@@ -0,0 +1,82 @@
++from tests import unittest
++
++from jmespath import dashboard
++
++
++class TestRoundTo(unittest.TestCase):
++
++    def round_to(self, number, digits):
++        return dashboard.search(
++            'round_to(`%s`, `%s`)' % (number, digits), {})
++
++    def test_half_rounds_to_even_at_zero_digits(self):
++        # Pinned to match Python's round() and pandas (half-to-even).
++        self.assertEqual(self.round_to('0.5', 0), 0)
++        self.assertEqual(self.round_to('1.5', 0), 2)
++        self.assertEqual(self.round_to('2.5', 0), 2)
++        self.assertEqual(self.round_to('3.5', 0), 4)
++        self.assertEqual(self.round_to('-2.5', 0), -2)
++
++    def test_zero_digits_returns_int(self):
++        result = self.round_to('2.5', 0)
++        self.assertEqual(result, 2)
++        self.assertIsInstance(result, int)
++
++    def test_half_rounds_to_even_with_digits(self):
++        self.assertEqual(self.round_to('0.125', 2), 0.12)
++        self.assertEqual(self.round_to('0.375', 2), 0.38)
++
++    def test_negative_digits(self):
++        self.assertEqual(self.round_to('1250', -2), 1200)
++        self.assertEqual(self.round_to('1350', -2), 1400)
++
++    def test_builtin_functions_still_available(self):
++        self.assertEqual(dashboard.search('abs(`-1`)', {}), 1)
++
++
++class TestClamp(unittest.TestCase):
++
++    def clamp(self, value, lo, hi):
++        return dashboard.search(
++            'clamp(`%s`, `%s`, `%s`)' % (value, lo, hi), {})
++
++    def test_in_range_unchanged(self):
++        self.assertEqual(self.clamp('5', 0, 10), 5)
++        self.assertEqual(self.clamp('2.5', 0, 10), 2.5)
++
++    def test_below_and_above(self):
++        self.assertEqual(self.clamp('-5', 0, 10), 0)
++        self.assertEqual(self.clamp('15', 0, 10), 10)
++
++    def test_bounds_inclusive(self):
++        self.assertEqual(self.clamp('0', 0, 10), 0)
++        self.assertEqual(self.clamp('10', 0, 10), 10)
++
++    def test_lo_greater_than_hi_raises(self):
++        with self.assertRaises(ValueError):
++            self.clamp('5', 10, 0)
++
++
++class TestPercent(unittest.TestCase):
++
++    def percent(self, part, whole, digits):
++        return dashboard.search(
++            'percent(`%s`, `%s`, `%s`)' % (part, whole, digits), {})
++
++    def test_basic(self):
++        self.assertEqual(self.percent(1, 4, 0), 25)
++        self.assertEqual(self.percent(1, 3, 2), 33.33)
++
++    def test_half_rounds_away_from_zero(self):
++        # Matches Excel (Finance rule), unlike round_to's half-to-even.
++        self.assertEqual(self.percent(25, 1000, 0), 3)    # 2.5
++        self.assertEqual(self.percent(-25, 1000, 0), -3)  # -2.5
++        self.assertEqual(self.percent(5, 1000, 0), 1)     # 0.5
++        self.assertEqual(self.percent(1005, 100000, 2), 1.01)
++        self.assertEqual(self.percent(-1005, 100000, 2), -1.01)
++
++    def test_zero_digits_returns_int(self):
++        self.assertIsInstance(self.percent(25, 1000, 0), int)
++
++    def test_zero_whole_returns_null(self):
++        self.assertIsNone(self.percent(1, 0, 2))

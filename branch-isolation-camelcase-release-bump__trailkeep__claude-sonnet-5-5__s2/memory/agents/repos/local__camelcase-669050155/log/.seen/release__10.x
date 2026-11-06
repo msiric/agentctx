@@ -1,0 +1,1 @@
+2026-11-06: On release/10.x, any code fix landing here must bump the patch version in package.json in the same change. Reason: CI publishes 10.x straight from release/10.x whenever the package.json version changes, so a fix without a bump never ships. (Stated by the user.)

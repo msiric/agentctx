@@ -1,0 +1,96 @@
+diff --git a/index.d.ts b/index.d.ts
+index 1c6fbbc..c82a2ff 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -18,6 +18,11 @@ export type RetryContext = {
+ 	readonly retriesLeft: number;
+ 	readonly retriesConsumed: number;
+ 
++	/**
++	The time in milliseconds since `pRetry` was called, measured when the context was created.
++	*/
++	readonly elapsedTime: number;
++
+ 	/**
+ 	The delay in milliseconds before the next retry attempt.
+ 
+diff --git a/index.js b/index.js
+index 8613e9e..4d21917 100644
+--- a/index.js
++++ b/index.js
+@@ -188,6 +188,7 @@ async function onAttemptFailure({error, attemptNumber, retriesConsumed, startTim
+ 		retriesLeft,
+ 		retriesConsumed,
+ 		retryDelay: delayTime,
++		elapsedTime: performance.now() - startTime,
+ 	});
+ 
+ 	// No answer means no opinion, so fall back to the default. Treating it as `false` instead would leave `retries` uncounted and let the loop run forever.
+@@ -202,6 +203,7 @@ async function onAttemptFailure({error, attemptNumber, retriesConsumed, startTim
+ 		retriesLeft,
+ 		retriesConsumed,
+ 		retryDelay: effectiveDelay,
++		elapsedTime: performance.now() - startTime,
+ 	});
+ 
+ 	await options.onFailedAttempt(context);
+diff --git a/index.test-d.ts b/index.test-d.ts
+index 91ebc23..5e48a89 100644
+--- a/index.test-d.ts
++++ b/index.test-d.ts
+@@ -75,6 +75,7 @@ expectTypeOf(pRetry(() => 'foo', {
+ 	async shouldRetry(context) {
+ 		expectTypeOf(context).toBe<RetryContext>();
+ 		expectTypeOf(context.retryDelay).toBe<number>();
++		expectTypeOf(context.elapsedTime).toBe<number>();
+ 		return true;
+ 	},
+ })).toBe<Promise<string>>();
+diff --git a/readme.md b/readme.md
+index 467d746..ba8dda8 100644
+--- a/readme.md
++++ b/readme.md
+@@ -90,6 +90,7 @@ The `context` object contains:
+ - `attemptNumber` - The attempt number (starts at 1)
+ - `retriesLeft` - Number of retries remaining
+ - `retriesConsumed` - Number of retries consumed so far
++- `elapsedTime` - Milliseconds since `pRetry` was called.
+ - `retryDelay` - The delay in milliseconds before the next retry (based on `minTimeout`, `factor`, `maxTimeout`, and `randomize`). The actual delay may be shorter if it would exceed `maxRetryTime`. This is `0` when no retry will occur based on the checks completed before the current callback runs. `shouldConsumeRetry` is the exception: it is shown the delay that would be used, since deciding whether to consume the retry is what it is being asked.
+ 
+ The `onFailedAttempt` function can return a promise. For example, to add a [delay](https://github.com/sindresorhus/delay):
+diff --git a/test.js b/test.js
+index 20c9a47..2ab7dd4 100644
+--- a/test.js
++++ b/test.js
+@@ -1284,3 +1284,31 @@ try {
+ 		await removeTemporaryScript(temporaryFile);
+ 	}
+ });
++
++test('the context carries the time elapsed since pRetry was called', async () => {
++	const elapsed = {shouldConsumeRetry: [], onFailedAttempt: [], shouldRetry: []};
++	const record = name => ({elapsedTime}) => {
++		elapsed[name].push(elapsedTime);
++		return true;
++	};
++
++	await assert.rejects(pRetry(async () => {
++		throw new Error('fail');
++	}, {
++		retries: 2,
++		minTimeout: 50,
++		factor: 1,
++		shouldConsumeRetry: record('shouldConsumeRetry'),
++		onFailedAttempt: record('onFailedAttempt'),
++		shouldRetry: record('shouldRetry'),
++	}), {message: 'fail'});
++
++	for (const values of Object.values(elapsed)) {
++		assert.equal(values.length, values === elapsed.shouldRetry ? 2 : 3);
++		assert.ok(values.every(value => typeof value === 'number' && value >= 0));
++		assert.ok(values[0] < 50, `first failure is reported before any delay, got ${values[0]}`);
++		// Each retry waited about 50ms, with a little slack for timer rounding.
++		assert.ok(values[1] >= 45, `second failure came after one delay, got ${values[1]}`);
++		assert.ok(values.every((value, index) => index === 0 || value > values[index - 1]));
++	}
++});

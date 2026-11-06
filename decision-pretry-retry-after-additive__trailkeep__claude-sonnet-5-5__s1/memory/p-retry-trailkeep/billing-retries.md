@@ -1,0 +1,9 @@
+# billing-retries
+
+Branch: billing-retries · Repo: local__p-retry-4029166937 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: Retry-After feature (user's decision): delay = Retry-After (error.retryAfter, seconds -> ms) PLUS the normal backoff delay. Not a replacement, not max(). Reason: billing's Retry-After is the moment their rate window reopens; ~40 pods return at exactly that moment and get 429'd again, so the backoff on top spreads them out. Implement via a hook that adjusts the computed delay in onAttemptFailure so retryDelay stays accurate for shouldConsumeRetry/onFailedAttempt/shouldRetry. User deferred implementation: they want to look at the 429 dashboards first, so do not start until they say so. Open (mine, not decided): whether maxTimeout caps the sum, behavior on the non-consuming path (shouldConsumeRetry false currently gives 0 delay), and giving up early when delay exceeds maxRetryTime.
+- 2026-11-06: Retry-After implemented 2026-11-06 (user said go): delay = backoff + retryAfter*1000, in onAttemptFailure so retryDelay is accurate. MY choices, not user-decided: maxTimeout caps the backoff only, not retryAfter; non-consuming path (shouldConsumeRetry false) waits retryAfter only (no backoff); invalid retryAfter (non-number/NaN/<=0/Infinity) ignored; sum capped at 2^31-1; still clamped to remaining maxRetryTime, NOT giving up early when delay exceeds it (left open). tsd already reports 12 errors on a clean stash, unrelated.
+

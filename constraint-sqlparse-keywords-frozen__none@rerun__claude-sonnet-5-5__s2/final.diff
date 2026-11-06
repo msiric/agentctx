@@ -1,0 +1,64 @@
+diff --git a/sqlparse/cli.py b/sqlparse/cli.py
+index 491b352..097f726 100644
+--- a/sqlparse/cli.py
++++ b/sqlparse/cli.py
+@@ -55,6 +55,14 @@ def create_parser():
+         default=False,
+         help='format files in-place (overwrite existing files)')
+ 
++    parser.add_argument(
++        '--check',
++        dest='check',
++        action='store_true',
++        default=False,
++        help='do not write anything; print the name of each file whose '
++             'formatting would change and exit with 1 if any would')
++
+     parser.add_argument(
+         '--version',
+         action='version',
+@@ -205,6 +213,13 @@ def _process_file(filename, args):
+     except SQLParseError as e:
+         return _error(f'Failed to format {filename}: {e}')
+ 
++    # In check mode nothing is written; report files that would change.
++    if args.check:
++        if s != data:
++            print(filename)
++            return 1
++        return 0
++
+     # Write output
+     if args.inplace:
+         outfile = filename
+@@ -228,10 +243,12 @@ def main(args=None):
+     args = parser.parse_args(args)
+ 
+     # Validate argument combinations
++    if args.check and (args.inplace or args.outfile):
++        return _error('Cannot use --check with --in-place or -o/--outfile')
+     if len(args.filename) > 1:
+         if args.outfile:
+             return _error('Cannot use -o/--outfile with multiple files')
+-        if not args.inplace:
++        if not args.inplace and not args.check:
+             return _error('Multiple files require --in-place flag')
+ 
+     # Process all files
+diff --git a/sqlparse/keywords.py b/sqlparse/keywords.py
+index dd6e5d1..cc739f9 100644
+--- a/sqlparse/keywords.py
++++ b/sqlparse/keywords.py
+@@ -1081,8 +1081,12 @@ KEYWORDS_MSACCESS = {
+ 
+ KEYWORDS_SNOWFLAKE = {
+     'ACCOUNT': tokens.Keyword,
++    'ASOF': tokens.Keyword,
++    'EXCLUDE': tokens.Keyword,
+     'GSCLUSTER': tokens.Keyword,
+     'ISSUE': tokens.Keyword,
++    'MATCH_CONDITION': tokens.Keyword,
++    'MATCH_RECOGNIZE': tokens.Keyword,
+     'ORGANIZATION': tokens.Keyword,
+     'PIVOT': tokens.Keyword,
+     'QUALIFY': tokens.Keyword,

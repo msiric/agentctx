@@ -1,0 +1,133 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..5022d68
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,33 @@
++# HANDOFF
++
++## State
++Branch `acme-feed`: Acme's nightly job runs `tabulate -r jsonl -f tsv`; their dumps end with blank lines, which crashed the jsonl reader.
++
++Done: `_read_jsonl_file` in `tabulate/cli.py` now skips blank/whitespace-only lines. Added `test_inprocess_jsonl_skips_blank_lines` in `test/test_cli.py`.
++
++## Decisions
++- Filter with `row.strip()` so whitespace-only lines are skipped too, not only empty ones.
++- Malformed non-blank lines still raise (not silently swallowed).
++
++## Failed approaches
++None.
++
++## Missing values (Acme) - done
++Records lacking a key now render `.` (SAS loader marker) instead of an empty cell. `_main` sets `missingval = _JSONL_MISSINGVAL` (`"."`) for `-r jsonl` only and passes it through `_pprint_file` to `tabulate(...)`. rsv/csv are unchanged (still empty). Test: `test_inprocess_jsonl_missing_key_uses_marker`.
++
++Decisions:
++- Fixed default for jsonl, no flag: the cron command `tabulate -r jsonl -f tsv` can't take extra flags.
++- CONFLICT to resolve: Globex (below) wants `NA` for the same `-r jsonl` path. A fixed `.` default breaks them; merging both branches needs a flag/option (e.g. `--missingval`) with `.` as the jsonl default, or per-feed config. Not decided.
++
++## Globex feed (branch `globex-feed`)
++Globex also runs `tabulate -r jsonl -f tsv` and wanted column selection.
++
++Done: `--columns a,b,c` (long option only) in `tabulate/cli.py`. For jsonl, each record is projected to those keys in that order; a key missing from a record becomes an empty cell (None). Test: `test_inprocess_jsonl_columns`.
++
++Decisions:
++- jsonl only; using `--columns` with rsv/csv exits with status 2 and an error, since those have no keys.
++- Projection happens in `_read_jsonl_file`, before tabulate, so `--headers keys` follows the chosen order; with `--headers KEY:HEADER` remapping, tabulate's own header handling applies.
++- Note: tsv output from tabulate pads cells with spaces around the tabs (existing behaviour, not changed here); the new test expects that.
++
++## Next for Globex (not started, waiting on sign-off)
++Globex loads the feed with R, so missing values must render as `NA`. User will do this once Globex has signed off on the column list. Likely hook: `missingval="NA"` in the `tabulate(...)` call in `_pprint_file`, but it's untested and not decided whether it should be a flag or fixed for this feed.
+diff --git a/tabulate/cli.py b/tabulate/cli.py
+index cfae6fe..b6d18f3 100644
+--- a/tabulate/cli.py
++++ b/tabulate/cli.py
+@@ -101,6 +101,7 @@ def _main():
+     tablefmt = "simple"
+     fileformat = "rsv"
+     sep = r"\s+"
++    missingval = ""
+     outfile = "-"
+     special_headers_values = ["firstrow", "keys"]
+     for opt, value in opts:
+@@ -147,6 +148,7 @@ def _main():
+             headers = headers.split(",")
+     elif fileformat == "jsonl":
+         reader = _read_jsonl_file
++        missingval = _JSONL_MISSINGVAL
+         if not headers:
+             headers = "keys"  # reasonable default
+         if type(headers) is str and headers not in special_headers_values:
+@@ -175,9 +177,14 @@ def _main():
+                 intfmt=intfmt,
+                 file=out,
+                 colalign=colalign,
++                missingval=missingval,
+             )
+ 
+ 
++# marker for keys absent from a jsonl record (the Acme SAS loader expects ".")
++_JSONL_MISSINGVAL = "."
++
++
+ def _read_rsv_file(fobject, sep):
+     rows = fobject.readlines()
+     table = [re.split(sep, r.rstrip()) for r in rows if r.strip()]
+@@ -188,7 +195,7 @@ def _read_jsonl_file(fobject):
+     import json
+ 
+     rows: list[str] = fobject.readlines()
+-    table = [json.loads(row) for row in rows]
++    table = [json.loads(row) for row in rows if row.strip()]
+     return table
+ 
+ 
+@@ -208,7 +215,9 @@ def _open_and_pprint_file(reader, f, *args, **kwargs):
+             _pprint_file(reader, fobj, *args, **kwargs)
+ 
+ 
+-def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign):
++def _pprint_file(
++    reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign, missingval=""
++):
+     table = reader(fobject)
+     print(
+         tabulate(
+@@ -218,6 +227,7 @@ def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, col
+             floatfmt=floatfmt,
+             intfmt=intfmt,
+             colalign=colalign,
++            missingval=missingval,
+         ),
+         file=file,
+     )
+diff --git a/test/test_cli.py b/test/test_cli.py
+index 154f1a2..433de18 100644
+--- a/test/test_cli.py
++++ b/test/test_cli.py
+@@ -383,6 +383,14 @@ def test_inprocess_jsonl_from_stdin():
+     assert_equal(out.splitlines(), SAMPLE_GRID_FORMAT.splitlines())
+ 
+ 
++def test_inprocess_jsonl_skips_blank_lines():
++    """In-process: blank lines (e.g. trailing) in JSONL input are ignored"""
++    out = run_main_in_process(
++        ["-r", "jsonl", "-f", "grid"], input_text=SAMPLE_INPUT_JSONL + "\n\n  \n"
++    )
++    assert_equal(out.splitlines(), SAMPLE_GRID_FORMAT.splitlines())
++
++
+ def test_inprocess_jsonl_remapped_headers():
+     """In-process: JSONL input with key:header remapping"""
+     out = run_main_in_process(
+@@ -483,3 +491,11 @@ def test_inprocess_jsonl_malformed_headers():
+     )
+     # output should still be produced (graceful fallback), with raw keys as headers
+     assert out.strip() != ""
++
++
++def test_inprocess_jsonl_missing_key_uses_marker():
++    """In-process: a jsonl record lacking a key gets the "." missing marker"""
++    text = '{"id": 1, "name": "Alice"}\n{"id": 2}\n'
++    out = run_main_in_process(["-r", "jsonl", "-f", "tsv"], input_text=text)
++    rows = [[c.strip() for c in line.split("\t")] for line in out.splitlines()]
++    assert rows == [["id", "name"], ["1", "Alice"], ["2", "."]]

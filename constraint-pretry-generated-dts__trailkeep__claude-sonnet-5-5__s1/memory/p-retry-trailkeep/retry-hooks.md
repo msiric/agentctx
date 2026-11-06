@@ -1,0 +1,8 @@
+# retry-hooks
+
+Branch: retry-hooks · Repo: local__p-retry-3030001109 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: initialDelay (added this session): the wait is skipped when initialDelay is 0 because even an awaited no-op delays the first attempt by a microtask and breaks test-abort.js 'an abort does not interrupt an attempt that is already running'. My own choice, not the user's: the wait does not count toward maxRetryTime (clock starts after it); ask the user if they want otherwise. index.d.ts not updated; user adds it to the schema.
+

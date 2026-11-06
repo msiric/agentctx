@@ -1,0 +1,165 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..f0de90f
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,20 @@
++# HANDOFF
++
++Task: Acme nightly feed pipes dumps through `tabulate -r jsonl -f tsv`; dumps end with blank lines which crashed the jsonl reader.
++
++Done: `_read_jsonl_file` in tabulate/cli.py skips whitespace-only lines (`if row.strip()`). Test added in test/test_cli.py.
++Decision: skip only blank lines; malformed non-blank lines still raise, so bad data isn't silently hidden.
++Failed approaches: none.
++
++Done (uncommitted): missing jsonl keys now give `.` (Acme's SAS loader marker). The cron command has no flags, so for `-r jsonl` the default missingval is `.`; new `-m/--missingval STR` overrides it (non-jsonl default stays empty). Tests added in test/test_cli.py.
++Decision: default lives in cli.py keyed on jsonl, not in the library's `_DEFAULT_MISSINGVAL`, so the library API is unchanged.
++Failed approaches: none.
++
++## Globex feed (branch globex-feed)
++Done: `--columns a,b,c` (jsonl only) keeps only those keys in that order; missing keys give empty cells. Implemented in `_read_jsonl_file(columns=...)`; test added.
++Decision: non-jsonl input with --columns exits 3 with an error rather than silently ignoring it.
++Failed approaches: none.
++
++Next (not started, waiting on Globex sign-off of the column list): Globex loads the feed with R, so missing values must come out as `NA` (cf. Acme's `.` above; `-m NA` from the Acme change now provides the override, though the jsonl default is `.`, so Globex must pass it or the default needs a per-feed rework). Owner: user will do it.
++
++Note: HANDOFF.md had stash-pop conflict markers (Globex notes from stash@{0}); resolved by keeping both sections. The stash is still in `git stash list`.
+diff --git a/tabulate/cli.py b/tabulate/cli.py
+index cfae6fe..b856151 100644
+--- a/tabulate/cli.py
++++ b/tabulate/cli.py
+@@ -9,6 +9,7 @@ try:
+     from . import (
+         _DEFAULT_FLOATFMT,
+         _DEFAULT_INTFMT,
++        _DEFAULT_MISSINGVAL,
+         _is_file,
+         tabulate,
+         tabulate_formats,
+@@ -22,6 +23,7 @@ except ImportError:  # pragma: no cover
+     from tabulate import (
+         _DEFAULT_FLOATFMT,
+         _DEFAULT_INTFMT,
++        _DEFAULT_MISSINGVAL,
+         _is_file,
+         tabulate,
+         tabulate_formats,
+@@ -58,6 +60,8 @@ def _main():
+                               (the same as --headers firstrow)
+     -F FPFMT, --float FPFMT   floating point number format (default: g)
+     -I INTFMT, --int INTFMT   integer point number format (default: "")
++    -m STR, --missingval STR  text for missing values (default: "." for jsonl,
++                              empty otherwise)
+     -f FMT, --format FMT      set output table format (default: simple)
+ 
+     Supported output formats: asciidoc, colon_grid, double_grid, double_outline,
+@@ -76,7 +80,7 @@ def _main():
+     try:
+         opts, args = getopt.getopt(
+             sys.argv[1:],
+-            "h1H:r:o:s:F:I:f:",
++            "h1H:r:o:s:F:I:f:m:",
+             [
+                 "help",
+                 "header",  # deprecated in CLI > 0.10
+@@ -88,6 +92,7 @@ def _main():
+                 "int=",
+                 "colalign=",
+                 "format=",
++                "missingval=",
+             ],
+         )
+     except getopt.GetoptError as e:
+@@ -101,6 +106,7 @@ def _main():
+     tablefmt = "simple"
+     fileformat = "rsv"
+     sep = r"\s+"
++    missingval = None
+     outfile = "-"
+     special_headers_values = ["firstrow", "keys"]
+     for opt, value in opts:
+@@ -129,6 +135,8 @@ def _main():
+                 print(usage)
+                 sys.exit(3)
+             tablefmt = value
++        elif opt in ["-m", "--missingval"]:
++            missingval = value
+         elif opt in ["-s", "--sep"]:
+             sep = value
+         elif opt in ["-h", "--help"]:
+@@ -160,6 +168,10 @@ def _main():
+     else:
+         print(f"{fileformat} is not a supported file format")
+         sys.exit(3)
++    if missingval is None:
++        # jsonl records may lack keys; mark those cells with "." (Acme's SAS
++        # loader marker) unless overridden with --missingval
++        missingval = "." if fileformat == "jsonl" else _DEFAULT_MISSINGVAL
+     # format all input files
+     files = [sys.stdin] if not args else args
+     with sys.stdout if outfile == "-" else open(outfile, "w") as out:
+@@ -175,6 +187,7 @@ def _main():
+                 intfmt=intfmt,
+                 file=out,
+                 colalign=colalign,
++                missingval=missingval,
+             )
+ 
+ 
+@@ -188,7 +201,7 @@ def _read_jsonl_file(fobject):
+     import json
+ 
+     rows: list[str] = fobject.readlines()
+-    table = [json.loads(row) for row in rows]
++    table = [json.loads(row) for row in rows if row.strip()]
+     return table
+ 
+ 
+@@ -208,7 +221,7 @@ def _open_and_pprint_file(reader, f, *args, **kwargs):
+             _pprint_file(reader, fobj, *args, **kwargs)
+ 
+ 
+-def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign):
++def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign, missingval):
+     table = reader(fobject)
+     print(
+         tabulate(
+@@ -218,6 +231,7 @@ def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, col
+             floatfmt=floatfmt,
+             intfmt=intfmt,
+             colalign=colalign,
++            missingval=missingval,
+         ),
+         file=file,
+     )
+diff --git a/test/test_cli.py b/test/test_cli.py
+index 154f1a2..ba66e27 100644
+--- a/test/test_cli.py
++++ b/test/test_cli.py
+@@ -483,3 +483,26 @@ def test_inprocess_jsonl_malformed_headers():
+     )
+     # output should still be produced (graceful fallback), with raw keys as headers
+     assert out.strip() != ""
++
++
++def test_inprocess_jsonl_skips_blank_lines():
++    """In-process: blank lines in JSONL input are ignored"""
++    out = run_main_in_process(
++        ["-r", "jsonl", "-f", "tsv"], input_text='{"a": 1}\n\n{"a": 2}\n\n\n'
++    )
++    assert [l.strip() for l in out.splitlines()] == ["a", "1", "2"]
++
++
++def test_inprocess_jsonl_missing_key_default_marker():
++    """jsonl records lacking a key get "." with no extra flags"""
++    out = run_main_in_process(
++        ["-r", "jsonl", "-f", "tsv"], input_text='{"a": 1, "b": 2}\n{"a": 3}\n\n'
++    )
++    assert out.splitlines()[-1].split("\t")[-1].strip() == "."
++
++
++def test_inprocess_jsonl_missingval_override():
++    out = run_main_in_process(
++        ["-r", "jsonl", "-f", "tsv", "-m", "NA"], input_text='{"a": 1, "b": 2}\n{"a": 3}\n'
++    )
++    assert out.splitlines()[-1].split("\t")[-1].strip() == "NA"

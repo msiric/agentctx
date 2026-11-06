@@ -1,0 +1,147 @@
+diff --git a/sqlparse/cli.py b/sqlparse/cli.py
+index 491b352..96869ac 100644
+--- a/sqlparse/cli.py
++++ b/sqlparse/cli.py
+@@ -55,6 +55,14 @@ def create_parser():
+         default=False,
+         help='format files in-place (overwrite existing files)')
+ 
++    parser.add_argument(
++        '--check',
++        dest='check',
++        action='store_true',
++        default=False,
++        help='do not write anything; print the names of files whose '
++             'formatting would change and exit with 1 if there are any')
++
+     parser.add_argument(
+         '--version',
+         action='version',
+@@ -205,6 +213,14 @@ def _process_file(filename, args):
+     except SQLParseError as e:
+         return _error(f'Failed to format {filename}: {e}')
+ 
++    # In check mode nothing is written; report files that would change.
++    if args.check:
++        if s != data:
++            sys.stdout.write(f'{filename}\n')
++            sys.stdout.flush()
++            return 1
++        return 0
++
+     # Write output
+     if args.inplace:
+         outfile = filename
+@@ -228,10 +244,12 @@ def main(args=None):
+     args = parser.parse_args(args)
+ 
+     # Validate argument combinations
++    if args.check and (args.inplace or args.outfile):
++        return _error('Cannot use --check with --in-place or -o/--outfile')
+     if len(args.filename) > 1:
+         if args.outfile:
+             return _error('Cannot use -o/--outfile with multiple files')
+-        if not args.inplace:
++        if not args.inplace and not args.check:
+             return _error('Multiple files require --in-place flag')
+ 
+     # Process all files
+diff --git a/sqlparse/extra_keywords.py b/sqlparse/extra_keywords.py
+new file mode 100644
+index 0000000..dcf7ad0
+--- /dev/null
++++ b/sqlparse/extra_keywords.py
+@@ -0,0 +1,15 @@
++"""Locally maintained keywords.
++
++Kept out of ``keywords.py`` so that file stays identical to upstream.
++These are registered on the default lexer in
++``Lexer.default_initialization``.
++"""
++
++from sqlparse import tokens
++
++KEYWORDS_LOCAL = {
++    'EXCLUDE': tokens.Keyword,
++    'MATCH_RECOGNIZE': tokens.Keyword,
++    'ASOF': tokens.Keyword,
++    'MATCH_CONDITION': tokens.Keyword,
++}
+diff --git a/sqlparse/lexer.py b/sqlparse/lexer.py
+index 5d4a5f9..69231f1 100644
+--- a/sqlparse/lexer.py
++++ b/sqlparse/lexer.py
+@@ -15,7 +15,7 @@ import re
+ from io import TextIOBase
+ from threading import Lock
+ 
+-from sqlparse import keywords, tokens
++from sqlparse import extra_keywords, keywords, tokens
+ from sqlparse.utils import consume
+ 
+ 
+@@ -68,6 +68,7 @@ class Lexer:
+         self.add_keywords(keywords.KEYWORDS_SNOWFLAKE)
+         self.add_keywords(keywords.KEYWORDS_BIGQUERY)
+         self.add_keywords(keywords.KEYWORDS)
++        self.add_keywords(extra_keywords.KEYWORDS_LOCAL)
+ 
+     def clear(self):
+         """Clear all syntax configurations.
+diff --git a/tests/test_cli.py b/tests/test_cli.py
+index f33b534..1ed756a 100644
+--- a/tests/test_cli.py
++++ b/tests/test_cli.py
+@@ -235,3 +235,28 @@ def test_cli_outfile_keeps_file_on_format_error(tmpdir, capsys):
+     assert out_file.read() == "select 1"
+     _, err = capsys.readouterr()
+     assert err.startswith("[ERROR] Failed to format")
++
++
++def test_check_reports_files_that_would_change(tmpdir, capsys):
++    changed = tmpdir.join('changed.sql')
++    changed.write('select 1\n')
++    clean = tmpdir.join('clean.sql')
++    clean.write('SELECT 1\n')
++    rc = sqlparse.cli.main(['-k', 'upper', '--check',
++                            str(changed), str(clean)])
++    assert rc == 1
++    assert capsys.readouterr().out == f'{changed}\n'
++    assert changed.read() == 'select 1\n'  # nothing written
++
++
++def test_check_clean_exits_zero(tmpdir, capsys):
++    clean = tmpdir.join('clean.sql')
++    clean.write('SELECT 1\n')
++    assert sqlparse.cli.main(['-k', 'upper', '--check', str(clean)]) == 0
++    assert capsys.readouterr().out == ''
++
++
++def test_check_incompatible_with_inplace(tmpdir):
++    f = tmpdir.join('a.sql')
++    f.write('select 1\n')
++    assert sqlparse.cli.main(['--check', '--in-place', str(f)]) == 1
+diff --git a/tests/test_keywords.py b/tests/test_keywords.py
+index b26e9b4..b9bd6df 100644
+--- a/tests/test_keywords.py
++++ b/tests/test_keywords.py
+@@ -1,4 +1,5 @@
+ import pytest
++import sqlparse
+ 
+ from sqlparse import tokens
+ from sqlparse.lexer import Lexer
+@@ -11,3 +12,13 @@ class TestSQLREGEX:
+     def test_float_numbers(self, number):
+         ttype = next(tt for action, tt in Lexer.get_default_instance()._SQL_REGEX if action(number))
+         assert tokens.Number.Float == ttype
++
++
++@pytest.mark.parametrize('word', [
++    'exclude', 'match_recognize', 'asof', 'match_condition'])
++def test_local_snowflake_keywords(word):
++    from sqlparse import tokens as T
++    tok = sqlparse.parse(word)[0].tokens[0]
++    assert tok.ttype is T.Keyword
++    assert sqlparse.format(f'select * {word} (a)', keyword_case='upper') \
++        == f'SELECT * {word.upper()} (a)'

@@ -1,0 +1,122 @@
+diff --git a/jmespath/dashboard.py b/jmespath/dashboard.py
+new file mode 100644
+index 0000000..65934f4
+--- /dev/null
++++ b/jmespath/dashboard.py
+@@ -0,0 +1,48 @@
++"""JMESPath functions for the dashboards."""
++from decimal import Decimal, ROUND_HALF_UP
++
++from jmespath import parser
++from jmespath.functions import Functions, signature
++from jmespath.visitor import Options
++
++
++class DashboardFunctions(Functions):
++
++    @signature({'types': ['number']}, {'types': ['number']})
++    def _func_round_to(self, number, digits):
++        # ``digits`` must be a whole number (JSON has one number type, so
++        # 2.0 is accepted); anything else yields null.
++        if digits != int(digits):
++            return None
++        return round(number, int(digits))
++
++    @signature({'types': ['number']}, {'types': ['number']},
++               {'types': ['number']})
++    def _func_clamp(self, value, lo, hi):
++        # An inverted range (lo > hi) has no sensible answer; yield null.
++        if lo > hi:
++            return None
++        return max(lo, min(value, hi))
++
++    @signature({'types': ['number']}, {'types': ['number']},
++               {'types': ['number']})
++    def _func_percent(self, part, whole, digits):
++        # Null for a zero ``whole`` or non-integer ``digits``.
++        if whole == 0 or digits != int(digits):
++            return None
++        # Finance compares against Excel, which rounds half away from zero,
++        # so don't use round() here (round_to keeps half-to-even on purpose).
++        # Work in Decimal from the printed values to avoid float artifacts.
++        ratio = Decimal(str(part)) / Decimal(str(whole)) * 100
++        exp = Decimal(1).scaleb(-int(digits))
++        return float(ratio.quantize(exp, rounding=ROUND_HALF_UP))
++
++
++def search(expression, data, options=None):
++    """Like ``jmespath.search`` but with the dashboard functions enabled."""
++    if options is None:
++        options = Options(custom_functions=DashboardFunctions())
++    elif options.custom_functions is None:
++        options = Options(dict_cls=options.dict_cls,
++                          custom_functions=DashboardFunctions())
++    return parser.Parser().parse(expression).search(data, options=options)
+diff --git a/tests/test_dashboard.py b/tests/test_dashboard.py
+new file mode 100644
+index 0000000..1240a53
+--- /dev/null
++++ b/tests/test_dashboard.py
+@@ -0,0 +1,62 @@
++from tests import unittest
++
++from jmespath import dashboard, exceptions
++
++
++class TestDashboardFunctions(unittest.TestCase):
++    def test_round_to(self):
++        self.assertEqual(dashboard.search('round_to(a, `2`)', {'a': 3.14159}), 3.14)
++
++    def test_round_to_negative_digits(self):
++        self.assertEqual(dashboard.search('round_to(a, `-1`)', {'a': 14}), 10)
++
++    def test_non_integer_digits_is_null(self):
++        self.assertIsNone(dashboard.search('round_to(a, `1.5`)', {'a': 1}))
++
++    def test_type_error(self):
++        with self.assertRaises(exceptions.JMESPathTypeError):
++            dashboard.search('round_to(a, `1`)', {'a': 'x'})
++
++    def test_builtins_still_available(self):
++        self.assertEqual(dashboard.search('max(a)', {'a': [1, 2]}), 2)
++
++    def test_round_to_is_half_to_even(self):
++        # Dashboards are checked against pandas reports, which round
++        # half-to-even like Python's round().
++        for value, expected in [(0.5, 0), (1.5, 2), (2.5, 2), (3.5, 4), (-2.5, -2)]:
++            self.assertEqual(
++                dashboard.search('round_to(a, `0`)', {'a': value}), expected)
++        self.assertEqual(dashboard.search('round_to(a, `1`)', {'a': 0.25}), 0.2)
++
++    def test_clamp(self):
++        for value, expected in [(5, 5), (-3, 0), (15, 10), (0, 0), (10, 10)]:
++            self.assertEqual(
++                dashboard.search('clamp(a, `0`, `10`)', {'a': value}), expected)
++
++    def test_clamp_inverted_range_is_null(self):
++        self.assertIsNone(dashboard.search('clamp(a, `10`, `0`)', {'a': 5}))
++
++    def test_percent(self):
++        self.assertEqual(
++            dashboard.search('percent(a, b, `1`)', {'a': 1, 'b': 3}), 33.3)
++
++    def test_percent_rounds_half_away_from_zero(self):
++        # Finance compares against Excel: half away from zero, unlike round_to.
++        for part, whole, expected in [(1, 8, 13.0), (-1, 8, -13.0),
++                                      (5, 8, 63.0), (1, 16, 6.0),
++                                      (0.5, 100, 1.0), (-0.5, 100, -1.0)]:
++            self.assertEqual(
++                dashboard.search('percent(a, b, `0`)', {'a': part, 'b': whole}),
++                expected)
++        self.assertEqual(
++            dashboard.search('percent(a, b, `1`)', {'a': 1, 'b': 16}), 6.3)
++
++    def test_percent_zero_whole_is_null(self):
++        self.assertIsNone(dashboard.search('percent(a, `0`, `1`)', {'a': 1}))
++
++    def test_percent_non_integer_digits_is_null(self):
++        self.assertIsNone(dashboard.search('percent(a, `2`, `1.5`)', {'a': 1}))
++
++    def test_clamp_type_error(self):
++        with self.assertRaises(exceptions.JMESPathTypeError):
++            dashboard.search('clamp(a, `0`, `10`)', {'a': 'x'})

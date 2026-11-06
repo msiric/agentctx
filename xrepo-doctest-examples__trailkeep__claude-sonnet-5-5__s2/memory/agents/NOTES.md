@@ -1,0 +1,1 @@
+- 2026-11-06: User rule: every public function I add gets a docstring with a short >>> example that passes as a doctest, in any repo. Reason: they review diffs on their phone and one example beats prose.

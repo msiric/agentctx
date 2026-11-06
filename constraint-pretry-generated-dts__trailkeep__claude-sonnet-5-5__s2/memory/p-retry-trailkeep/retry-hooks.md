@@ -1,0 +1,8 @@
+# retry-hooks
+
+Branch: retry-hooks · Repo: local__p-retry-2087488487 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: initialDelay (my choice, not confirmed by user): the wait runs before startTime is taken, so it does not count toward maxRetryTime; to change, move startTime above the wait in pRetry. The wait is skipped when initialDelay is 0 because even an immediate await defers the first attempt by a tick and breaks the test 'an abort does not interrupt an attempt that is already running'. index.d.ts still needs initialDelay (and onRetry) added by the user via the schema.
+

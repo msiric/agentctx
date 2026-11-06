@@ -1,0 +1,142 @@
+diff --git a/base.d.ts b/base.d.ts
+index 17ddbbd..6b2405d 100644
+--- a/base.d.ts
++++ b/base.d.ts
+@@ -334,11 +334,27 @@ export type ParseOptions = {
+ 	//=> {flagged: true, isAdmin: 'true', isOkay: false}
+ 	```
+ 
++	@example
++	Parse `filter` as JSON. A value that is not valid JSON stays a string:
++	```
++	import queryString from 'query-string';
++
++	queryString.parse('?filter=%7B%22status%22%3A%22open%22%7D&other=%7B', {
++		types: {
++			filter: 'json',
++			other: 'json',
++		}
++	});
++	//=> {filter: {status: 'open'}, other: '{'}
++	```
++
++	Note: The `'json'` type uses `JSON.parse()`, so an integer beyond `Number.MAX_SAFE_INTEGER`, like a 64-bit ID, is silently rounded. Write such IDs as strings.
++
+ 	Note: The `'boolean'` type also converts `'0'` and `'1'` to booleans, and treats valueless keys (e.g. `?flag`) as `true`.
+ 	*/
+ 	readonly types?: Record<
+ 		string,
+-	'boolean' | 'number' | 'string' | 'string[]' | 'number[]' | ((value: string) => unknown)
++	'boolean' | 'number' | 'json' | 'string' | 'string[]' | 'number[]' | ((value: string) => unknown)
+ 	>;
+ };
+ 
+@@ -349,8 +365,9 @@ export type ParsedQuery<T = string> = Record<string, T | null | Array<T | null>>
+ type ParsedTypeValue<Type> =
+ 	Type extends 'number' | 'number[]' ? number
+ 		: Type extends 'boolean' ? boolean
+-			: Type extends (value: string) => infer Result ? Result
+-				: never;
++			: Type extends 'json' ? unknown
++				: Type extends (value: string) => infer Result ? Result
++					: never;
+ 
+ /**
+ The type of a parsed value, from the `parseNumbers`, `parseBooleans`, and `types` options. A value that does not match its type stays a string.
+diff --git a/base.js b/base.js
+index bb2a093..1c4eef4 100644
+--- a/base.js
++++ b/base.js
+@@ -464,6 +464,15 @@ function parseValue(value, options, type) {
+ 		return type(value);
+ 	}
+ 
++	if (type === 'json' && typeof value === 'string') {
++		// A value that is not valid JSON stays a string.
++		try {
++			return JSON.parse(value);
++		} catch {
++			return value;
++		}
++	}
++
+ 	if (type === 'boolean' && value === null) {
+ 		return true;
+ 	}
+@@ -486,7 +495,7 @@ function parseValue(value, options, type) {
+ 	}
+ 
+ 	// An explicit type takes precedence over `parseNumbers` and `parseBooleans`. A value that does not match its type stays a string. With `arrayFormat: 'none'`, a single value with an array type is not an array and stays a string too.
+-	if (['boolean', 'number', 'string[]', 'number[]'].includes(type)) {
++	if (['boolean', 'number', 'json', 'string[]', 'number[]'].includes(type)) {
+ 		return value;
+ 	}
+ 
+diff --git a/index.test-d.ts b/index.test-d.ts
+index 23d4968..4b860dd 100644
+--- a/index.test-d.ts
++++ b/index.test-d.ts
+@@ -280,3 +280,4 @@ expectTypeOf(parseWrapper({parseNumbers: true})).toBe<queryString.ParsedQuery>()
+ expectTypeOf(parseUrlWrapper({parseNumbers: true})).toBe<queryString.ParsedUrl>();
+ expectTypeOf(pickWrapper({parseNumbers: true})).toBe<string>();
+ expectTypeOf(excludeWrapper({parseNumbers: true})).toBe<string>();
++expectTypeOf(queryString.parse('?a=1', {types: {a: 'json'}})).toBe<queryString.ParsedQuery<unknown>>();
+diff --git a/readme.md b/readme.md
+index 3e2992b..a98f2a5 100644
+--- a/readme.md
++++ b/readme.md
+@@ -287,6 +287,22 @@ queryString.parse('?age=20&id=01234&zipcode=90210', {
+ //=> {age: 20, id: '01234', zipcode: '90210'}
+ ```
+ 
++- `'json'`: Parse `filter` as JSON. A value that is not valid JSON stays a string:
++
++```js
++import queryString from 'query-string';
++
++queryString.parse('?filter=%7B%22status%22%3A%22open%22%7D&other=%7B', {
++	types: {
++		filter: 'json',
++		other: 'json',
++	}
++});
++//=> {filter: {status: 'open'}, other: '{'}
++```
++
++Note: The `'json'` type uses `JSON.parse()`, so an integer beyond `Number.MAX_SAFE_INTEGER`, like a 64-bit ID, is silently rounded. Write such IDs as strings. A valueless key (e.g. `?filter`) stays `null`, and with an array format, each item is parsed separately.
++
+ - `'string[]'`:  Parse `items` as an array of strings (overriding the `parseNumbers` option):
+ 
+ ```js
+diff --git a/test/parse.js b/test/parse.js
+index 00a1abf..e775325 100644
+--- a/test/parse.js
++++ b/test/parse.js
+@@ -1492,3 +1492,27 @@ test('rejects an invalid `arrayFormatSeparator`', () => {
+ 
+ 	assert.deepEqual(structuredClone(queryString.parse('foo=a·b', {arrayFormat: 'separator', arrayFormatSeparator: '·'})), {foo: ['a', 'b']});
+ });
++
++test('`types` with `json` parses the value as JSON', () => {
++	const parse = query => structuredClone(queryString.parse(query, {types: {filter: 'json'}}));
++	assert.deepEqual(parse('filter=%7B%22status%22%3A%22open%22%2C%22ids%22%3A%5B1%2C2%5D%7D'), {filter: {status: 'open', ids: [1, 2]}});
++	assert.deepEqual(parse('filter=%5B1%2C%22a%22%5D'), {filter: [1, 'a']});
++	assert.deepEqual(parse('filter=12'), {filter: 12});
++	assert.deepEqual(parse('filter=true'), {filter: true});
++	assert.deepEqual(parse('filter=null'), {filter: null});
++	assert.deepEqual(parse('filter=%22a%22'), {filter: 'a'});
++});
++
++test('`types` with `json` leaves a value that is not valid JSON as a string', () => {
++	const parse = query => structuredClone(queryString.parse(query, {types: {filter: 'json'}}));
++	assert.deepEqual(parse('filter=%7B'), {filter: '{'});
++	assert.deepEqual(parse('filter=abc'), {filter: 'abc'});
++	assert.deepEqual(parse('filter='), {filter: ''});
++	assert.deepEqual(parse('filter'), {filter: null});
++});
++
++test('`types` with `json` takes precedence over `parseNumbers` and `parseBooleans`, and applies to each repeated item', () => {
++	assert.deepEqual(structuredClone(queryString.parse('filter=1&other=1', {parseNumbers: true, types: {filter: 'json'}})), {filter: 1, other: 1});
++	assert.deepEqual(structuredClone(queryString.parse('filter=%7B%22a%22%3A1%7D&filter=x', {types: {filter: 'json'}})), {filter: [{a: 1}, 'x']});
++	assert.deepEqual(structuredClone(queryString.parse('filter=%5B1%5D,%5B2%5D', {arrayFormat: 'comma', types: {filter: 'json'}})), {filter: [[1], [2]]});
++});

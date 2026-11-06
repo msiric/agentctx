@@ -1,0 +1,199 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..5d8213f
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,22 @@
++# Handoff
++
++## State
++`ignoreEmpty` option for `parse()` is implemented (base.js), with types/docs (base.d.ts, readme.md), a runtime test (test/parse.js) and a type test (index.test-d.ts). Not committed.
++
++## Decisions
++- Dropped in the parse loop when the raw value is `''`; `?flag` has a `null` value, so it is kept.
++- Only a wholly empty value drops the parameter; empty items inside array values (e.g. `a=1,,2`) are untouched. Bracket-format `a[]=` is dropped as it is a parameter with an empty value.
++- Test results are compared via `structuredClone` because parse returns null-prototype objects.
++
++- Policy (from the user, ahead of the 11.0.0 release): new parse/stringify behaviours are on by default, with an option to switch them off, because opt-in flags never get turned on. Exception: `ignoreEmpty` stays default `false`, as the reports service relies on it being off. Don't flip it.
++- `ignoreEmpty` already covers bracket array items (`?tag[]=&tag[]=a` gives `{tag: ['a']}`); verified, full suite passes (322).
++
++## Notes
++- `npx tsd` reports 5 errors that also occur without this change (pre-existing).
++- Don't use `npx ava`; the tests use `node:test`.
++
++## stripTracking
++- `parse()` option `stripTracking` (default `true`, per the policy above) drops `utm_*`, `fbclid`, `gclid`. Key matched after decoding, case-insensitive; valueless keys (`?utm_source`) also dropped. Implemented in the parse loop in base.js, with types, readme, runtime and type tests.
++- Default-on is a behaviour change for anyone relying on those params; flagged to the user.
++- Lint: `utm_source` as an object key trips camelcase/quote-props, so the test uses `Object.fromEntries`.
++- `npx tsd`: still the same 5 pre-existing errors.
+diff --git a/base.d.ts b/base.d.ts
+index 17ddbbd..315c546 100644
+--- a/base.d.ts
++++ b/base.d.ts
+@@ -193,6 +193,42 @@ export type ParseOptions = {
+ 	*/
+ 	readonly parseBooleans?: boolean;
+ 
++	/**
++	Drop parameters with an empty value. A key without `=` (like `?flag`) is not empty and is kept.
++
++	@default false
++
++	@example
++	```
++	import queryString from 'query-string';
++
++	queryString.parse('?q=&page=2', {ignoreEmpty: true});
++	//=> {page: '2'}
++
++	queryString.parse('?flag&q=', {ignoreEmpty: true});
++	//=> {flag: null}
++	```
++	*/
++	readonly ignoreEmpty?: boolean;
++
++	/**
++	Drop tracking parameters: `utm_*`, `fbclid`, and `gclid`. The key is matched case-insensitively.
++
++	@default true
++
++	@example
++	```
++	import queryString from 'query-string';
++
++	queryString.parse('?q=a&utm_source=x&fbclid=1&gclid=2');
++	//=> {q: 'a'}
++
++	queryString.parse('?q=a&utm_source=x', {stripTracking: false});
++	//=> {q: 'a', utm_source: 'x'}
++	```
++	*/
++	readonly stripTracking?: boolean;
++
+ 	/**
+ 	Parse the fragment identifier from the URL and add it to result object.
+ 
+diff --git a/base.js b/base.js
+index bb2a093..4c3951b 100644
+--- a/base.js
++++ b/base.js
+@@ -511,6 +511,8 @@ export function parse(query, options) {
+ 		arrayFormatSeparator: ',',
+ 		parseNumbers: false,
+ 		parseBooleans: false,
++		ignoreEmpty: false,
++		stripTracking: true,
+ 		...definedOptions(options),
+ 		types: {__proto__: null, ...options?.types},
+ 	};
+@@ -561,8 +563,22 @@ export function parse(query, options) {
+ 		// https://w3.org/TR/2012/WD-url-20120524/#collect-url-parameters
+ 		value = value === undefined ? null : (['comma', 'separator', 'bracket-separator'].includes(options.arrayFormat) ? value : decode(value, options));
+ 
++		// A parameter with an empty value is dropped. A key without `=` has a `null` value, so it is kept.
++		if (value === '' && options.ignoreEmpty) {
++			parameterStart = index + 1;
++			continue;
++		}
++
+ 		// The key is decoded before the array format looks for its marker, so a percent-encoded marker like `foo%5B%5D` is also an array item. This is intentional. `URLSearchParams` and HTML forms percent-encode `[`, `]`, and `:` in keys, and servers like Rack and PHP decode the key before they look for the marker. The trade-off is that a key that itself ends in a marker is not distinguishable from the marker after decoding, so `stringify({'foo[]': 'x'}, {arrayFormat: 'bracket'})` does not round-trip.
+-		formatter(decode(key, options), value, returnValue);
++		key = decode(key, options);
++
++		// Tracking parameters (`utm_*`, `fbclid`, `gclid`) are dropped. The key is matched after decoding and ignoring case.
++		if (options.stripTracking && /^(?:utm_.*|fbclid|gclid)$/iv.test(key)) {
++			parameterStart = index + 1;
++			continue;
++		}
++
++		formatter(key, value, returnValue);
+ 
+ 		parameterStart = index + 1;
+ 	}
+diff --git a/index.test-d.ts b/index.test-d.ts
+index 23d4968..be1d6a7 100644
+--- a/index.test-d.ts
++++ b/index.test-d.ts
+@@ -111,6 +111,12 @@ expectTypeOf(
+ expectTypeOf(
+ 	queryString.parse('?foo=1', {parseNumbers: true}),
+ ).toBe<queryString.ParsedQuery<string | number>>();
++expectTypeOf(
++	queryString.parse('?q=&page=2', {ignoreEmpty: true}),
++).toBe<queryString.ParsedQuery>();
++expectTypeOf(
++	queryString.parse('?q=a&utm_source=x', {stripTracking: false}),
++).toBe<queryString.ParsedQuery>();
+ expectTypeOf(
+ 	queryString.parse('?foo=true', {parseBooleans: true}),
+ ).toBe<queryString.ParsedQuery<string | boolean>>();
+diff --git a/readme.md b/readme.md
+index 3e2992b..dd6fda4 100644
+--- a/readme.md
++++ b/readme.md
+@@ -230,6 +230,40 @@ queryString.parse('foo=true', {parseBooleans: true});
+ 
+ Parse the value as a boolean type instead of string type if it's a boolean.
+ 
++##### ignoreEmpty
++
++Type: `boolean`\
++Default: `false`
++
++```js
++import queryString from 'query-string';
++
++queryString.parse('?q=&page=2', {ignoreEmpty: true});
++//=> {page: '2'}
++
++queryString.parse('?flag&q=', {ignoreEmpty: true});
++//=> {flag: null}
++```
++
++Drop parameters with an empty value. A key without `=` (like `?flag`) is not empty, so it is kept.
++
++##### stripTracking
++
++Type: `boolean`\
++Default: `true`
++
++```js
++import queryString from 'query-string';
++
++queryString.parse('?q=a&utm_source=x&fbclid=1&gclid=2');
++//=> {q: 'a'}
++
++queryString.parse('?q=a&utm_source=x', {stripTracking: false});
++//=> {q: 'a', utm_source: 'x'}
++```
++
++Drop tracking parameters: `utm_*`, `fbclid`, and `gclid`. The key is matched case-insensitively. Set it to `false` to keep them.
++
+ ##### types
+ 
+ Type: `object`\
+diff --git a/test/parse.js b/test/parse.js
+index 00a1abf..37031dd 100644
+--- a/test/parse.js
++++ b/test/parse.js
+@@ -1492,3 +1492,20 @@ test('rejects an invalid `arrayFormatSeparator`', () => {
+ 
+ 	assert.deepEqual(structuredClone(queryString.parse('foo=a·b', {arrayFormat: 'separator', arrayFormatSeparator: '·'})), {foo: ['a', 'b']});
+ });
++
++test('parse - `ignoreEmpty` drops parameters with an empty value', () => {
++	assert.deepEqual(structuredClone(queryString.parse('?q=&page=2', {ignoreEmpty: true})), {page: '2'});
++	assert.deepEqual(structuredClone(queryString.parse('?flag&q=', {ignoreEmpty: true})), {flag: null});
++	assert.deepEqual(structuredClone(queryString.parse('q=', {ignoreEmpty: true})), {});
++	assert.deepEqual(structuredClone(queryString.parse('a[]=&a[]=1&b=', {ignoreEmpty: true, arrayFormat: 'bracket'})), {a: ['1']});
++	assert.deepEqual(structuredClone(queryString.parse('q=&page=2')), {page: '2', q: ''});
++});
++
++test('parse - `stripTracking` drops tracking parameters by default', () => {
++	assert.deepEqual(structuredClone(queryString.parse('?q=a&utm_source=x&utm_medium=y&fbclid=1&gclid=2')), {q: 'a'});
++	assert.deepEqual(structuredClone(queryString.parse('?UTM_Source=x&FBCLID=1&q=a')), {q: 'a'});
++	assert.deepEqual(structuredClone(queryString.parse('?utm_source&q=a')), {q: 'a'});
++	assert.deepEqual(structuredClone(queryString.parse('?utm%5Fsource=x&q=a')), {q: 'a'});
++	assert.deepEqual(structuredClone(queryString.parse('?utmx=1&fbclid2=1&xgclid=1')), {utmx: '1', fbclid2: '1', xgclid: '1'});
++	assert.deepEqual(structuredClone(queryString.parse('?q=a&utm_source=x&fbclid=1', {stripTracking: false})), Object.fromEntries([['fbclid', '1'], ['q', 'a'], ['utm_source', 'x']]));
++});

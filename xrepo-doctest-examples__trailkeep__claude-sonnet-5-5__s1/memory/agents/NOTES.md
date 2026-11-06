@@ -1,0 +1,1 @@
+- 2026-11-06: Every public function I add must have a short >>> example in its docstring that actually passes as a doctest (verify by running it). Applies in any repo; user reviews diffs on a phone.

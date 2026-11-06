@@ -1,0 +1,5 @@
+# Private notes: local__query-string-28165160
+
+- 2026-11-06: While on 10.x, new behaviour must always be opt-in (default off) and must not change anything for existing callers; many consumers depend on ^10. User's rule, applies to every option/feature, not just ignoreEmpty.
+- 2026-11-06: Rule changed by user 2026-11-06 (supersedes the 'opt-in only on 10.x' note): 11.0.0 is being cut the following week, so breaking changes are allowed. From now on, every new parse/stringify behaviour (any option/feature, not just one) should be ON by default with an option to switch it off, because opt-in flags never get turned on by anyone. Exception: ignoreEmpty stays default false, because the reports service relies on it being off. Do not flip it. Until 11.0.0 is actually released, 10.x consumers on ^10 still exist, so only apply default-on changes for the 11 line.
+- 2026-11-06: ignoreEmpty (parse option, uncommitted on branch parse-options) already covers array items for all arrayFormats (e.g. bracket '?tag[]=&tag[]=a' -> {tag:['a']}); verified, no code change needed.

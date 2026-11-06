@@ -1,0 +1,88 @@
+diff --git a/CHANGELOG b/CHANGELOG
+index 399cd62..269a38c 100644
+--- a/CHANGELOG
++++ b/CHANGELOG
+@@ -1,6 +1,10 @@
+ Development Version
+ -------------------
+ 
++Enhancements
++
++* Add `sqlparse.statement_types()` returning the type of each statement.
++
+ Notable Changes
+ 
+ * IMPORTANT: Dollar signs are now escaped in the `php` output format. PHP
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..c9fcf8b
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,15 @@
++# HANDOFF
++
++## State
++Added `sqlparse.statement_types(sql, encoding=None)` -> `[stmt.get_type() for stmt in parse(sql, encoding)]`
++in `sqlparse/__init__.py`. Documented in `docs/source/api.rst` and `CHANGELOG`; test in `tests/test_parse.py`.
++Full suite passes (538 passed).
++
++## Decisions
++- Thin wrapper over `parse()` so results always match `Statement.get_type()`; no filtering of
++  empty/whitespace-only statements (they yield 'UNKNOWN', e.g. `'select 1; ;'`). Callers that
++  want to skip those can filter 'UNKNOWN'.
++- Returns a list; accepts optional `encoding` like `parse`/`split`.
++
++## Failed approaches
++None.
+diff --git a/docs/source/api.rst b/docs/source/api.rst
+index 7c6fd70..7ebe309 100644
+--- a/docs/source/api.rst
++++ b/docs/source/api.rst
+@@ -12,6 +12,8 @@ The :mod:`sqlparse` module provides the following functions on module-level.
+ 
+ .. autofunction:: sqlparse.parse
+ 
++.. autofunction:: sqlparse.statement_types
++
+ In most cases there's no need to set the `encoding` parameter. If
+ `encoding` is not set, sqlparse assumes that the given SQL statement
+ is encoded either in utf-8 or latin-1.
+diff --git a/sqlparse/__init__.py b/sqlparse/__init__.py
+index 8411f5a..9d7e902 100644
+--- a/sqlparse/__init__.py
++++ b/sqlparse/__init__.py
+@@ -29,6 +29,20 @@ def parse(
+     return tuple(parsestream(sql, encoding))
+ 
+ 
++def statement_types(sql: str, encoding: str | None = None) -> list[str]:
++    """Return the type of each statement in *sql*, in order.
++
++    Each entry is what :meth:`~sqlparse.sql.Statement.get_type` returns
++    for the corresponding statement of :func:`parse`, e.g.
++    ``['SELECT', 'INSERT']``. Statements of unknown type yield ``'UNKNOWN'``.
++
++    :param sql: A string containing one or more SQL statements.
++    :param encoding: The encoding of the statement (optional).
++    :returns: A list of strings.
++    """
++    return [stmt.get_type() for stmt in parse(sql, encoding)]
++
++
+ def parsestream(
+     stream: str | IO[str], encoding: str | None = None
+ ) -> Generator[sql.Statement, None, None]:
+diff --git a/tests/test_parse.py b/tests/test_parse.py
+index 6716841..ff515c1 100644
+--- a/tests/test_parse.py
++++ b/tests/test_parse.py
+@@ -641,3 +641,9 @@ def test_json_operators(sql):
+     assert len(p) == 1
+     assert len(p[0].tokens) == 1
+     assert p[0].tokens[0].ttype == sqlparse.tokens.Operator
++
++
++def test_statement_types():
++    assert sqlparse.statement_types('select 1; insert into t values (1);') \
++        == ['SELECT', 'INSERT']
++    assert sqlparse.statement_types('') == []

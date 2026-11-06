@@ -1,0 +1,80 @@
+diff --git a/tabulate/cli.py b/tabulate/cli.py
+index cfae6fe..8dab53a 100644
+--- a/tabulate/cli.py
++++ b/tabulate/cli.py
+@@ -101,6 +101,7 @@ def _main():
+     tablefmt = "simple"
+     fileformat = "rsv"
+     sep = r"\s+"
++    missingval = ""
+     outfile = "-"
+     special_headers_values = ["firstrow", "keys"]
+     for opt, value in opts:
+@@ -147,6 +148,7 @@ def _main():
+             headers = headers.split(",")
+     elif fileformat == "jsonl":
+         reader = _read_jsonl_file
++        missingval = "."  # missing keys must render as '.' (Acme SAS loader)
+         if not headers:
+             headers = "keys"  # reasonable default
+         if type(headers) is str and headers not in special_headers_values:
+@@ -175,6 +177,7 @@ def _main():
+                 intfmt=intfmt,
+                 file=out,
+                 colalign=colalign,
++                missingval=missingval,
+             )
+ 
+ 
+@@ -188,7 +191,7 @@ def _read_jsonl_file(fobject):
+     import json
+ 
+     rows: list[str] = fobject.readlines()
+-    table = [json.loads(row) for row in rows]
++    table = [json.loads(row) for row in rows if row.strip()]
+     return table
+ 
+ 
+@@ -208,7 +211,7 @@ def _open_and_pprint_file(reader, f, *args, **kwargs):
+             _pprint_file(reader, fobj, *args, **kwargs)
+ 
+ 
+-def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign):
++def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign, missingval=""):
+     table = reader(fobject)
+     print(
+         tabulate(
+@@ -218,6 +221,7 @@ def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, col
+             floatfmt=floatfmt,
+             intfmt=intfmt,
+             colalign=colalign,
++            missingval=missingval,
+         ),
+         file=file,
+     )
+diff --git a/test/test_cli.py b/test/test_cli.py
+index 154f1a2..5a707b0 100644
+--- a/test/test_cli.py
++++ b/test/test_cli.py
+@@ -483,3 +483,21 @@ def test_inprocess_jsonl_malformed_headers():
+     )
+     # output should still be produced (graceful fallback), with raw keys as headers
+     assert out.strip() != ""
++
++
++def test_inprocess_jsonl_skips_blank_lines():
++    """In-process: JSONL input with trailing blank lines is accepted"""
++    out = run_main_in_process(
++        ["-r", "jsonl", "-f", "tsv"], input_text='{"a": 1}\n{"a": 2}\n\n\n'
++    )
++    assert out == run_main_in_process(
++        ["-r", "jsonl", "-f", "tsv"], input_text='{"a": 1}\n{"a": 2}\n'
++    )
++
++
++def test_inprocess_jsonl_missing_key_uses_dot():
++    """Records lacking a key get '.' (no extra flags needed)."""
++    inp = '{"a": 1, "b": 2}\n{"a": 3}\n\n'
++    out = run_main_in_process(["-r", "jsonl", "-f", "tsv"], input_text=inp)
++    rows = [[c.strip() for c in l.split("\t")] for l in out.splitlines()]
++    assert rows == [["a", "b"], ["1", "2"], ["3", "."]]

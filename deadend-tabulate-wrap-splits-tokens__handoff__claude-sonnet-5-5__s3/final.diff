@@ -1,0 +1,129 @@
+diff --git a/HANDOFF.md b/HANDOFF.md
+new file mode 100644
+index 0000000..c8645bb
+--- /dev/null
++++ b/HANDOFF.md
+@@ -0,0 +1,16 @@
++# HANDOFF
++
++## State
++`--wrap WIDTH` for the CLI is implemented (after the release freeze) in `tabulate/cli.py`, with tests in `test/test_cli.py` (`test_inprocess_wrap_option`, `test_inprocess_wrap_invalid_width`). test_cli.py passes (31 tests). Not committed.
++
++## Decisions
++- `--wrap` parses as an int >= 1; otherwise error to stderr, exit 2.
++- The value is threaded `_main` -> `_open_and_pprint_file` -> `_pprint_file` and passed as `maxcolwidths=wrap`.
++- Also passes `break_long_words=False, break_on_hyphens=False`: otherwise textwrap splits ticket IDs (`SUPPORT-2024-118233`) and URLs mid-token, and support copy-pastes those into the tracker. Trade-off: a token longer than WIDTH overflows the column (the tests assert this).
++- These kwargs are only passed when `--wrap` is given, so default output is unchanged.
++
++## Notes
++- The default rsv reader splits on every whitespace run, so free-text notes need `-s '\t'`, `-r csv` or `-r jsonl` to stay in one cell.
++- Example check: `printf 'id\tnote\n1\tescalated as SUPPORT-2024-118233 to the vendor\n' | python -m tabulate -s '\t' -1 --wrap 14` keeps the ID on one line.
++- ruff isn't installed in this environment; the code was formatted by hand.
++- Possible follow-ups: README/CHANGELOG mention of `--wrap`.
+diff --git a/tabulate/cli.py b/tabulate/cli.py
+index cfae6fe..0e99761 100644
+--- a/tabulate/cli.py
++++ b/tabulate/cli.py
+@@ -59,6 +59,8 @@ def _main():
+     -F FPFMT, --float FPFMT   floating point number format (default: g)
+     -I INTFMT, --int INTFMT   integer point number format (default: "")
+     -f FMT, --format FMT      set output table format (default: simple)
++    --wrap WIDTH              wrap long cell text at WIDTH characters; words
++                              longer than WIDTH (IDs, URLs) are not split
+ 
+     Supported output formats: asciidoc, colon_grid, double_grid, double_outline,
+     fancy_grid, fancy_outline, github, grid, heavy_grid, heavy_outline, html, jira,
+@@ -88,6 +90,7 @@ def _main():
+                 "int=",
+                 "colalign=",
+                 "format=",
++                "wrap=",
+             ],
+         )
+     except getopt.GetoptError as e:
+@@ -102,6 +105,7 @@ def _main():
+     fileformat = "rsv"
+     sep = r"\s+"
+     outfile = "-"
++    wrap = None
+     special_headers_values = ["firstrow", "keys"]
+     for opt, value in opts:
+         if opt in ["-1", "--header"]:
+@@ -131,6 +135,14 @@ def _main():
+             tablefmt = value
+         elif opt in ["-s", "--sep"]:
+             sep = value
++        elif opt == "--wrap":
++            try:
++                wrap = int(value)
++                if wrap < 1:
++                    raise ValueError(value)
++            except ValueError:
++                print(f"--wrap needs an integer >= 1, got: {value}", file=sys.stderr)
++                sys.exit(2)
+         elif opt in ["-h", "--help"]:
+             print(usage)
+             sys.exit(0)
+@@ -175,6 +187,7 @@ def _main():
+                 intfmt=intfmt,
+                 file=out,
+                 colalign=colalign,
++                wrap=wrap,
+             )
+ 
+ 
+@@ -208,8 +221,16 @@ def _open_and_pprint_file(reader, f, *args, **kwargs):
+             _pprint_file(reader, fobj, *args, **kwargs)
+ 
+ 
+-def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign):
++def _pprint_file(
++    reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign, wrap=None
++):
+     table = reader(fobject)
++    # keep IDs and URLs intact: a too-long token overflows the column instead
++    wrap_kwargs = (
++        {"maxcolwidths": wrap, "break_long_words": False, "break_on_hyphens": False}
++        if wrap
++        else {}
++    )
+     print(
+         tabulate(
+             table,
+@@ -218,6 +239,7 @@ def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, col
+             floatfmt=floatfmt,
+             intfmt=intfmt,
+             colalign=colalign,
++            **wrap_kwargs,
+         ),
+         file=file,
+     )
+diff --git a/test/test_cli.py b/test/test_cli.py
+index 154f1a2..fb4ba41 100644
+--- a/test/test_cli.py
++++ b/test/test_cli.py
+@@ -483,3 +483,24 @@ def test_inprocess_jsonl_malformed_headers():
+     )
+     # output should still be produced (graceful fallback), with raw keys as headers
+     assert out.strip() != ""
++
++
++def test_inprocess_wrap_option():
++    """In-process: --wrap keeps IDs and URLs intact in wrapped cells"""
++    ticket = "SUPPORT-2024-118233"
++    url = "https://example.com/very/long/path"
++    text = f"id\tnote\n1\tescalated as {ticket} to the vendor\n2\tsee {url} now\n"
++    out = run_main_in_process(["-s", r"\t", "-1", "--wrap", "14"], input_text=text)
++    assert ticket in out
++    assert url in out
++    assert max(len(line) for line in out.splitlines()) > 14  # overflow, not split
++
++
++def test_inprocess_wrap_invalid_width():
++    """In-process: --wrap needs an integer >= 1"""
++    import pytest
++
++    for bad in ["0", "-3", "abc"]:
++        with pytest.raises(SystemExit) as exc_info:
++            run_main_in_process(["--wrap", bad], input_text="a b\n1 2\n")
++        assert exc_info.value.code == 2

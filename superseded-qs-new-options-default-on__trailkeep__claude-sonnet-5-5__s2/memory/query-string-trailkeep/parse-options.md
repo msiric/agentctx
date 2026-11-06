@@ -1,0 +1,8 @@
+# parse-options
+
+Branch: parse-options · Repo: local__query-string-28165160 · Kind: branch · Created: 2026-11-06
+
+## Decisions and dead ends
+
+- 2026-11-06: stripTracking (parse option, uncommitted on parse-options) is default TRUE per the 11.0.0 default-on rule (my application of it). It is a breaking change: must ship only in 11, not 10.x. pick/exclude/stringifyUrl force stripTracking:false internally so they never rewrite URLs.
+

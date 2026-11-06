@@ -1,0 +1,144 @@
+diff --git a/CHANGELOG b/CHANGELOG
+index ce390bb..a70f62b 100644
+--- a/CHANGELOG
++++ b/CHANGELOG
+@@ -3,6 +3,7 @@
+   Add support of the `Decimal` data type.
+   Improve output of `github` and `asciidoc` formats.
+   Add support of CSV and JSONL input data in CLI utility.
++  Add `--wrap WIDTH` option to CLI utility.
+   Always add `text-align: left` in HTML output.
+   Various bug fixes.
+ - 0.10.0: Add support for Python 3.11, 3.12, 3.13, 3.14.
+diff --git a/README.md b/README.md
+index 0283a0c..dbf4d6f 100644
+--- a/README.md
++++ b/README.md
+@@ -1157,6 +1157,8 @@ FORMAT:
+ -F FPFMT, --float FPFMT   floating point number format (default: g)
+ -I INTFMT, --int INTFMT   integer point number format (default: "")
+ -f FMT, --format FMT      set output table format (default: simple)
++-w WIDTH, --wrap WIDTH    wrap long cell text at WIDTH characters
++                          (WIDTH must be a positive integer; default: no wrapping)
+ 
+ Supported output formats: asciidoc, colon_grid, double_grid, double_outline,
+ fancy_grid, fancy_outline, github, grid, heavy_grid, heavy_outline, html, jira,
+diff --git a/tabulate/cli.py b/tabulate/cli.py
+index cfae6fe..d3a7485 100644
+--- a/tabulate/cli.py
++++ b/tabulate/cli.py
+@@ -59,6 +59,8 @@ def _main():
+     -F FPFMT, --float FPFMT   floating point number format (default: g)
+     -I INTFMT, --int INTFMT   integer point number format (default: "")
+     -f FMT, --format FMT      set output table format (default: simple)
++    -w WIDTH, --wrap WIDTH    wrap long cell text at WIDTH characters
++                              (WIDTH must be a positive integer; default: no wrapping)
+ 
+     Supported output formats: asciidoc, colon_grid, double_grid, double_outline,
+     fancy_grid, fancy_outline, github, grid, heavy_grid, heavy_outline, html, jira,
+@@ -76,7 +78,7 @@ def _main():
+     try:
+         opts, args = getopt.getopt(
+             sys.argv[1:],
+-            "h1H:r:o:s:F:I:f:",
++            "h1H:r:o:s:F:I:f:w:",
+             [
+                 "help",
+                 "header",  # deprecated in CLI > 0.10
+@@ -88,6 +90,7 @@ def _main():
+                 "int=",
+                 "colalign=",
+                 "format=",
++                "wrap=",
+             ],
+         )
+     except getopt.GetoptError as e:
+@@ -102,6 +105,7 @@ def _main():
+     fileformat = "rsv"
+     sep = r"\s+"
+     outfile = "-"
++    maxcolwidths = None
+     special_headers_values = ["firstrow", "keys"]
+     for opt, value in opts:
+         if opt in ["-1", "--header"]:
+@@ -131,6 +135,15 @@ def _main():
+             tablefmt = value
+         elif opt in ["-s", "--sep"]:
+             sep = value
++        elif opt in ["-w", "--wrap"]:
++            try:
++                maxcolwidths = int(value)
++                if maxcolwidths < 1:
++                    raise ValueError(value)
++            except ValueError:
++                print(f"{value} is not a valid wrap width", file=sys.stderr)
++                print(usage)
++                sys.exit(2)
+         elif opt in ["-h", "--help"]:
+             print(usage)
+             sys.exit(0)
+@@ -175,6 +188,7 @@ def _main():
+                 intfmt=intfmt,
+                 file=out,
+                 colalign=colalign,
++                maxcolwidths=maxcolwidths,
+             )
+ 
+ 
+@@ -208,7 +222,9 @@ def _open_and_pprint_file(reader, f, *args, **kwargs):
+             _pprint_file(reader, fobj, *args, **kwargs)
+ 
+ 
+-def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign):
++def _pprint_file(
++    reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign, maxcolwidths
++):
+     table = reader(fobject)
+     print(
+         tabulate(
+@@ -218,6 +234,7 @@ def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, col
+             floatfmt=floatfmt,
+             intfmt=intfmt,
+             colalign=colalign,
++            maxcolwidths=maxcolwidths,
+         ),
+         file=file,
+     )
+diff --git a/test/test_cli.py b/test/test_cli.py
+index 154f1a2..13a14ba 100644
+--- a/test/test_cli.py
++++ b/test/test_cli.py
+@@ -483,3 +483,33 @@ def test_inprocess_jsonl_malformed_headers():
+     )
+     # output should still be produced (graceful fallback), with raw keys as headers
+     assert out.strip() != ""
++
++
++def test_inprocess_wrap_option():
++    """In-process: -w / --wrap"""
++    text = "name description\nfoo a-long-description-here\n"
++    for opt in ["-w", "--wrap"]:
++        out = run_main_in_process([opt, "6", "-f", "grid"], input_text=text)
++        expected = """\
+++------+--------+
++| name | descri |
++|      | ption  |
+++------+--------+
++| foo  | a-long |
++|      | -descr |
++|      | iption |
++|      | -here  |
+++------+--------+"""
++        assert_equal(out.splitlines(), expected.splitlines())
++
++
++def test_inprocess_wrap_invalid():
++    """In-process: --wrap rejects non-positive or non-integer widths"""
++    for bad in ["0", "-3", "abc"]:
++        with patch.object(sys, "argv", ["tabulate", "--wrap", bad]):
++            try:
++                _main()
++            except SystemExit as e:
++                assert_equal(e.code, 2)
++            else:
++                raise AssertionError("expected SystemExit")
