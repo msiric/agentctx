@@ -41,17 +41,19 @@ The first held-out set compared everything (6 scenarios, 3 runs each, trailkeep 
 | Basic Memory | 6% | +3,276 |
 | Hindsight | 0% | +3,560 |
 
-Two more fresh sets compared newer versions with the closest competitor and with no memory (11 and 12 scenarios, 3 runs each):
+Three more fresh sets compared newer versions with the closest competitor and with no memory (11, 12 and 10 scenarios, 3 runs each):
 
-| Setup | Set 2 (0.5.0) | Set 3 (0.5.1) |
-|---|---|---|
-| **trailkeep** | **79%** | **89%** |
-| HANDOFF.md instruction | 79% | 78% |
-| No memory | 6% | 0% |
+| Setup | Set 2 (0.5.0) | Set 3 (0.5.1) | Set 4 (0.5.2) |
+|---|---|---|---|
+| **trailkeep** | **79%** | **89%** | **77%** |
+| HANDOFF.md instruction | 79% | 78% | 70% |
+| No memory | 6% | 0% | 3% |
+
+In set 4, one scenario's check broke when the agent followed the repo's own instructions to use `uv`, which only trailkeep runs did. Re-scored, trailkeep is at 87% there. The table shows the recorded result.
 
 What that means:
 - trailkeep beats no memory by a wide, statistically significant margin in every set. It also beat Claude Code's built-in memory significantly, and every other memory tool tested scored far lower.
-- It's ahead of a HANDOFF.md instruction overall (84% vs 75% across all 29 scenarios), but that gap isn't statistically significant. Its clear edge is preferences you state in one repo that apply in another: in set 3, trailkeep got 6 of 6 and the handoff file 0 of 6. It also keeps branch-specific decisions apart. If you work in one repo on one branch, a handoff file does nearly as well.
+- It's ahead of a HANDOFF.md instruction overall (82% vs 74% across all 39 scenarios), but that gap isn't statistically significant. Its clear edge is preferences you state in one repo that apply in another (9 of 9 vs 0 of 9 in sets 3 and 4) and decisions that hold on one branch only. If you work in one repo on one branch, a handoff file does nearly as well.
 - Most of its remaining failures are the agent misapplying a note it had, not losing it.
 
 Full reports, the pre-registration and every deviation are in [`bench/results/`](bench/results/).
