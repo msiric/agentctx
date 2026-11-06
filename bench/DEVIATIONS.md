@@ -148,3 +148,14 @@ through Hindsight's own MCP tool, which needs no LLM, so the check missed it.
 - **Effect:** none on H2b-2, which doesn't involve `none`. This was found
   when the analysis listed two trailkeep commits in the version line, before
   `none@rerun` results existed.
+
+## 2026-11-06: held-out set 4, author blindness and two overlapping facts
+
+The Python author for set 4 listed the shared scratch folder, which held
+clones and result folders from other runs, and saw their names. It reports
+that it used none of them. Separately, two set-4 facts resemble set-2 facts:
+xrepo-doctest-examples (a doctest example in every new public function's
+docstring, like cross-repo-doctest-examples) and superseded-jmespath-rounding
+(round halves away from zero to match Finance, like dead-end-humanize-half-up).
+The traps stay as written. The set-4 report also gives results without these
+two.

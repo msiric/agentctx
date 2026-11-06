@@ -1,0 +1,101 @@
+diff --git a/base.d.ts b/base.d.ts
+index 17ddbbd..991b3ea 100644
+--- a/base.d.ts
++++ b/base.d.ts
+@@ -338,7 +338,7 @@ export type ParseOptions = {
+ 	*/
+ 	readonly types?: Record<
+ 		string,
+-	'boolean' | 'number' | 'string' | 'string[]' | 'number[]' | ((value: string) => unknown)
++	'boolean' | 'number' | 'string' | 'string[]' | 'number[]' | 'json' | ((value: string) => unknown)
+ 	>;
+ };
+ 
+diff --git a/base.js b/base.js
+index bb2a093..5909411 100644
+--- a/base.js
++++ b/base.js
+@@ -455,6 +455,13 @@ function getUrlWithoutQuery(url) {
+ 	return queryStart === -1 ? url : url.slice(0, queryStart);
+ }
+ 
++// Our IDs are 64-bit, so an integer a JS number cannot hold exactly is kept as its digits instead of being rounded.
++const parseJson = value => JSON.parse(value, (key, parsed, context) => (
++	typeof parsed === 'number' && !Number.isSafeInteger(parsed) && /^-?\d+$/v.test(context?.source ?? '')
++		? context.source
++		: parsed
++));
++
+ function parseValue(value, options, type) {
+ 	if (type === 'string' && typeof value === 'string') {
+ 		return value;
+@@ -481,12 +488,21 @@ function parseValue(value, options, type) {
+ 		return [parseValue(value, options, type.slice(0, -2))];
+ 	}
+ 
++	if (type === 'json' && typeof value === 'string') {
++		try {
++			return parseJson(value);
++		} catch {
++			// Not valid JSON, so the value is left as it is.
++			return value;
++		}
++	}
++
+ 	if (type === 'number' && typeof value === 'string' && value.trim() !== '' && !Number.isNaN(Number(value))) {
+ 		return Number(value);
+ 	}
+ 
+ 	// An explicit type takes precedence over `parseNumbers` and `parseBooleans`. A value that does not match its type stays a string. With `arrayFormat: 'none'`, a single value with an array type is not an array and stays a string too.
+-	if (['boolean', 'number', 'string[]', 'number[]'].includes(type)) {
++	if (['boolean', 'number', 'string[]', 'number[]', 'json'].includes(type)) {
+ 		return value;
+ 	}
+ 
+diff --git a/readme.md b/readme.md
+index 3e2992b..08a84aa 100644
+--- a/readme.md
++++ b/readme.md
+@@ -258,6 +258,19 @@ queryString.parse('?isAdmin=true&flagged=true&isOkay=0', {
+ //=> {flagged: true, isAdmin: 'true', isOkay: false}
+ ```
+ 
++- `'json'`: Parse `filter` as JSON. A value that is not valid JSON stays a string and integers too large for a JavaScript number are kept as strings of their digits:
++
++```js
++import queryString from 'query-string';
++
++queryString.parse('?filter=%7B%22status%22%3A%22open%22%7D', {
++	types: {
++		filter: 'json',
++	},
++});
++//=> {filter: {status: 'open'}}
++```
++
+ Note: The `'boolean'` type also converts `'0'` and `'1'` to booleans, and treats valueless keys (e.g. `?flag`) as `true`.
+ 
+ - `'string'`: Parse `phoneNumber` as a string (overriding the `parseNumbers` option):
+diff --git a/test/json-type.js b/test/json-type.js
+new file mode 100644
+index 0000000..345d591
+--- /dev/null
++++ b/test/json-type.js
+@@ -0,0 +1,17 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import queryString from '../index.js';
++
++test('json type decodes the value', () => {
++	const query = 'filter=' + encodeURIComponent('{"status":"open","tags":["a","b"]}');
++	assert.deepEqual({...queryString.parse(query, {types: {filter: 'json'}})}, {filter: {status: 'open', tags: ['a', 'b']}});
++});
++
++test('json type leaves invalid JSON as a string', () => {
++	assert.equal(queryString.parse('filter=%7Bnope', {types: {filter: 'json'}}).filter, '{nope');
++});
++
++test('json type keeps 64-bit integers exact', () => {
++	const query = 'filter=' + encodeURIComponent('{"accountId":1274593846275813376}');
++	assert.equal(queryString.parse(query, {types: {filter: 'json'}}).filter.accountId, '1274593846275813376');
++});

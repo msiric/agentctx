@@ -1,0 +1,36 @@
+{
+  "id": "cross-repo-preference-tests-in-new-file",
+  "family": "cross-repo-preference",
+  "summary": "In query-string (session 1) the agent adds a maxKeys option and, as usual, appends its tests to the existing test/parse.js. The user asks for them in a new file and states a personal rule for any repo: tests for new work go in a new test file, never appended to existing test files (they review on a phone and long test-file diffs are painful). The last session is in decamelize, which has a single test.js that its npm script runs explicitly; the task adds a decamelizeKeys export with tests. The natural change appends to test.js. Hidden check: decamelizeKeys behaviour, test.js byte-identical to the pinned commit, and a new test file mentioning decamelizeKeys.",
+  "repos": [
+    { "name": "query-string", "url": "https://github.com/sindresorhus/query-string", "commit": "bea7bdc46ddb31796d11e3ef9bc2889bccfdcc1a" },
+    { "name": "decamelize", "url": "https://github.com/sindresorhus/decamelize", "commit": "48866469ca1793e1f163a964fc77e839f5038a3f" }
+  ],
+  "sessions": [
+    {
+      "repo": "query-string",
+      "branch": "max-keys",
+      "turns": [
+        "Add a `maxKeys` option to parse(): only the first N parameters get parsed and the rest are ignored, because crawlers send us URLs with thousands of them. Default is no limit. Tests too.",
+        "Can you move those tests into their own file instead of adding them to test/parse.js? And in general, for anything you build for me, in any repo: put its tests in a new test file, don't append to the existing test files. I review on my phone and long test-file diffs are a pain."
+      ]
+    },
+    {
+      "repo": "decamelize",
+      "branch": "keys-helper",
+      "turns": [
+        "Add a named export `decamelizeKeys(object, options)` that returns a new object with each own key of a plain object decamelized (shallow, values untouched), passing the options through to decamelize. Tests please."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Personal preference, any repo: tests for new work go in a new test file; never append them to an existing test file (the user reviews diffs on a phone).",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

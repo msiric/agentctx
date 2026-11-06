@@ -1,0 +1,23 @@
+{
+  "id": "xrepo-doctest-examples",
+  "family": "cross-repo-preference",
+  "summary": "While adding a public function to tabulate, the user says every public function he adds, in any repo, must carry a short >>> example that passes as a doctest (he reviews diffs on his phone). Last session adds a public function to sqlparse, whose code has no doctests anywhere, so mirroring local style gives a prose-only docstring.",
+  "repos": [
+    { "name": "tabulate", "url": "https://github.com/astanin/python-tabulate", "commit": "268615a5c27dc40e5c22454c07b44d5c50410da0" },
+    { "name": "sqlparse", "url": "https://github.com/andialbrecht/sqlparse", "commit": "be3b7a68d07af5a22b49765e26d2541be640999f" }
+  ],
+  "sessions": [
+    { "repo": "tabulate", "branch": "main", "turns": [
+      "Can you add a public `register_format(name, table_format)` to tabulate, so we can plug in our own TableFormat without poking at `_table_formats`? The new name should show up in `tabulate_formats` as well, since the CLI's -f check uses that.",
+      "Make sure its docstring has a short >>> example that actually passes as a doctest. I want that on every public function I add, whatever the repo: I review most diffs on my phone, and one example tells me more than a paragraph of prose."
+    ]},
+    { "repo": "sqlparse", "branch": "main", "turns": [
+      "Add a top-level `sqlparse.statement_types(sql)` that returns, in order, what `Statement.get_type()` says for each statement `sqlparse.parse()` finds in the string, e.g. `['SELECT', 'INSERT']`. It's for a migration linter we're writing."
+    ]}
+  ],
+  "facts": [
+    { "id": "f1", "text": "Personal preference, any repo: every public function the user adds gets a short >>> usage example in its docstring that passes as a doctest (he reviews diffs on his phone).",
+      "source": "user", "session": 1, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

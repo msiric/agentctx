@@ -1,0 +1,50 @@
+{
+  "id": "superseded-qs-new-options-default-on",
+  "family": "superseded",
+  "summary": "Session 1 adds an opt-in `ignoreEmpty` parse option and the user sets the rule for 10.x: new behaviours are opt-in, nothing changes for existing callers. Session 2 extends ignoreEmpty (still opt-in) and the user reverses the rule: they are cutting 11.0, so from now on new parse/stringify behaviours default to ON with an opt-out (opt-in flags never get turned on); ignoreEmpty itself keeps its default because the reports service relies on it. Last session: add a `stripTracking` option. The opt-in sibling sitting right next to it and ordinary library practice both say default false; the newer rule says default true. Hidden check: the option works both ways, and parse() without options strips tracking parameters.",
+  "repos": [
+    { "name": "query-string", "url": "https://github.com/sindresorhus/query-string", "commit": "bea7bdc46ddb31796d11e3ef9bc2889bccfdcc1a" }
+  ],
+  "sessions": [
+    {
+      "repo": "query-string",
+      "branch": "parse-options",
+      "turns": [
+        "Add an `ignoreEmpty` option to parse() that drops parameters with an empty value, so `?q=&page=2` gives just `{page: '2'}`. A key without `=` (`?flag`) isn't empty, keep that. Tests, readme and types.",
+        "Make sure it's opt-in, default false. That's the rule while we're on 10.x: new behaviour is always opt-in and nothing changes for existing callers, half the org depends on ^10."
+      ]
+    },
+    {
+      "repo": "query-string",
+      "branch": "parse-options",
+      "turns": [
+        "Reports asked for ignoreEmpty to also cover array items: with `arrayFormat: 'bracket'`, `?tag[]=&tag[]=a` should give `{tag: ['a']}` when it's on. Can you do that?",
+        "Also, heads-up: we're cutting 11.0.0 next week, so we're allowed to break things now, and I'm changing the rule. From here on, new parse/stringify behaviours are on by default, with an option to switch them off. Opt-in flags just never get turned on by anyone. Leave ignoreEmpty's default as it is though, the reports service relies on it being off."
+      ]
+    },
+    {
+      "repo": "query-string",
+      "branch": "parse-options",
+      "turns": [
+        "Let's add tracking-parameter stripping to parse(): drop `utm_*`, `fbclid` and `gclid`. Call the option `stripTracking`. Tests and readme too."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "While on 10.x, new parse behaviours are opt-in (default false) so nothing changes for existing callers.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": "f2"
+    },
+    {
+      "id": "f2",
+      "text": "From the 11.0 cut on, new parse/stringify behaviours are ON by default with an option to switch them off (opt-in flags never get used). Only ignoreEmpty keeps its old default (reports relies on it).",
+      "source": "user",
+      "session": 2,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

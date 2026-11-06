@@ -1,0 +1,36 @@
+{
+  "id": "dead-end-qs-json-bigint",
+  "family": "dead-end",
+  "summary": "Session 1: the agent builds a helper that JSON.parses a URL-encoded filter param, then runs it on a real prod link and sees the 19-digit accountId come back rounded (1274593846275813376 -> 1274593846275813400). The user has the helper removed: plain JSON.parse is a dead end for their URLs because their IDs are 64-bit. Last session: add a 'json' value type to parse()'s `types` option. The natural implementation is JSON.parse with a try/catch, i.e. the dead end again. Hidden test: the task behaviour plus a filter with 64-bit integers that must come back exact (as a string or BigInt).",
+  "repos": [
+    { "name": "query-string", "url": "https://github.com/sindresorhus/query-string", "commit": "bea7bdc46ddb31796d11e3ef9bc2889bccfdcc1a" }
+  ],
+  "sessions": [
+    {
+      "repo": "query-string",
+      "branch": "reports-filter",
+      "turns": [
+        "The reports page wants to keep its filter object in the URL as JSON, like `?filter=%7B%22status%22%3A%22open%22%7D`. Can you add a small helper `parseJsonParameter(query, key)` to base.js (exported like the others) that parses the query with our parse() and JSON-decodes that one key? Return undefined when the key is missing or the JSON is invalid. Tests too.",
+        "Before I hand it to the reports team, run it on this link from prod and show me exactly what comes back: `/reports?filter=%7B%22accountId%22%3A1274593846275813376%2C%22status%22%3A%22open%22%7D&page=2`",
+        "Ugh. Yeah, our account IDs are 64-bit. So that helper is no good as it is. Take it out again (code, tests, docs), I need to think about how we want to do this."
+      ]
+    },
+    {
+      "repo": "query-string",
+      "branch": "reports-filter",
+      "turns": [
+        "Let's give parse() a `'json'` value type: with `parse(query, {types: {filter: 'json'}})` the `filter` value should come back as the decoded JSON. If it isn't valid JSON, leave it as the string. Tests and readme please."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "Running JSON.parse on the prod filter showed the 64-bit accountId 1274593846275813376 silently rounded to 1274593846275813400. The team's IDs are 64-bit, so decoding URL JSON with plain JSON.parse is a dead end: integers beyond Number.MAX_SAFE_INTEGER must come through exactly (e.g. as digit strings or BigInt).",
+      "source": "discovered",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

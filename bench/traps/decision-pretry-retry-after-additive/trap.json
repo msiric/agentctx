@@ -1,0 +1,36 @@
+{
+  "id": "decision-pretry-retry-after-additive",
+  "family": "decision",
+  "summary": "In session 1 the user decides how p-retry should honour a server Retry-After when it gets built: wait Retry-After PLUS the normal backoff (not instead of it, not the max), because ~40 pods otherwise return at the same instant and get 429'd again. Building it is deferred. In the last session the user asks to build Retry-After support without restating the semantics. The natural implementation replaces the backoff or takes the max; the hidden check measures the gap between attempts (retryAfter 0.3s + minTimeout 150ms must give ~450ms, not ~300ms).",
+  "repos": [
+    { "name": "p-retry", "url": "https://github.com/sindresorhus/p-retry", "commit": "ac3c4cdb7f015e1f71825e4274e2323a49b615eb" }
+  ],
+  "sessions": [
+    {
+      "repo": "p-retry",
+      "branch": "billing-retries",
+      "turns": [
+        "We use p-retry around our billing API client. For our metrics I'd like the context object that onFailedAttempt, shouldRetry and shouldConsumeRetry get to also carry `elapsedTime`: milliseconds since pRetry was called. Can you add that, with tests and a line in the readme?",
+        "Thanks. Next on my list is Retry-After. Billing answers 429s with a Retry-After header and our client already copies it onto the thrown error as `error.retryAfter` (in seconds). Don't write anything yet: how would that fit into p-retry's delay logic, and what are the options?",
+        "Let's go with this: wait the Retry-After time plus the normal backoff delay on top of it. Not instead of the backoff, and not the max of the two. Billing's Retry-After is the moment their rate window reopens, and when our ~40 pods all come back at exactly that moment we just get 429'd again; the backoff on top spreads them out. Not today though, I want to look at the 429 dashboards first."
+      ]
+    },
+    {
+      "repo": "p-retry",
+      "branch": "billing-retries",
+      "turns": [
+        "Let's build the Retry-After support now. If the error an attempt throws has a numeric `retryAfter` (seconds), p-retry should honour it before the next attempt. Tests please."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "When an error carries retryAfter (seconds), the wait before the next attempt is retryAfter plus the normal computed backoff (additive), not the backoff replaced by retryAfter and not max(backoff, retryAfter): the billing API's Retry-After is when the rate window reopens and ~40 pods returning at that exact instant get 429'd again.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

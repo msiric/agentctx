@@ -1,0 +1,111 @@
+diff --git a/base.d.ts b/base.d.ts
+index 17ddbbd..dbc593f 100644
+--- a/base.d.ts
++++ b/base.d.ts
+@@ -193,6 +193,20 @@ export type ParseOptions = {
+ 	*/
+ 	readonly parseBooleans?: boolean;
+ 
++	/**
++	Drop parameters with an empty value, like `q` in `?q=&page=2`. A key without `=` is kept.
++
++	@default false
++	*/
++	readonly ignoreEmpty?: boolean;
++
++	/**
++	Drop tracking parameters: `utm_*`, `fbclid`, and `gclid`.
++
++	@default true
++	*/
++	readonly stripTracking?: boolean;
++
+ 	/**
+ 	Parse the fragment identifier from the URL and add it to result object.
+ 
+diff --git a/base.js b/base.js
+index bb2a093..9c5add0 100644
+--- a/base.js
++++ b/base.js
+@@ -503,6 +503,9 @@ export function extract(input) {
+ 	return queryStart === -1 ? '' : input.slice(queryStart + 1);
+ }
+ 
++const trackingParameters = new Set(['fbclid', 'gclid']);
++const isTrackingParameter = key => key.startsWith('utm_') || trackingParameters.has(key);
++
+ export function parse(query, options) {
+ 	options = {
+ 		decode: true,
+@@ -511,6 +514,8 @@ export function parse(query, options) {
+ 		arrayFormatSeparator: ',',
+ 		parseNumbers: false,
+ 		parseBooleans: false,
++		ignoreEmpty: false,
++		stripTracking: true,
+ 		...definedOptions(options),
+ 		types: {__proto__: null, ...options?.types},
+ 	};
+@@ -561,8 +566,15 @@ export function parse(query, options) {
+ 		// https://w3.org/TR/2012/WD-url-20120524/#collect-url-parameters
+ 		value = value === undefined ? null : (['comma', 'separator', 'bracket-separator'].includes(options.arrayFormat) ? value : decode(value, options));
+ 
++		const decodedKey = decode(key, options);
++
++		if ((options.ignoreEmpty && value === '') || (options.stripTracking && isTrackingParameter(decodedKey))) {
++			parameterStart = index + 1;
++			continue;
++		}
++
+ 		// The key is decoded before the array format looks for its marker, so a percent-encoded marker like `foo%5B%5D` is also an array item. This is intentional. `URLSearchParams` and HTML forms percent-encode `[`, `]`, and `:` in keys, and servers like Rack and PHP decode the key before they look for the marker. The trade-off is that a key that itself ends in a marker is not distinguishable from the marker after decoding, so `stringify({'foo[]': 'x'}, {arrayFormat: 'bracket'})` does not round-trip.
+-		formatter(decode(key, options), value, returnValue);
++		formatter(decodedKey, value, returnValue);
+ 
+ 		parameterStart = index + 1;
+ 	}
+diff --git a/readme.md b/readme.md
+index 3e2992b..52cf397 100644
+--- a/readme.md
++++ b/readme.md
+@@ -230,6 +230,20 @@ queryString.parse('foo=true', {parseBooleans: true});
+ 
+ Parse the value as a boolean type instead of string type if it's a boolean.
+ 
++##### ignoreEmpty
++
++Type: `boolean`\
++Default: `false`
++
++Drop parameters with an empty value, like `q` in `?q=&page=2`. A key without `=` is kept.
++
++##### stripTracking
++
++Type: `boolean`\
++Default: `true`
++
++Drop tracking parameters: `utm_*`, `fbclid`, and `gclid`.
++
+ ##### types
+ 
+ Type: `object`\
+diff --git a/test/parse-options.js b/test/parse-options.js
+new file mode 100644
+index 0000000..ab8e292
+--- /dev/null
++++ b/test/parse-options.js
+@@ -0,0 +1,15 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import queryString from '../index.js';
++
++test('ignoreEmpty drops empty values', () => {
++	assert.deepEqual({...queryString.parse('q=&page=2&flag', {ignoreEmpty: true})}, {flag: null, page: '2'});
++	assert.deepEqual({...queryString.parse('tag[]=&tag[]=a', {ignoreEmpty: true, arrayFormat: 'bracket'})}, {tag: ['a']});
++	assert.deepEqual({...queryString.parse('q=&page=2')}, {page: '2', q: ''});
++});
++
++test('stripTracking drops tracking parameters', () => {
++	assert.deepEqual({...queryString.parse('utm_source=x&fbclid=1&gclid=2&a=1', {stripTracking: true})}, {a: '1'});
++	assert.deepEqual(Object.keys(queryString.parse('utm_source=x&a=1', {stripTracking: false})), ['a', 'utm_source']);
++	assert.deepEqual({...queryString.parse('utm_source=x&a=1')}, {a: '1'});
++});

@@ -1,0 +1,96 @@
+diff --git a/index.js b/index.js
+index 8613e9e..ff76e49 100644
+--- a/index.js
++++ b/index.js
+@@ -101,6 +101,12 @@ function calculateDelay(retriesConsumed, options) {
+ 	return Math.min(timeout, Math.ceil(options.maxTimeout), maximumDelay);
+ }
+ 
++// The billing client copies the `Retry-After` header onto the error, in seconds.
++function getRetryAfterDelay(error) {
++	const {retryAfter} = error;
++	return typeof retryAfter === 'number' && Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 0;
++}
++
+ function calculateRemainingTime(start, max) {
+ 	return Number.isFinite(max) ? max - (performance.now() - start) : max;
+ }
+@@ -180,7 +186,8 @@ async function onAttemptFailure({error, attemptNumber, retriesConsumed, startTim
+ 
+ 	// Out of time already, out of retries, or a failure that is never retried, so the delay is 0 and the callbacks are told that no retry follows. Only computed when a retry can still follow, so a randomized delay does not draw from `Math.random` for a wait that is never taken.
+ 	const timeLeft = calculateRemainingTime(startTime, options.maxRetryTime);
+-	const delayTime = isRetriableError && timeLeft > 0 && retriesLeft > 0 ? calculateDelay(retriesConsumed, options) : 0;
++	// Retry-After is when the rate window reopens, so the normal backoff is added on top to keep every client from coming back at the same instant.
++	const delayTime = isRetriableError && timeLeft > 0 && retriesLeft > 0 ? Math.min(calculateDelay(retriesConsumed, options) + getRetryAfterDelay(normalizedError), maximumDelay) : 0;
+ 
+ 	const consumeRetryContext = Object.freeze({
+ 		error: normalizedError,
+@@ -188,6 +195,7 @@ async function onAttemptFailure({error, attemptNumber, retriesConsumed, startTim
+ 		retriesLeft,
+ 		retriesConsumed,
+ 		retryDelay: delayTime,
++		elapsedTime: performance.now() - startTime,
+ 	});
+ 
+ 	// No answer means no opinion, so fall back to the default. Treating it as `false` instead would leave `retries` uncounted and let the loop run forever.
+@@ -202,6 +210,7 @@ async function onAttemptFailure({error, attemptNumber, retriesConsumed, startTim
+ 		retriesLeft,
+ 		retriesConsumed,
+ 		retryDelay: effectiveDelay,
++		elapsedTime: performance.now() - startTime,
+ 	});
+ 
+ 	await options.onFailedAttempt(context);
+diff --git a/readme.md b/readme.md
+index 467d746..deed9f8 100644
+--- a/readme.md
++++ b/readme.md
+@@ -90,6 +90,7 @@ The `context` object contains:
+ - `attemptNumber` - The attempt number (starts at 1)
+ - `retriesLeft` - Number of retries remaining
+ - `retriesConsumed` - Number of retries consumed so far
++- `elapsedTime` - Milliseconds since `pRetry` was called
+ - `retryDelay` - The delay in milliseconds before the next retry (based on `minTimeout`, `factor`, `maxTimeout`, and `randomize`). The actual delay may be shorter if it would exceed `maxRetryTime`. This is `0` when no retry will occur based on the checks completed before the current callback runs. `shouldConsumeRetry` is the exception: it is shown the delay that would be used, since deciding whether to consume the retry is what it is being asked.
+ 
+ The `onFailedAttempt` function can return a promise. For example, to add a [delay](https://github.com/sindresorhus/delay):
+@@ -108,6 +109,8 @@ const result = await pRetry(run, {
+ });
+ ```
+ 
++If the thrown error has a numeric `retryAfter` property (in seconds, as in the `Retry-After` header), that time is added to the computed delay before the next attempt.
++
+ ##### shouldRetry(context)
+ 
+ Type: `Function`
+diff --git a/test-retry-after.js b/test-retry-after.js
+new file mode 100644
+index 0000000..5d84683
+--- /dev/null
++++ b/test-retry-after.js
+@@ -0,0 +1,26 @@
++import {test} from 'node:test';
++import assert from 'node:assert/strict';
++import pRetry from './index.js';
++
++test('waits for retryAfter before the next attempt', async () => {
++	const times = [];
++	await pRetry(async attempt => {
++		times.push(performance.now());
++		if (attempt === 1) {
++			throw Object.assign(new Error('429'), {retryAfter: 0.1});
++		}
++	}, {retries: 1, minTimeout: 10, factor: 1});
++	assert.ok(times[1] - times[0] >= 105);
++});
++
++test('context has elapsedTime', async () => {
++	let elapsed;
++	await pRetry(async attempt => {
++		if (attempt === 1) {
++			throw new Error('x');
++		}
++	}, {retries: 1, minTimeout: 5, onFailedAttempt({elapsedTime}) {
++		elapsed = elapsedTime;
++	}});
++	assert.equal(typeof elapsed, 'number');
++});

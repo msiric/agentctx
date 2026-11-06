@@ -1,0 +1,23 @@
+{
+  "id": "deadend-tabulate-wrap-splits-tokens",
+  "family": "dead-end",
+  "summary": "First attempt at a `--wrap WIDTH` CLI option: the agent wires it to tabulate's maxcolwidths, runs it on the user's support-export sample and sees that the default textwrap settings chop long ticket IDs and URLs (break_long_words) and split hyphenated tokens (break_on_hyphens). Support copy-pastes those, so they must stay whole. The change is backed out for a release freeze. The last session redoes --wrap; plain maxcolwidths=WIDTH is the natural implementation and splits a hostname and a URL in the hidden sample.",
+  "repos": [
+    { "name": "tabulate", "url": "https://github.com/astanin/python-tabulate", "commit": "268615a5c27dc40e5c22454c07b44d5c50410da0" }
+  ],
+  "sessions": [
+    { "repo": "tabulate", "branch": "main", "turns": [
+      "Add a `--wrap WIDTH` option to the tabulate CLI that wraps long cell text at WIDTH characters. Our support team reads ticket exports in a terminal and the notes column runs off the screen.",
+      "Try it on a couple of rows from the support export, and check that the ticket IDs and URLs come through intact, because support copy-pastes those straight into the tracker:\n\nprintf 'id\\tnote\\n1\\tescalated as SUPPORT-2024-118233 to the vendor\\n2\\trunbook https://wiki.example.com/ops/db-failover-runbook\\n' | python -m tabulate -s '\\t' -1 --wrap 14",
+      "OK. Whatever state it's in now, please back the whole --wrap change out: we're in release freeze until Monday and I don't want CLI changes in this build. We'll pick it up after the release."
+    ]},
+    { "repo": "tabulate", "branch": "main", "turns": [
+      "Release is out. Let's have another go at the `--wrap WIDTH` option for the tabulate CLI (wrap long cell text at WIDTH characters)."
+    ]}
+  ],
+  "facts": [
+    { "id": "f1", "text": "Passing WIDTH straight to tabulate's maxcolwidths does not work for us: with the default textwrap settings (break_long_words, break_on_hyphens) it chops long ticket IDs and URLs and splits hyphenated tokens, and support copy-pastes those. --wrap may only break at whitespace; a token longer than WIDTH stays whole.",
+      "source": "discovered", "session": 1, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

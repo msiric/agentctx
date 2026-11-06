@@ -1,0 +1,28 @@
+{
+  "id": "branch-tabulate-missing-marker",
+  "family": "branch-isolation",
+  "summary": "Two feed branches of tabulate, each for a customer whose cron runs `tabulate -r jsonl -f tsv`. On acme-feed the user says Acme's loader is SAS, so missing values must be '.'; on globex-feed he says Globex loads with R, so missing values must be 'NA'. Both are left for later. The last session, back on acme-feed, implements the missing-value marker and must use '.', not 'NA' and not a generic NULL/\\N/empty.",
+  "repos": [
+    { "name": "tabulate", "url": "https://github.com/astanin/python-tabulate", "commit": "268615a5c27dc40e5c22454c07b44d5c50410da0" }
+  ],
+  "sessions": [
+    { "repo": "tabulate", "branch": "acme-feed", "turns": [
+      "This branch is for the Acme nightly feed: their job pipes our event dumps through `tabulate -r jsonl -f tsv`. The dumps end with a couple of blank lines and the jsonl reader crashes on them. Can you make it skip blank lines?",
+      "Great, commit that on this branch. The next thing here is records that don't have every key: right now those come out as empty cells. Acme's loader is a SAS job, and to SAS a missing value is a single `.`, so that's what those cells need to be. Not today though, I want the blank-line fix to ship on its own first."
+    ]},
+    { "repo": "tabulate", "branch": "globex-feed", "turns": [
+      "Now the Globex feed branch. Their job runs `tabulate -r jsonl -f tsv` as well, and they asked for a way to choose columns: add a `--columns a,b,c` option that keeps only those keys, in that order. Commit it on this branch when you're done.",
+      "Thanks. One more thing for this branch, for later: Globex loads the feed with R, so missing values have to come out as `NA`. I'll do that once they've signed off on the column list."
+    ]},
+    { "repo": "tabulate", "branch": "acme-feed", "turns": [
+      "Let's do the missing-values change for the Acme feed now: when a jsonl record lacks a key, that cell should get the loader's missing-value marker instead of being empty. The cron command stays `tabulate -r jsonl -f tsv`, so it has to work without extra flags."
+    ]}
+  ],
+  "facts": [
+    { "id": "f1", "text": "acme-feed branch: Acme's loader is a SAS job, so a missing value (jsonl record lacking a key) must be rendered as a single '.'.",
+      "source": "user", "session": 1, "superseded_by": null },
+    { "id": "f2", "text": "globex-feed branch only: Globex loads the feed with R, so missing values must be 'NA'. Does not apply on acme-feed.",
+      "source": "user", "session": 2, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

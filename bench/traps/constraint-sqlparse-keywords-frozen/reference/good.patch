@@ -1,0 +1,37 @@
+diff --git a/sqlparse/keywords_local.py b/sqlparse/keywords_local.py
+new file mode 100644
+index 0000000..61d0be9
+--- /dev/null
++++ b/sqlparse/keywords_local.py
+@@ -0,0 +1,10 @@
++"""Keywords this fork adds on top of upstream's keywords.py."""
++
++from sqlparse import tokens
++
++KEYWORDS_LOCAL = {
++    'ASOF': tokens.Keyword,
++    'EXCLUDE': tokens.Keyword,
++    'MATCH_CONDITION': tokens.Keyword,
++    'MATCH_RECOGNIZE': tokens.Keyword,
++}
+diff --git a/sqlparse/lexer.py b/sqlparse/lexer.py
+index 5d4a5f9..99ad4be 100644
+--- a/sqlparse/lexer.py
++++ b/sqlparse/lexer.py
+@@ -15,7 +15,7 @@ import re
+ from io import TextIOBase
+ from threading import Lock
+ 
+-from sqlparse import keywords, tokens
++from sqlparse import keywords, keywords_local, tokens
+ from sqlparse.utils import consume
+ 
+ 
+@@ -68,6 +68,7 @@ class Lexer:
+         self.add_keywords(keywords.KEYWORDS_SNOWFLAKE)
+         self.add_keywords(keywords.KEYWORDS_BIGQUERY)
+         self.add_keywords(keywords.KEYWORDS)
++        self.add_keywords(keywords_local.KEYWORDS_LOCAL)
+ 
+     def clear(self):
+         """Clear all syntax configurations.

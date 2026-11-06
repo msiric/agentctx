@@ -1,0 +1,27 @@
+diff --git a/index.js b/index.js
+index 18bd32b..2d6c17b 100644
+--- a/index.js
++++ b/index.js
+@@ -4,7 +4,7 @@ const ALPHABETIC = /\p{Alphabetic}/v;
+ // A decimal digit in any script, not only ASCII like `\d`. Other \p{Number} characters, such as superscripts and Roman numerals, are not digit runs.
+ const DIGIT = /\p{Decimal_Number}/v;
+ const LEADING_CAPITAL = /^\p{Uppercase_Letter}(?!\p{Uppercase_Letter})/v;
+-const SEPARATORS = /[ \-._]+/v;
++const SEPARATORS = /[ \-.\/_]+/v;
+ const LEADING_PREFIX = /^[$_]*/v;
+ 
+ // The |$ alternative allows matching at end-of-string, capturing empty string
+diff --git a/test.js b/test.js
+index bf7de19..06f0cf1 100644
+--- a/test.js
++++ b/test.js
+@@ -1117,3 +1117,9 @@ test('invalid input', () => {
+ 		message: /Expected the input to be/v,
+ 	});
+ });
++
++test('camelCase treats slashes as separators', () => {
++	assert.equal(camelCase('aws/region'), 'awsRegion');
++	assert.equal(camelCase('aws/region', {pascalCase: true}), 'AwsRegion');
++	assert.equal(camelCase('foo/bar_baz'), 'fooBarBaz');
++});

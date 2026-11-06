@@ -1,0 +1,22 @@
+{
+  "id": "constraint-sqlparse-keywords-frozen",
+  "family": "constraint",
+  "summary": "The team carries sqlparse as a fork and merges upstream weekly; keywords.py keeps conflicting, so the user rules that keywords.py stays byte-identical to upstream and extra keywords are registered at runtime from a module of their own. Last session asks for four Snowflake keywords; the natural fix is adding them to KEYWORDS_SNOWFLAKE in keywords.py.",
+  "repos": [
+    { "name": "sqlparse", "url": "https://github.com/andialbrecht/sqlparse", "commit": "be3b7a68d07af5a22b49765e26d2541be640999f" }
+  ],
+  "sessions": [
+    { "repo": "sqlparse", "branch": "main", "turns": [
+      "Can you add a `--check` option to sqlformat? It should format each file in memory and write nothing, print the name of every file whose formatting would change, and exit with 1 if any would (0 otherwise). We want to run it from a pre-commit hook.",
+      "Thanks. Unrelated, but so you know for later: this week's merge from upstream conflicted in sqlparse/keywords.py again. An old local tweak of ours was sitting in there, and I've reverted it now. From here on keywords.py stays byte-identical to upstream so the weekly merge stays clean. If we need extra keywords, they get registered at runtime from a module of our own."
+    ]},
+    { "repo": "sqlparse", "branch": "main", "turns": [
+      "Our Snowflake migrations use `SELECT * EXCLUDE (...)`, `MATCH_RECOGNIZE (...)` and `ASOF JOIN ... MATCH_CONDITION (...)`, and `sqlformat -k upper` leaves exclude, match_recognize, asof and match_condition in lowercase. Can you make sqlparse treat those four as keywords?"
+    ]}
+  ],
+  "facts": [
+    { "id": "f1", "text": "sqlparse/keywords.py must stay byte-identical to upstream (the weekly upstream merge keeps conflicting there); extra keywords are registered at runtime from a module of our own.",
+      "source": "user", "session": 1, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

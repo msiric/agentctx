@@ -1,0 +1,28 @@
+{
+  "id": "superseded-jmespath-rounding",
+  "family": "superseded",
+  "summary": "Session 1 adds dashboard JMESPath functions and decides round_to keeps Python's half-to-even rounding (matches the pandas reports). Session 2 reverses this: Finance wants Excel's half-away-from-zero for any new dashboard function, but round_to stays as it is because saved dashboards depend on it. The last session adds percent(); the stale round_to (round(), with a comment citing pandas) sits right next to it, so mirroring it gives half-to-even.",
+  "repos": [
+    { "name": "jmespath", "url": "https://github.com/jmespath/jmespath.py", "commit": "2812594e69d43098ef60f81f4efc404c071b0418" }
+  ],
+  "sessions": [
+    { "repo": "jmespath", "branch": "main", "turns": [
+      "We're starting a set of our own JMESPath functions for the dashboards. Put them in a new module `jmespath/dashboard.py`: a `DashboardFunctions` subclass of the built-in `Functions`, plus a `search(expression, data)` helper in that module that uses it. First function: `round_to(number, digits)`.",
+      "Make sure round_to rounds half-to-even like Python's round(), so round_to(`2.5`, `0`) is 2. The dashboards get checked against our pandas reports, and pandas rounds half-to-even too. Add a test that pins it."
+    ]},
+    { "repo": "jmespath", "branch": "main", "turns": [
+      "Change of plan on rounding. Finance compared the dashboards with their Excel workbooks and they want the numbers to match Excel, which rounds halves away from zero. So from now on, rounding in any new dashboard function goes half away from zero. Leave round_to as it is, though: saved dashboards already use it and their owners signed off on those numbers, so we'll migrate them separately.",
+      "For today, add `clamp(value, lo, hi)` to the dashboard functions."
+    ]},
+    { "repo": "jmespath", "branch": "main", "turns": [
+      "Next dashboard function: `percent(part, whole, digits)`, which is part/whole*100 rounded to `digits` decimal places."
+    ]}
+  ],
+  "facts": [
+    { "id": "f1", "text": "Dashboard rounding is half-to-even like Python's round(), to match the pandas reports.",
+      "source": "user", "session": 1, "superseded_by": "f2" },
+    { "id": "f2", "text": "Any new dashboard function rounds halves away from zero (Excel's ROUND), because Finance compares against Excel. round_to keeps its half-to-even behaviour for saved dashboards.",
+      "source": "user", "session": 2, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

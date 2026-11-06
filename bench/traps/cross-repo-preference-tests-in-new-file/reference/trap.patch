@@ -1,0 +1,59 @@
+diff --git a/index.d.ts b/index.d.ts
+index 915dd1b..ccf1e8c 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -55,3 +55,16 @@ decamelize('unicornRainbow', {separator: '-'});
+ ```
+ */
+ export default function decamelize(string: string, options?: Options): string;
++
++/**
++Decamelize the keys of a plain object. Shallow: nested objects are left as they are.
++
++@example
++```
++import {decamelizeKeys} from 'decamelize';
++
++decamelizeKeys({unicornRainbow: 1});
++//=> {unicorn_rainbow: 1}
++```
++*/
++export function decamelizeKeys<T extends Record<string, unknown>>(object: T, options?: Options): Record<string, T[keyof T]>;
+diff --git a/index.js b/index.js
+index 2305a0d..2c4cf71 100644
+--- a/index.js
++++ b/index.js
+@@ -65,3 +65,11 @@ export default function decamelize(
+ 	words.push(text.slice(wordStart).toLowerCase());
+ 	return words.join(separator);
+ }
++
++export function decamelizeKeys(object, options) {
++	if (object === null || typeof object !== 'object' || Array.isArray(object)) {
++		throw new TypeError('Expected a plain object');
++	}
++
++	return Object.fromEntries(Object.entries(object).map(([key, value]) => [decamelize(key, options), value]));
++}
+diff --git a/test.js b/test.js
+index 1187d71..994cc49 100644
+--- a/test.js
++++ b/test.js
+@@ -1,7 +1,7 @@
+ import process from 'node:process';
+ import assert from 'node:assert/strict';
+ import test from 'node:test';
+-import decamelize from './index.js';
++import decamelize, {decamelizeKeys} from './index.js';
+ 
+ const measureMs = fn => {
+ 	const start = process.hrtime.bigint();
+@@ -593,3 +593,8 @@ test('calls do not share regex state', () => {
+ 		assert.equal(decamelize('getURLValue', {preserveConsecutiveUppercase: true}), 'get_URL_value');
+ 	}
+ });
++
++test('decamelizeKeys', () => {
++	assert.deepEqual(decamelizeKeys({fooBar: 1, bazQux: {innerKey: 2}}), {foo_bar: 1, baz_qux: {innerKey: 2}});
++	assert.deepEqual(decamelizeKeys({fooBar: 1}, {separator: '-'}), {'foo-bar': 1});
++});

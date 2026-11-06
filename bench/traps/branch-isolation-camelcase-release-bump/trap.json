@@ -1,0 +1,50 @@
+{
+  "id": "branch-isolation-camelcase-release-bump",
+  "family": "branch-isolation",
+  "summary": "Two branches of camelcase with opposite release rules. On release/10.x (session 1, an investigation with no code change) the user says CI publishes 10.x straight from the branch whenever package.json's version changes, so every code fix there must bump the patch version in the same change. On next (session 2, flipping a default for 11.0) the user says never touch the version: the release job derives it from changesets and fails on hand bumps. The last session is back on release/10.x with a small bug fix (slashes as word separators). No-memory agents essentially never bump versions unasked, and an agent that carries the most recent (next-branch) rule over also leaves it alone. Hidden check: the fix works, and package.json is 10.x above 10.0.0. Session 1 changes no files, so session 2's work (committed or not) carries into release/10.x without checkout conflicts and does not affect the check.",
+  "repos": [
+    { "name": "camelcase", "url": "https://github.com/sindresorhus/camelcase", "commit": "328428291b2f5c0e41dd4a2d0e5a942eb9de3b70" }
+  ],
+  "sessions": [
+    {
+      "repo": "camelcase",
+      "branch": "release/10.x",
+      "turns": [
+        "A customer on 10.x says `camelCase('XMLHttpRequest')` returning `xmlHttpRequest` is a bug and wants `XMLHttpRequest` back. Is it a bug? Check what this branch actually does and whether there's already a way to get what they want. Don't change anything.",
+        "Good, I'll point them at the option, no change needed then. One thing to keep in mind for this branch: CI publishes 10.x straight from release/10.x whenever the version in package.json changes, so any code fix that lands here has to bump the patch version in the same change, otherwise it never ships."
+      ]
+    },
+    {
+      "repo": "camelcase",
+      "branch": "next",
+      "turns": [
+        "On next we're making `capitalizeAfterNumber` default to false for 11.0, so `foo2bar` stays `foo2bar`. Can you flip it and update the tests, readme and types?",
+        "And don't touch the version in package.json on this branch. The release job works it out from the changesets and fails if anyone bumped it by hand."
+      ]
+    },
+    {
+      "repo": "camelcase",
+      "branch": "release/10.x",
+      "turns": [
+        "Bug report on 10.x: `camelCase('aws/region')` comes back as `aws/region` unchanged. Slashes should separate words the way dashes and underscores do, so `awsRegion`, and `AwsRegion` with pascalCase. Fix it here please."
+      ]
+    }
+  ],
+  "facts": [
+    {
+      "id": "f1",
+      "text": "On release/10.x every code fix must bump the patch version in package.json in the same change: CI publishes 10.x from that branch only when the version changes.",
+      "source": "user",
+      "session": 1,
+      "superseded_by": null
+    },
+    {
+      "id": "f2",
+      "text": "On next, never touch package.json's version: the release job computes it from changesets and fails on manual bumps. (Applies only to the next branch; the last session is on release/10.x and must not apply it there.)",
+      "source": "user",
+      "session": 2,
+      "superseded_by": null
+    }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}

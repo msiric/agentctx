@@ -1,0 +1,24 @@
+diff --git a/sqlparse/__init__.py b/sqlparse/__init__.py
+index 8411f5a..6916be7 100644
+--- a/sqlparse/__init__.py
++++ b/sqlparse/__init__.py
+@@ -73,3 +73,19 @@ def split(
+     """
+     stack = engine.FilterStack(strip_semicolon=strip_semicolon)
+     return [str(stmt).strip() for stmt in stack.run(sql, encoding)]
++
++
++def statement_types(sql: str, encoding: str | None = None) -> list[str]:
++    """Return the type of each statement in *sql*, in order.
++
++    The type is whatever :meth:`~sqlparse.sql.Statement.get_type` reports
++    for each statement that :func:`parse` finds.
++
++    >>> statement_types("select 1; insert into t values (1);")
++    ['SELECT', 'INSERT']
++
++    :param sql: A string containing one or more SQL statements.
++    :param encoding: The encoding of the statement (optional).
++    :returns: A list of statement types such as ``'SELECT'``.
++    """
++    return [stmt.get_type() for stmt in parsestream(sql, encoding)]

@@ -1,0 +1,64 @@
+diff --git a/index.d.ts b/index.d.ts
+index 915dd1b..ccf1e8c 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -55,3 +55,16 @@ decamelize('unicornRainbow', {separator: '-'});
+ ```
+ */
+ export default function decamelize(string: string, options?: Options): string;
++
++/**
++Decamelize the keys of a plain object. Shallow: nested objects are left as they are.
++
++@example
++```
++import {decamelizeKeys} from 'decamelize';
++
++decamelizeKeys({unicornRainbow: 1});
++//=> {unicorn_rainbow: 1}
++```
++*/
++export function decamelizeKeys<T extends Record<string, unknown>>(object: T, options?: Options): Record<string, T[keyof T]>;
+diff --git a/index.js b/index.js
+index 2305a0d..2c4cf71 100644
+--- a/index.js
++++ b/index.js
+@@ -65,3 +65,11 @@ export default function decamelize(
+ 	words.push(text.slice(wordStart).toLowerCase());
+ 	return words.join(separator);
+ }
++
++export function decamelizeKeys(object, options) {
++	if (object === null || typeof object !== 'object' || Array.isArray(object)) {
++		throw new TypeError('Expected a plain object');
++	}
++
++	return Object.fromEntries(Object.entries(object).map(([key, value]) => [decamelize(key, options), value]));
++}
+diff --git a/package.json b/package.json
+index 6389d25..790907f 100644
+--- a/package.json
++++ b/package.json
+@@ -16,7 +16,7 @@
+ 		"node": ">=22"
+ 	},
+ 	"scripts": {
+-		"test": "xo && node --test test.js && nz"
++		"test": "xo && node --test test.js test-decamelize-keys.js && nz"
+ 	},
+ 	"files": [
+ 		"index.js",
+diff --git a/test-decamelize-keys.js b/test-decamelize-keys.js
+new file mode 100644
+index 0000000..3f41eb1
+--- /dev/null
++++ b/test-decamelize-keys.js
+@@ -0,0 +1,8 @@
++import assert from 'node:assert/strict';
++import test from 'node:test';
++import {decamelizeKeys} from './index.js';
++
++test('decamelizeKeys', () => {
++	assert.deepEqual(decamelizeKeys({fooBar: 1, bazQux: {innerKey: 2}}), {foo_bar: 1, baz_qux: {innerKey: 2}});
++	assert.deepEqual(decamelizeKeys({fooBar: 1}, {separator: '-'}), {'foo-bar': 1});
++});

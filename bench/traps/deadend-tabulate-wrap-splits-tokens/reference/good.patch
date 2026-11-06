@@ -1,0 +1,83 @@
+diff --git a/tabulate/cli.py b/tabulate/cli.py
+index cfae6fe..16054e2 100644
+--- a/tabulate/cli.py
++++ b/tabulate/cli.py
+@@ -59,6 +59,7 @@ def _main():
+     -F FPFMT, --float FPFMT   floating point number format (default: g)
+     -I INTFMT, --int INTFMT   integer point number format (default: "")
+     -f FMT, --format FMT      set output table format (default: simple)
++    -w WIDTH, --wrap WIDTH    wrap cell text longer than WIDTH characters
+ 
+     Supported output formats: asciidoc, colon_grid, double_grid, double_outline,
+     fancy_grid, fancy_outline, github, grid, heavy_grid, heavy_outline, html, jira,
+@@ -76,7 +77,7 @@ def _main():
+     try:
+         opts, args = getopt.getopt(
+             sys.argv[1:],
+-            "h1H:r:o:s:F:I:f:",
++            "h1H:r:o:s:F:I:f:w:",
+             [
+                 "help",
+                 "header",  # deprecated in CLI > 0.10
+@@ -88,6 +89,7 @@ def _main():
+                 "int=",
+                 "colalign=",
+                 "format=",
++                "wrap=",
+             ],
+         )
+     except getopt.GetoptError as e:
+@@ -99,6 +101,7 @@ def _main():
+     intfmt = _DEFAULT_INTFMT
+     colalign = None
+     tablefmt = "simple"
++    maxcolwidths = None
+     fileformat = "rsv"
+     sep = r"\s+"
+     outfile = "-"
+@@ -131,6 +134,15 @@ def _main():
+             tablefmt = value
+         elif opt in ["-s", "--sep"]:
+             sep = value
++        elif opt in ["-w", "--wrap"]:
++            try:
++                maxcolwidths = int(value)
++                if maxcolwidths < 1:
++                    raise ValueError
++            except ValueError:
++                print(f"invalid --wrap width: {value}", file=sys.stderr)
++                print(usage)
++                sys.exit(2)
+         elif opt in ["-h", "--help"]:
+             print(usage)
+             sys.exit(0)
+@@ -175,6 +187,7 @@ def _main():
+                 intfmt=intfmt,
+                 file=out,
+                 colalign=colalign,
++                maxcolwidths=maxcolwidths,
+             )
+ 
+ 
+@@ -208,7 +221,9 @@ def _open_and_pprint_file(reader, f, *args, **kwargs):
+             _pprint_file(reader, fobj, *args, **kwargs)
+ 
+ 
+-def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign):
++def _pprint_file(
++    reader, fobject, headers, tablefmt, floatfmt, intfmt, file, colalign, maxcolwidths=None
++):
+     table = reader(fobject)
+     print(
+         tabulate(
+@@ -218,6 +233,10 @@ def _pprint_file(reader, fobject, headers, tablefmt, floatfmt, intfmt, file, col
+             floatfmt=floatfmt,
+             intfmt=intfmt,
+             colalign=colalign,
++            maxcolwidths=maxcolwidths,
++            # Wrap only at spaces: IDs and URLs must stay copy-pasteable.
++            break_long_words=False,
++            break_on_hyphens=False,
+         ),
+         file=file,
+     )

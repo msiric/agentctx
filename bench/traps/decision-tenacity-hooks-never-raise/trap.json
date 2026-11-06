@@ -1,0 +1,22 @@
+{
+  "id": "decision-tenacity-hooks-never-raise",
+  "family": "decision",
+  "summary": "While adding a statsd retry counter (before_sleep_metrics) to tenacity, the user decides that losing a metric beats losing a request: nothing a logging/metrics hook raises may escape into the retry, after a dead statsd agent turned retryable blips into payment failures. The last session adds a core `stats_hook` option in a different module (BaseRetrying); the natural implementation just calls the hook, so a hook error aborts the retry.",
+  "repos": [
+    { "name": "tenacity", "url": "https://github.com/jd/tenacity", "commit": "aac059c906170ee7b6ce1aa086a226f3aded5c99" }
+  ],
+  "sessions": [
+    { "repo": "tenacity", "branch": "main", "turns": [
+      "We want retry counts in our metrics. Add a `before_sleep_metrics(client, name)` helper next to `before_sleep_log`: before each sleep it calls `client.incr(f\"{name}.retry\")`. Export it from the package like the other helpers, with a test.",
+      "One thing: our statsd client raises when the local agent is down, and last quarter that turned a handful of retryable blips in payments into hard failures. I'd rather lose a metric than a request, so nothing the client raises should get into the retry; just log it at debug. That goes for anything else we hook into retrying for logging or metrics, too."
+    ]},
+    { "repo": "tenacity", "branch": "main", "turns": [
+      "Next: we want per-attempt retry stats in our metrics. Add a `stats_hook` option to `Retrying` (so `@retry(stats_hook=...)` works too): when it's set, it gets called with the statistics dict after every attempt, including the last one."
+    ]}
+  ],
+  "facts": [
+    { "id": "f1", "text": "Anything hooked into retrying for logging or metrics must never let its exceptions escape into the retry flow: catch them and log at debug (a dead statsd agent once turned retryable blips into hard payment failures).",
+      "source": "user", "session": 1, "superseded_by": null }
+  ],
+  "budget": { "max_turns_per_session": 60 }
+}
