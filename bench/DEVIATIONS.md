@@ -178,3 +178,11 @@ The pre-registered result stays as recorded. The report adds the re-scored
 result as a sensitivity analysis. Why only trailkeep runs used uv is not
 known. The check should run pytest with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`
 and keep stderr; that fix is for future runs only.
+
+Follow-up (2026-11-06, after the set 4 report): both traps that run
+sqlparse's own tests (constraint-sqlparse-keywords-frozen,
+xrepo-doctest-examples) now run pytest with `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`
+and keep stderr in the failure reason. Reproduced: with a `.venv` built by
+`uv sync --group dev`, the old check fails a correct diff with an empty log
+and the new one passes it. Set 4's recorded results are unchanged; the fix
+applies to runs after it, where set 4 is dev.

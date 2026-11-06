@@ -1,4 +1,4 @@
-import doctest, io, json, subprocess, sys
+import os, doctest, io, json, subprocess, sys
 
 def emit(**kw):
     print(json.dumps(kw), flush=True)
@@ -27,10 +27,12 @@ for sql, want in cases:
         got = "raised %r" % (e,)
     if got != want:
         bad.append((sql, want, got))
+# a uv-synced .venv can carry pytest plugins that crash at start-up
 tests = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "tests"],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True,
+                       env=dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1"))
 task_ok = not bad and tests.returncode == 0
-why = "ok" if task_ok else ("wrong results: %r" % bad if bad else "existing tests fail: " + tests.stdout[-300:])
+why = "ok" if task_ok else ("wrong results: %r" % bad if bad else "existing tests fail: " + (tests.stdout + tests.stderr)[-300:])
 emit(task=task_ok, why=why)
 ok_all &= task_ok
 

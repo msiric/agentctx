@@ -260,22 +260,18 @@ build_context() {
   [ -n "$effort" ] && [ -s "$effort" ] && has_effort=1
 
   budget=$MAX_CHARS
-  shown=0
   if [ -s "$GLOBAL_NOTES" ]; then
-    shown=1
     piece "trailkeep: your preferences for every repo; apply them unless the user says otherwise" "$GLOBAL_NOTES" "$((budget / 4))"
     budget=$((budget - $(chars "$GLOBAL_NOTES")))
     [ "$budget" -lt $((MAX_CHARS / 2)) ] && budget=$((MAX_CHARS / 2))
     printf '\n'
   fi
   if [ "$has_notes" -eq 1 ]; then
-    shown=1
     piece "trailkeep: rules and notes for this repository; follow them unless the user says otherwise" "$notes" "$((budget / 3))"
     budget=$((budget - $(chars "$notes")))
     [ "$budget" -lt $((MAX_CHARS / 2)) ] && budget=$((MAX_CHARS / 2))
     printf '\n'
   fi
-  [ "$has_effort" -eq 1 ] && shown=1
   if [ "$has_effort" -eq 1 ] && ! grep -q '^## Plan' "$effort"; then
     piece "trailkeep: decisions recorded for branch $b; follow them unless the user says otherwise" "$effort" "$budget"
     printf '\n'
@@ -283,9 +279,6 @@ build_context() {
     printf 'trailkeep: this branch has an effort file. It is the source of truth for the current task. Keep it current as you work: tick Plan items and add one dated line under Progress before you stop.\n'
     piece "trailkeep: effort file for branch $b" "$effort" "$budget"
     printf '\n'
-  fi
-  if [ "$shown" -eq 1 ]; then
-    printf '%s\n\n' 'trailkeep: use these notes while you do what the user asks now. Don'"'"'t ask again about decisions they record, and settle any open points they list with your own recommendation, saying what you chose.'
   fi
   if [ "$has_effort" -eq 0 ] && [ -n "$effort" ]; then
     od=$(other_decisions "$b" "$KEY" 2>/dev/null)

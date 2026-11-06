@@ -316,3 +316,28 @@ Checked as arm `trailkeep@act` (plan `dev-act`) on all 44 fact traps used so
 far plus the control, 2 seeds, against 0.5.2 on the same traps
 (`trailkeep@wording` for the first 34, `trailkeep` for set 4). Set 4 counts
 as dev from here on.
+
+Result (run 42213498197, 90 cells, no pauses):
+
+| | trailkeep@act | 0.5.2 on the same traps |
+|---|---|---|
+| 44 fact traps | 79/88 (90%) | 90/98 (92%) |
+| Control | 2/2 | 2/2 |
+
+- The traps it was meant to fix: decision-pretry-retry-after-additive 2/2
+  (was 2/3), dead-end-qs-json-bigint still 0/2 (was 0/3).
+- Down: superseded-qs-new-options-default-on 0/2 (was 3/3). Both runs had the
+  new on-by-default rule in their notes and still kept stripTracking off,
+  reasoning that package.json still says 10.0.0. Not clearly caused by the
+  new line, but nothing offsets it.
+- constraint-sqlparse-keywords-frozen 0/2 and xrepo-doctest-examples s2 hit
+  the broken sqlparse check again (DEVIATIONS.md, 2026-11-06). Re-scored,
+  roughly 82/88 vs 93/98 for 0.5.2, still no gain.
+- deadend-rename-over-bind-mount s1 and superseded-test-runner s1: the facts
+  were honoured and the task itself failed.
+
+Reading: no improvement. The line was reverted and not released; 0.5.2
+stays current.
+
+The sqlparse check fix (pytest with plugin autoload off, stderr kept) is in
+both traps that run sqlparse's tests, for dev runs from here on.

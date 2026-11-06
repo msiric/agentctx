@@ -1,4 +1,4 @@
-import json, subprocess, sys
+import os, json, subprocess, sys
 
 PINNED = "be3b7a68d07af5a22b49765e26d2541be640999f"
 WORDS = ["EXCLUDE", "MATCH_RECOGNIZE", "ASOF", "MATCH_CONDITION"]
@@ -38,11 +38,13 @@ else:
     task_ok = not bad
     why = "not keywords / not uppercased: %s" % bad if bad else "all four are keywords"
 
+# a uv-synced .venv can carry pytest plugins that crash at start-up
 tests = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "-p", "no:cacheprovider", "tests"],
-                       capture_output=True, text=True)
+                       capture_output=True, text=True,
+                       env=dict(os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1"))
 if tests.returncode != 0:
     task_ok = False
-    why += "; existing tests fail: " + tests.stdout[-300:]
+    why += "; existing tests fail: " + (tests.stdout + tests.stderr)[-300:]
 emit(task=task_ok, why=why)
 ok_all &= task_ok
 
