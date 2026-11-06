@@ -226,3 +226,23 @@ earlier sets is exploratory.
 
 No trap is edited after the gate unless it is broken (logged in
 `DEVIATIONS.md`). Set 3 runs once and is reported whatever it shows.
+
+## Addendum: held-out set 4 (committed 2026-11-06, before its traps exist)
+
+Set 3 put trailkeep 0.5.1 11 points ahead of the handoff file, not
+significant (p = 0.17). trailkeep 0.5.2 was changed after reading set 3's
+failures (the capture rule now asks for notes worded as instructions, as
+broad as the user's rule, with the agent's own choices marked). Set 3 is no
+longer unseen. Set 4 is a fresh test of 0.5.2.
+
+Same design as set 3: 12 new traps from two new blind authors (6 Python, 6
+TypeScript/JavaScript), 2 per family, on repos no earlier trap used; the same
+gate; `trailkeep` (0.5.2), `handoff` and `none@rerun`, 3 seeds, frozen
+versions, dispatched from a frozen branch.
+
+**Primary**, on set 4 only, Holm-corrected at α = 0.05, same method:
+- **H2b-4:** trailkeep has a higher pass rate than handoff.
+- **H1-4:** trailkeep has a higher pass rate than no memory.
+
+Secondary and exploratory analyses as in set 3. No trap is edited after the
+gate unless it is broken. Set 4 runs once and is reported whatever it shows.
