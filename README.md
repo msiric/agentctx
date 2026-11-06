@@ -75,7 +75,7 @@ Full reports, the pre-registration and every deviation are in [`bench/results/`]
 
 | When | What happens automatically |
 |---|---|
-| Any session starts in any repo | Notes and the branch's effort file are injected. A one-line pointer mentions the decision log if it has entries. Leftovers from a session that didn't exit cleanly are logged first. |
+| Any session starts in any repo | Notes and the branch's effort file are injected, with one line telling the agent to act on them rather than ask again. A one-line pointer mentions the decision log if it has entries. Leftovers from a session that didn't exit cleanly are logged first. |
 | Any session starts in a repo | A short capture rule tells the agent to record decisions, user rules and dead ends the moment they come up and to check before finishing a task that nothing is left unrecorded, with `trailkeep note`, and to pick the scope: this branch, the whole repo (`--repo`) or every repo (`--all`). It doesn't wait for anyone to decide the task "spans sessions". Turn it off with `TRAILKEEP_HINT=0`. |
 | You're on a branch with no notes yet | The last few decisions recorded on other branches are shown, each labelled with its branch, so repo-wide rules saved on one branch aren't lost on the next. Once the branch has its own notes, only those are shown. |
 | The agent works | It keeps the effort file current: plan ticks, a progress line per session, decisions and dead ends. That's the effort skill's job. |

@@ -180,6 +180,7 @@ test_context() {
   new_repo "$SB/r" git@github.com:me/app.git
   cd "$SB/r" || return
   out=$(ax context --for claude </dev/null); contains "$out" "trailkeep note" "capture rule only"
+  case $out in *"Don't ask again"*) flunk "no act-on-notes line without notes" ;; *) pass ;; esac
   out=$(TRAILKEEP_HINT=0 ax context --for claude </dev/null); eq "$out" "" "nothing to inject"
   out=$(TRAILKEEP_HINT=0 ax context --for copilot </dev/null); eq "$out" "" "copilot nothing"
 
@@ -187,6 +188,7 @@ test_context() {
   ax new >/dev/null
   out=$(ax context --for claude </dev/null)
   contains "$out" "Use pnpm, never npm."; contains "$out" "effort file for branch main"; contains "$out" "## Goal"
+  contains "$out" "Don't ask again about decisions" "act-on-notes line with notes"
 
   out=$(ax context --for codex </dev/null); contains "$out" "Use pnpm"
 

@@ -296,3 +296,23 @@ by user" from finance's rule.
 Caveats: these are dev traps, and the traps 0.5.1 failed were picked out by
 those failures, so some of the gain is regression to the mean. 2 seeds. Only
 a fresh held-out set can say how much holds. Released as 0.5.2.
+
+## 9. Change after held-out set 4: act on notes (2026-11-06)
+
+Three of trailkeep 0.5.2's four real failures on set 4 stopped short of the
+user's request although the note was there: twice the last session asked how
+to handle 64-bit IDs instead of building the feature, and once it skipped the
+user's Retry-After decision while its own open design points were listed as
+"my recommendations". Notes that split the user's decisions from the agent's
+open points may make the next session wait for confirmation.
+
+When any notes are shown, context now adds one line after them: "use these
+notes while you do what the user asks now. Don't ask again about decisions
+they record, and settle any open points they list with your own
+recommendation, saying what you chose." A repo with no notes gets nothing
+new.
+
+Checked as arm `trailkeep@act` (plan `dev-act`) on all 44 fact traps used so
+far plus the control, 2 seeds, against 0.5.2 on the same traps
+(`trailkeep@wording` for the first 34, `trailkeep` for set 4). Set 4 counts
+as dev from here on.
